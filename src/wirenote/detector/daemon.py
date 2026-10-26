@@ -43,6 +43,7 @@ PW_DUMP = ("pw-dump", "--monitor", "--no-colors")
 STATUS_EVERY_S = 5.0
 HOUSEKEEPING_EVERY_S = 6 * 3600.0
 JOB_RETRY_DELAY_S = 60.0
+STOPPED_IN_APP = "stopped in the app"   # the web UI is already showing the call
 
 
 def now_iso() -> str:
@@ -433,13 +434,13 @@ class Daemon:
 
     def _open_note(self, rec_id: str, path: str | None) -> None:
         """The call in the web UI if this user's UI runs (docs/dev/ui-design.md), else the
-        Markdown file. Never a UI on the port that belongs to someone else."""
+        Markdown file at path, if given. Never a UI on the port that belongs to someone else."""
         from ..ui.launch import open_ui
 
         try:
             if not open_ui(self.settings.ui_port, f"#/call/{rec_id}", fallback=path):
-                self.log.write("warning", message="web UI not running (or not ours); "
-                                                  "opened the Markdown note")
+                self.log.write("warning", message="web UI not running (or not ours); " +
+                               ("opened the Markdown note" if path else "call not opened"))
         except OSError as e:
             self.log.write("error", message=f"cannot open note: {e!r}")
 
@@ -515,8 +516,12 @@ class Daemon:
             self.log.write("note", app=e.key, message="stop: no recording was running")
             self._ops.put_nowait((self._show_stopped, (e, None)))
             return
+        rec_id = self.recording.id
         job_id = await self._finish_recording(e.reason)
         self._ops.put_nowait((self._show_stopped, (e, job_id)))
+        if self.settings.open_call_after_recording and e.reason != STOPPED_IN_APP:
+            # The call page shows "Writing the note…" and fills in when the note is done.
+            self._open_note(rec_id, None)
 
     async def _finish_recording(self, reason: str) -> int:
         rec, self.recording = self.recording, None
@@ -679,12 +684,13 @@ class Daemon:
     def _control(self, cmd: str) -> dict:
         now = time.monotonic()
         tracker = self.detector.tracker
-        if cmd == "stop":
+        if cmd in ("stop", "stop-in-app"):
             key = tracker.recording_key
             if key is None:
                 return {"ok": False, "error": "not recording"}
-            self.log.write("control", command="stop", app=key)
-            self._handle(tracker.stop(now, "stopped by you"))
+            self.log.write("control", command=cmd, app=key)
+            self._handle(tracker.stop(now, STOPPED_IN_APP if cmd == "stop-in-app"
+                                      else "stopped by you"))
             return {"ok": True, "app": key}
         if cmd == "record":
             prompted = [k for k, t in tracker.apps.items() if t.state is State.PROMPTED]

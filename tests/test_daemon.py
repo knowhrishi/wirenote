@@ -268,3 +268,36 @@ def test_reload_settings_control(tmp_path, monkeypatch):
     cfg.write_text("nonsense = = =\n")
     assert Daemon._control(d, "reload-settings")["ok"] is False
     assert d.settings.consent_line == "new line"
+
+
+def _record_and_stop(d, stop="stop"):
+    prompt(d)
+    assert d._control("record")["ok"]
+    asyncio.run(drain(d))
+    rec_id = d.recording.id
+    assert d._control(stop)["ok"]
+    asyncio.run(drain(d))
+    return rec_id
+
+
+def test_call_opens_in_the_ui_when_the_recording_stops(tmp_path, monkeypatch):
+    import wirenote.ui.launch as launch
+
+    opened = []
+    monkeypatch.setattr(launch, "open_ui",
+                        lambda port, route, fallback=None: opened.append((route, fallback)) or True)
+    rec_id = _record_and_stop(make(tmp_path))
+    assert opened == [(f"#/call/{rec_id}", None)]   # never the Markdown file instead
+    _record_and_stop(make(tmp_path / "again"), stop="stop-in-app")
+    assert len(opened) == 1                         # Stop in the app: it shows the call already
+
+
+def test_open_call_after_recording_can_be_turned_off(tmp_path, monkeypatch):
+    import wirenote.ui.launch as launch
+
+    opened = []
+    monkeypatch.setattr(launch, "open_ui", lambda *a, **k: opened.append(a) or True)
+    d = make(tmp_path)
+    d.settings = replace(d.settings, open_call_after_recording=False)
+    _record_and_stop(d)
+    assert opened == []

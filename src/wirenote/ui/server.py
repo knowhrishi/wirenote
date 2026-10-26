@@ -319,7 +319,7 @@ def make_handler(app: App):
             path = urlsplit(self.path).path
             store = app.store
             if path == "/api/stop":
-                return self._json(_control("stop"))
+                return self._json(_control("stop-in-app"))
             if path == "/api/record":
                 return self._json(_control("record-now"))
             if path == "/api/ask":
