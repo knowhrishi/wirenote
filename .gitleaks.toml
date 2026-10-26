@@ -5,6 +5,6 @@ title = "wirenote"
 [extend]
 useDefault = true
 
-[allowlist]
+[[allowlists]]
 description = "Package hashes and the license text"
 paths = ['''^uv\.lock$''', '''^LICENSE$''']

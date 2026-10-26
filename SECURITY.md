@@ -23,4 +23,4 @@ Out of scope: an attacker who already runs code as your user, or has root, can r
 
 ## For contributors
 
-`pip-audit` and `gitleaks` run on every pull request. Never commit recordings, transcripts, calendar links, API keys or log files, even from test calls; test fixtures must be redacted (see `scripts/make_replay.py`).
+`pip-audit` and `gitleaks` run on every push and pull request. Never commit recordings, transcripts, calendar links, API keys or log files, even from test calls; test fixtures must be redacted (see `scripts/make_replay.py`).
