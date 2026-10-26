@@ -9,3 +9,4 @@ The notes written while Wirenote was built, milestone by milestone. They explain
 - [features-2-design.md](features-2-design.md): speakers, notes during the call, Ask across meetings.
 - [ui-design.md](ui-design.md): the meetings app.
 - [releasing.md](releasing.md): how a release is made, and the one-time PyPI and GitHub setup.
+- [macos-design.md](macos-design.md): the macOS port, a draft: platform split, Swift helper, permissions, packaging.
