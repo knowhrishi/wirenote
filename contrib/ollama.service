@@ -1,0 +1,12 @@
+# Ollama for wirenote summaries; user install in ~/.local/opt/ollama (no root).
+[Unit]
+Description=Ollama (local LLM server for wirenote)
+
+[Service]
+ExecStart=%h/.local/opt/ollama/bin/ollama serve
+Environment=OLLAMA_HOST=127.0.0.1:11434
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,2148 @@
+{
+ "source": "jitsi-chrome-marked",
+ "processes": {
+  "6148": {
+   "exe_basename": "pipewire",
+   "comm": "pipewire-pulse",
+   "ppid": 6116,
+   "cmdline0": "pipewire-pulse",
+   "flatpak_id": null,
+   "snap_name": null,
+   "unit": "pipewire-pulse.service"
+  },
+  "6116": {
+   "exe_basename": "systemd",
+   "comm": "systemd",
+   "ppid": null,
+   "cmdline0": "systemd",
+   "flatpak_id": null,
+   "snap_name": null,
+   "unit": "init.scope"
+  },
+  "189476": {
+   "exe_basename": "chrome",
+   "comm": "chrome",
+   "ppid": 154384,
+   "cmdline0": "chrome",
+   "flatpak_id": null,
+   "snap_name": null,
+   "unit": "app-com.google.Chrome-154384.scope"
+  },
+  "154384": {
+   "exe_basename": "chrome",
+   "comm": "chrome",
+   "ppid": 6116,
+   "cmdline0": "chrome",
+   "flatpak_id": null,
+   "snap_name": null,
+   "unit": "app-com.google.Chrome-154384.scope"
+  }
+ },
+ "batches": [
+  {
+   "rel_s": 0.023,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 80,
+     "type": "PipeWire:Interface:Client",
+     "info": {
+      "props": {
+       "client.api": "pipewire-pulse",
+       "object.serial": 95,
+       "pipewire.sec.pid": 6148,
+       "application.process.id": 10791,
+       "application.process.binary": "sd_dummy",
+       "application.name": "speech-dispatcher-dummy"
+      }
+     }
+    },
+    {
+     "id": 81,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "speech-dispatcher-dummy",
+       "media.name": "playback",
+       "client.id": 80,
+       "object.serial": 96,
+       "application.process.id": 10791,
+       "application.process.binary": "sd_dummy",
+       "application.name": "speech-dispatcher-dummy"
+      }
+     }
+    },
+    {
+     "id": 75,
+     "type": "PipeWire:Interface:Client",
+     "info": {
+      "props": {
+       "client.api": "pipewire-pulse",
+       "object.serial": 2309,
+       "pipewire.sec.pid": 6148,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome input"
+      }
+     }
+    },
+    {
+     "id": 113,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 81,
+      "input-node-id": 57,
+      "state": "init"
+     }
+    },
+    {
+     "id": 125,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 81,
+      "input-node-id": 57,
+      "state": "init"
+     }
+    },
+    {
+     "id": 76,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Google Chrome input",
+       "media.name": "RecordStream",
+       "client.id": 75,
+       "object.serial": 8457,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome input"
+      }
+     }
+    },
+    {
+     "id": 96,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 76,
+      "state": "active"
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 76,
+      "state": "active"
+     }
+    },
+    {
+     "id": 128,
+     "type": "PipeWire:Interface:Client",
+     "info": {
+      "props": {
+       "client.api": "pipewire-pulse",
+       "object.serial": 8464,
+       "pipewire.sec.pid": 6148,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 127,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 128,
+       "object.serial": 8465,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 98,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 127,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 130,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 127,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 6.007,
+   "batch": [
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 13.0,
+   "batch": [
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 27.665,
+   "batch": [
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 76,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Google Chrome input",
+       "media.name": "RecordStream",
+       "client.id": 75,
+       "object.serial": 8457,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome input"
+      }
+     }
+    },
+    {
+     "id": 96,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 76,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 76,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 27.667,
+   "batch": [
+    {
+     "id": 96,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 27.667,
+   "batch": [
+    {
+     "id": 110,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 27.667,
+   "batch": [
+    {
+     "id": 76,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 27.667,
+   "batch": [
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 27.926,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 127,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 128,
+       "object.serial": 8465,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 98,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 127,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 130,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 127,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 27.927,
+   "batch": [
+    {
+     "id": 127,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 128,
+       "object.serial": 8465,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.344,
+   "batch": [
+    {
+     "id": 76,
+     "type": "PipeWire:Interface:Client",
+     "info": {
+      "props": {
+       "client.api": "pipewire-pulse",
+       "object.serial": 8471,
+       "pipewire.sec.pid": 6148,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.346,
+   "batch": [
+    {
+     "id": 76,
+     "type": "PipeWire:Interface:Client",
+     "info": {
+      "props": {
+       "client.api": "pipewire-pulse",
+       "object.serial": 8471,
+       "pipewire.sec.pid": 6148,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.35,
+   "batch": [
+    {
+     "id": 132,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 76,
+       "object.serial": 8472,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.353,
+   "batch": [
+    {
+     "id": 132,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 76,
+       "object.serial": 8472,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.359,
+   "batch": [
+    {
+     "id": 132,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 76,
+       "object.serial": 8472,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.361,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 132,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 132,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.365,
+   "batch": [
+    {
+     "id": 132,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 76,
+       "object.serial": 8472,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 132,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 132,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.368,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 132,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 76,
+       "object.serial": 8472,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 132,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 132,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.546,
+   "batch": [
+    {
+     "id": 96,
+     "type": "PipeWire:Interface:Client",
+     "info": {
+      "props": {
+       "client.api": "pipewire-pulse",
+       "object.serial": 8477,
+       "pipewire.sec.pid": 6148,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.547,
+   "batch": [
+    {
+     "id": 96,
+     "type": "PipeWire:Interface:Client",
+     "info": {
+      "props": {
+       "client.api": "pipewire-pulse",
+       "object.serial": 8477,
+       "pipewire.sec.pid": 6148,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.55,
+   "batch": [
+    {
+     "id": 87,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 96,
+       "object.serial": 8478,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.552,
+   "batch": [
+    {
+     "id": 87,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 96,
+       "object.serial": 8478,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.555,
+   "batch": [
+    {
+     "id": 87,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 96,
+       "object.serial": 8478,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.558,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 118,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 87,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 136,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 87,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.559,
+   "batch": [
+    {
+     "id": 87,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 96,
+       "object.serial": 8478,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 118,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 87,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 136,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 87,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.562,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 87,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 96,
+       "object.serial": 8478,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 118,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 87,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 136,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 87,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.564,
+   "batch": [
+    {
+     "id": 78,
+     "type": "PipeWire:Interface:Client",
+     "info": {
+      "props": {
+       "client.api": "pipewire-pulse",
+       "object.serial": 8483,
+       "pipewire.sec.pid": 6148,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.566,
+   "batch": [
+    {
+     "id": 78,
+     "type": "PipeWire:Interface:Client",
+     "info": {
+      "props": {
+       "client.api": "pipewire-pulse",
+       "object.serial": 8483,
+       "pipewire.sec.pid": 6148,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.569,
+   "batch": [
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 78,
+       "object.serial": 8484,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.571,
+   "batch": [
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 78,
+       "object.serial": 8484,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.574,
+   "batch": [
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 78,
+       "object.serial": 8484,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.577,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 84,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 100,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 84,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.579,
+   "batch": [
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 78,
+       "object.serial": 8484,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 84,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 100,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 84,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.582,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 78,
+       "object.serial": 8484,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 84,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 100,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 84,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.583,
+   "batch": [
+    {
+     "id": 87,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 96,
+       "object.serial": 8478,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 118,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 87,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 136,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 87,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 78,
+       "object.serial": 8484,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.585,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 87,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 96,
+       "object.serial": 8478,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 78,
+       "object.serial": 8484,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 84,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 100,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 84,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.637,
+   "batch": [
+    {
+     "id": 89,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Google Chrome input",
+       "media.name": "RecordStream",
+       "client.id": 75,
+       "object.serial": 8489,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome input"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.641,
+   "batch": [
+    {
+     "id": 89,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Google Chrome input",
+       "media.name": "RecordStream",
+       "client.id": 75,
+       "object.serial": 8489,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome input"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.645,
+   "batch": [
+    {
+     "id": 89,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Google Chrome input",
+       "media.name": "RecordStream",
+       "client.id": 75,
+       "object.serial": 8489,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome input"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.653,
+   "batch": [
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 89,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Google Chrome input",
+       "media.name": "RecordStream",
+       "client.id": 75,
+       "object.serial": 8489,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome input"
+      }
+     }
+    },
+    {
+     "id": 142,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 89,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 145,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 89,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.654,
+   "batch": [
+    {
+     "id": 142,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 89,
+      "state": "active"
+     }
+    },
+    {
+     "id": 145,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 89,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.657,
+   "batch": [
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 89,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Google Chrome input",
+       "media.name": "RecordStream",
+       "client.id": 75,
+       "object.serial": 8489,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome input"
+      }
+     }
+    },
+    {
+     "id": 142,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 89,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 145,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 89,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.682,
+   "batch": [
+    {
+     "id": 87,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 96,
+       "object.serial": 8478,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 118,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 87,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 136,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 87,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.686,
+   "batch": [
+    {
+     "id": 87,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 96,
+       "object.serial": 8478,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 118,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 87,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 136,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 87,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.687,
+   "batch": [
+    {
+     "id": 87,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 96,
+       "object.serial": 8478,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.708,
+   "batch": [
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 78,
+       "object.serial": 8484,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 84,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 100,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 84,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.71,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 87,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 96,
+       "object.serial": 8478,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 118,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 87,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 136,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 87,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.711,
+   "batch": [
+    {
+     "id": 87,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 96,
+       "object.serial": 8478,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.714,
+   "batch": [
+    {
+     "id": 127,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 128,
+       "object.serial": 8465,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 98,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 127,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 130,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 127,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.719,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 127,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 128,
+       "object.serial": 8465,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 89,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Google Chrome input",
+       "media.name": "RecordStream",
+       "client.id": 75,
+       "object.serial": 8489,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome input"
+      }
+     }
+    },
+    {
+     "id": 142,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 89,
+      "state": "active"
+     }
+    },
+    {
+     "id": 145,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 89,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 28.721,
+   "batch": [
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 89,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Google Chrome input",
+       "media.name": "RecordStream",
+       "client.id": 75,
+       "object.serial": 8489,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome input"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 33.37,
+   "batch": [
+    {
+     "id": 110,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 33.373,
+   "batch": [
+    {
+     "id": 77,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 33.373,
+   "batch": [
+    {
+     "id": 132,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 33.373,
+   "batch": [
+    {
+     "id": 76,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 33.373,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 33.764,
+   "batch": [
+    {
+     "id": 119,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 33.764,
+   "batch": [
+    {
+     "id": 100,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 33.764,
+   "batch": [
+    {
+     "id": 84,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 33.764,
+   "batch": [
+    {
+     "id": 78,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 33.766,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 33.766,
+   "batch": [
+    {
+     "id": 118,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 33.766,
+   "batch": [
+    {
+     "id": 136,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 33.766,
+   "batch": [
+    {
+     "id": 87,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 33.766,
+   "batch": [
+    {
+     "id": 96,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 33.767,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 59.528,
+   "batch": [
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 89,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Google Chrome input",
+       "media.name": "RecordStream",
+       "client.id": 75,
+       "object.serial": 8489,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome input"
+      }
+     }
+    },
+    {
+     "id": 142,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 89,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 145,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 89,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 59.53,
+   "batch": [
+    {
+     "id": 142,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 59.53,
+   "batch": [
+    {
+     "id": 145,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 59.53,
+   "batch": [
+    {
+     "id": 89,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 59.531,
+   "batch": [
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 59.813,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 127,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 128,
+       "object.serial": 8465,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    },
+    {
+     "id": 98,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 127,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 130,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 127,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 59.813,
+   "batch": [
+    {
+     "id": 127,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Google Chrome",
+       "media.name": "Playback",
+       "client.id": 128,
+       "object.serial": 8465,
+       "application.process.id": 189476,
+       "application.process.binary": "chrome",
+       "application.name": "Google Chrome"
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

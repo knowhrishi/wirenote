@@ -1,0 +1,15 @@
+# Written by `wirenote setup install`; remove with `wirenote setup uninstall`.
+# Logs: journalctl --user -u wirenote -f   (events: ~/.local/state/wirenote/detector.jsonl)
+[Unit]
+Description=Wirenote meeting detector
+After=pipewire.service pipewire-pulse.service graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=@EXEC@ run
+UMask=0077
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

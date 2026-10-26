@@ -1,0 +1,3961 @@
+{
+ "source": "jitsi-firefox",
+ "processes": {
+  "6148": {
+   "exe_basename": "pipewire",
+   "comm": "pipewire-pulse",
+   "ppid": 6116,
+   "cmdline0": "pipewire-pulse",
+   "flatpak_id": null,
+   "snap_name": null,
+   "unit": "pipewire-pulse.service"
+  },
+  "6116": {
+   "exe_basename": "systemd",
+   "comm": "systemd",
+   "ppid": null,
+   "cmdline0": "systemd",
+   "flatpak_id": null,
+   "snap_name": null,
+   "unit": "init.scope"
+  },
+  "1309099": {
+   "exe_basename": "firefox-bin",
+   "comm": "firefox-bin",
+   "ppid": 6116,
+   "cmdline0": "firefox",
+   "flatpak_id": null,
+   "snap_name": null,
+   "unit": "app-firefox@1211b9fe9c3840a981d15258dea84c11.service"
+  },
+  "1313205": {
+   "exe_basename": "firefox-bin",
+   "comm": "firefox-bin",
+   "ppid": 6116,
+   "cmdline0": "firefox",
+   "flatpak_id": null,
+   "snap_name": null,
+   "unit": "app-firefox@673036a0c35847d09786fbdde0c57114.service"
+  }
+ },
+ "batches": [
+  {
+   "rel_s": 0.028,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 80,
+     "type": "PipeWire:Interface:Client",
+     "info": {
+      "props": {
+       "client.api": "pipewire-pulse",
+       "object.serial": 95,
+       "pipewire.sec.pid": 6148,
+       "application.process.id": 10791,
+       "application.process.binary": "sd_dummy",
+       "application.name": "speech-dispatcher-dummy"
+      }
+     }
+    },
+    {
+     "id": 81,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "speech-dispatcher-dummy",
+       "media.name": "playback",
+       "client.id": 80,
+       "object.serial": 96,
+       "application.process.id": 10791,
+       "application.process.binary": "sd_dummy",
+       "application.name": "speech-dispatcher-dummy"
+      }
+     }
+    },
+    {
+     "id": 113,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 81,
+      "input-node-id": 57,
+      "state": "init"
+     }
+    },
+    {
+     "id": 125,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 81,
+      "input-node-id": 57,
+      "state": "init"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 12.395,
+   "batch": [
+    {
+     "id": 132,
+     "type": "PipeWire:Interface:Client",
+     "info": {
+      "props": {
+       "client.api": "pipewire-pulse",
+       "object.serial": 8536,
+       "pipewire.sec.pid": 6148,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 12.396,
+   "batch": [
+    {
+     "id": 132,
+     "type": "PipeWire:Interface:Client",
+     "info": {
+      "props": {
+       "client.api": "pipewire-pulse",
+       "object.serial": 8536,
+       "pipewire.sec.pid": 6148,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 12.43,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8537,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 12.434,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8537,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 12.437,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8537,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 12.442,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8537,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 128,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 12.443,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 128,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 12.446,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8537,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 128,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 12.448,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8537,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 128,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 12.48,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8537,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 128,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 12.48,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8537,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 12.516,
+   "batch": [
+    {
+     "id": 144,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 12.516,
+   "batch": [
+    {
+     "id": 128,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 12.516,
+   "batch": [
+    {
+     "id": 77,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 12.517,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 17.485,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 18.168,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8542,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 18.171,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8542,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 18.173,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8542,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 18.176,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8542,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 18.176,
+   "batch": [
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 18.178,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8542,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 18.178,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8542,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 18.18,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8542,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 18.232,
+   "batch": [
+    {
+     "id": 110,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 18.232,
+   "batch": [
+    {
+     "id": 144,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 18.232,
+   "batch": [
+    {
+     "id": 77,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 18.234,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.291,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8547,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.292,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8547,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.295,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8547,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.297,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.297,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8547,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.299,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8547,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.327,
+   "batch": [
+    {
+     "id": 101,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 22.327,
+   "batch": [
+    {
+     "id": 110,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 22.327,
+   "batch": [
+    {
+     "id": 77,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 22.329,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8552,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8553,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.332,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8552,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.332,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8553,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.335,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8552,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.336,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 118,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.337,
+   "batch": [
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8552,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 118,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.338,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8552,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 118,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.34,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8553,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.342,
+   "batch": [
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 78,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 144,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 95,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 144,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.343,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8553,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.343,
+   "batch": [
+    {
+     "id": 78,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 144,
+      "state": "active"
+     }
+    },
+    {
+     "id": 95,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 144,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.346,
+   "batch": [
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8553,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 78,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 144,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 95,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 144,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 22.353,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8552,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8553,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 118,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 78,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 144,
+      "state": "active"
+     }
+    },
+    {
+     "id": 95,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 144,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 190.923,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8552,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8553,
+       "application.process.id": 1309099,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 118,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 77,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 78,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 144,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 95,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 144,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 190.928,
+   "batch": [
+    {
+     "id": 101,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 190.928,
+   "batch": [
+    {
+     "id": 118,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 190.928,
+   "batch": [
+    {
+     "id": 77,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 190.929,
+   "batch": [
+    {
+     "id": 78,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 190.929,
+   "batch": [
+    {
+     "id": 95,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 190.929,
+   "batch": [
+    {
+     "id": 144,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 190.93,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 191.147,
+   "batch": [
+    {
+     "id": 132,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 195.929,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 221.578,
+   "batch": [
+    {
+     "id": 132,
+     "type": "PipeWire:Interface:Client",
+     "info": {
+      "props": {
+       "client.api": "pipewire-pulse",
+       "object.serial": 8564,
+       "pipewire.sec.pid": 6148,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 221.579,
+   "batch": [
+    {
+     "id": 132,
+     "type": "PipeWire:Interface:Client",
+     "info": {
+      "props": {
+       "client.api": "pipewire-pulse",
+       "object.serial": 8564,
+       "pipewire.sec.pid": 6148,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 221.602,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8565,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 221.604,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8565,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 221.607,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8565,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 221.61,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8565,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 95,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 221.611,
+   "batch": [
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 95,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 221.613,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8565,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 95,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 221.613,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8565,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 221.614,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8565,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 95,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 221.646,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8565,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 95,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 221.647,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8565,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 221.684,
+   "batch": [
+    {
+     "id": 94,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 221.684,
+   "batch": [
+    {
+     "id": 95,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 221.684,
+   "batch": [
+    {
+     "id": 144,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 221.685,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 223.893,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8570,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 223.895,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8570,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 223.898,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8570,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 223.9,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 223.9,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8570,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 223.902,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8570,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 223.903,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8570,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 223.904,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8570,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 223.963,
+   "batch": [
+    {
+     "id": 119,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 223.963,
+   "batch": [
+    {
+     "id": 94,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 223.963,
+   "batch": [
+    {
+     "id": 144,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 223.964,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.671,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8575,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.674,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8575,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.677,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8575,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.679,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.68,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8575,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.682,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8575,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.684,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8575,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.69,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8575,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 119,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.691,
+   "batch": [
+    {
+     "id": 84,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 227.691,
+   "batch": [
+    {
+     "id": 119,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 227.691,
+   "batch": [
+    {
+     "id": 144,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 227.694,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8580,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8581,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.698,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8580,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.699,
+   "batch": [
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8581,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.703,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8580,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.706,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 100,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.706,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8580,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 100,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.708,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8580,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 100,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.712,
+   "batch": [
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8580,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8581,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.713,
+   "batch": [
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 94,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 94,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.715,
+   "batch": [
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8581,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.715,
+   "batch": [
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 94,
+      "state": "active"
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 94,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.72,
+   "batch": [
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8581,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 94,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 94,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 227.727,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8580,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8581,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 100,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 94,
+      "state": "active"
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 94,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 306.138,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    },
+    {
+     "id": 144,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8580,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Input/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8581,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 84,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 100,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 144,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 110,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 94,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 58,
+      "input-node-id": 94,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 306.141,
+   "batch": [
+    {
+     "id": 84,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 306.141,
+   "batch": [
+    {
+     "id": 100,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 306.141,
+   "batch": [
+    {
+     "id": 144,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 306.141,
+   "batch": [
+    {
+     "id": 110,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 306.141,
+   "batch": [
+    {
+     "id": 101,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 306.141,
+   "batch": [
+    {
+     "id": 94,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 306.142,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 58,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Source",
+       "node.name": "source-58",
+       "client.id": 48,
+       "object.serial": 58
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 306.142,
+   "batch": [
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8592,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 306.144,
+   "batch": [
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8592,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 306.147,
+   "batch": [
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8592,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 306.149,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 94,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 94,
+      "input-node-id": 57,
+      "state": "negotiating"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 306.15,
+   "batch": [
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8592,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 94,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 94,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 306.153,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "suspended",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8592,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 94,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 94,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 306.154,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "running",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8592,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 94,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 94,
+      "input-node-id": 57,
+      "state": "active"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 306.233,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    },
+    {
+     "id": 94,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Stream/Output/Audio",
+       "node.name": "Firefox",
+       "media.name": "Room | Jitsi Meet",
+       "client.id": 132,
+       "object.serial": 8592,
+       "application.process.id": 1313205,
+       "application.process.binary": "firefox-bin",
+       "application.name": "Firefox"
+      }
+     }
+    },
+    {
+     "id": 77,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 94,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    },
+    {
+     "id": 101,
+     "type": "PipeWire:Interface:Link",
+     "info": {
+      "output-node-id": 94,
+      "input-node-id": 57,
+      "state": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "rel_s": 306.233,
+   "batch": [
+    {
+     "id": 77,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 306.233,
+   "batch": [
+    {
+     "id": 101,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 306.233,
+   "batch": [
+    {
+     "id": 94,
+     "info": null
+    }
+   ]
+  },
+  {
+   "rel_s": 306.234,
+   "batch": [
+    {
+     "id": 57,
+     "type": "PipeWire:Interface:Node",
+     "info": {
+      "state": "idle",
+      "props": {
+       "media.class": "Audio/Sink",
+       "node.name": "sink-57",
+       "client.id": 48,
+       "object.serial": 57
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,10 @@
+# Secret scan settings for gitleaks (run in CI). The default rules apply; the
+# test suite builds its fake keys at run time, so no fixture needs an exception.
+title = "wirenote"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Package hashes and the license text"
+paths = ['''^uv\.lock$''', '''^LICENSE$''']

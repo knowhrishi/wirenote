@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Wirenote
+GenericName=Meeting notes
+Comment=Past calls: transcripts, summaries and action items
+Exec=@EXEC@ open
+Icon=wirenote
+Terminal=false
+Categories=Office;AudioVideo;
+Keywords=meeting;notes;transcript;call;

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="wirenote-token" content="{{TOKEN}}">
+  <meta name="color-scheme" content="light dark">
+  <title>Wirenote</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <a class="brand" href="#/">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Wirenote</span>
+      </a>
+      <button id="record-btn" class="record-btn" type="button">
+        <span class="rec-dot" aria-hidden="true"></span><span id="record-label">Record a meeting</span>
+      </button>
+      <nav class="nav" aria-label="Sections">
+        <a class="nav-item" href="#/" data-nav="home"><svg class="icon"><use href="/static/icons.svg#home"/></svg>Home</a>
+        <a class="nav-item" href="#/ask" data-nav="ask"><svg class="icon"><use href="/static/icons.svg#sparkle"/></svg>Ask your meetings</a>
+        <a class="nav-item" href="#/tasks" data-nav="tasks"><svg class="icon"><use href="/static/icons.svg#check-square"/></svg>Action items<span id="tasks-count" class="nav-count"></span></a>
+        <a class="nav-item" href="#/settings" data-nav="settings"><svg class="icon"><use href="/static/icons.svg#settings"/></svg>Settings</a>
+      </nav>
+      <label class="search">
+        <svg class="icon" aria-hidden="true"><use href="/static/icons.svg#search"/></svg>
+        <input id="search" type="search" placeholder="Search meetings" autocomplete="off" spellcheck="false">
+        <kbd>Ctrl K</kbd>
+      </label>
+      <nav id="list" class="list" aria-label="Meetings"></nav>
+      <footer id="sidebar-status" class="sidebar-status"></footer>
+      <div class="about">Wirenote {{VERSION}} · AGPL-3.0 · <a href="https://github.com/knowhrishi/wirenote" target="_blank" rel="noopener noreferrer">Source</a></div>
+    </aside>
+
+    <div class="content">
+      <div id="banner" class="banner" hidden></div>
+      <main id="main" class="main" tabindex="-1"></main>
+      <div id="player" class="player" hidden>
+        <button class="btn-icon" id="p-back" title="Back 15 s (←)"><svg class="icon"><use href="/static/icons.svg#back15"/></svg></button>
+        <button class="btn-play" id="p-play" title="Play (Space)"><svg class="icon"><use href="/static/icons.svg#play"/></svg></button>
+        <button class="btn-icon" id="p-fwd" title="Forward 15 s (→)"><svg class="icon"><use href="/static/icons.svg#fwd15"/></svg></button>
+        <span class="p-time" id="p-time">0:00</span>
+        <input class="p-scrub" id="p-scrub" type="range" min="0" max="1000" value="0" aria-label="Position">
+        <span class="p-time" id="p-dur">0:00</span>
+        <button class="btn-chip" id="p-speed" title="Playback speed">1×</button>
+        <audio id="audio" preload="none"></audio>
+      </div>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="modal" class="modal" hidden></div>
+</body>
+</html>

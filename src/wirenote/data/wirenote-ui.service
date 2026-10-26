@@ -1,0 +1,15 @@
+# Written by `wirenote setup install`; remove with `wirenote setup uninstall`.
+# The meetings web app on 127.0.0.1 (this user only); open it with `wirenote open`.
+[Unit]
+Description=Wirenote web app (past calls, transcripts, summaries)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=@EXEC@ ui
+UMask=0077
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

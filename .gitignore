@@ -1,0 +1,15 @@
+__pycache__/
+*.tmp
+
+# Raw captures: hostnames, user name, device names, room names. Commit only scrubbed
+# traces made with scripts/make_replay.py (tests/replay/).
+tests/fixtures/
+.venv/
+.pytest_cache/
+
+# AI assistant working files stay local: plans, specs, agent instructions.
+docs/superpowers/
+.superpowers/
+.claude/
+CLAUDE.md
+AGENTS.md

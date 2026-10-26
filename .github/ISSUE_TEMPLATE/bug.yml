@@ -1,0 +1,38 @@
+name: Bug report
+description: Something does not work as described
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Do not attach recordings, transcripts, notes, calendar links, API keys or full logs**: they contain other people's words and names. Security problems go through the Security tab › Report a vulnerability, not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Join a Jitsi call in Firefox\n2. …"
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `wirenote doctor`
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Distribution, desktop and PipeWire version
+      placeholder: "Fedora 43, GNOME 49 (Wayland), PipeWire 1.6"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Wirenote version
+      description: Shown at the bottom of the app's sidebar.
