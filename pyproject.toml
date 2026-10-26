@@ -54,7 +54,11 @@ packages = ["src/wirenote"]
 artifacts = ["src/wirenote/data/*", "src/wirenote/ui/static/*"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "LICENSE", "README.md", "CHANGELOG.md", "pyproject.toml", "uv.lock"]
+include = [
+    "/src", "/tests", "/scripts", "/docs/usage.md", "/pyproject.toml", "/uv.lock",
+    "/LICENSE", "/README.md", "/CHANGELOG.md", "/PRIVACY.md", "/SECURITY.md",
+    "/CONTRIBUTING.md", "/CODE_OF_CONDUCT.md", "/THIRD_PARTY.md", "/CLA.md",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

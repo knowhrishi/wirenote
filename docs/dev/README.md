@@ -8,3 +8,4 @@ The notes written while Wirenote was built, milestone by milestone. They explain
 - [m2-m4-design.md](m2-m4-design.md): recording, transcript, summary and calendar.
 - [features-2-design.md](features-2-design.md): speakers, notes during the call, Ask across meetings.
 - [ui-design.md](ui-design.md): the meetings app.
+- [releasing.md](releasing.md): how a release is made, and the one-time PyPI and GitHub setup.

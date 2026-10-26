@@ -9,7 +9,11 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).parent.parent
+# The source archive on PyPI has no git history; these checks guard the repository.
+needs_git = pytest.mark.skipif(not (REPO / ".git").exists(), reason="needs a git checkout")
 # Words that must never appear in the published tree (a company, a user name, a
 # private folder, a product we do not compare with), stored as SHA-256 hashes so
 # this file does not publish them either.
@@ -37,6 +41,7 @@ def _tracked_text() -> dict[str, str]:
     return out
 
 
+@needs_git
 def test_no_private_text_in_tree():
     hits = sorted(name for name, text in _tracked_text().items()
                   if any(hashlib.sha256(w.encode()).hexdigest() in PRIVATE_WORDS
@@ -44,6 +49,7 @@ def test_no_private_text_in_tree():
     assert hits == []
 
 
+@needs_git
 def test_no_ai_working_files_in_tree():
     """Plans, specs and agent instructions stay local (.gitignore)."""
     tracked = _tracked_text()

@@ -32,7 +32,7 @@ jobs:
           enable-cache: true
       - run: uv sync --locked
       - run: uv run pytest -q
-      - run: uv run pyflakes src tests
+      - run: uv run pyflakes src tests scripts
 
   audit:
     name: Dependency audit

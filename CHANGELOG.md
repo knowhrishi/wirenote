@@ -22,3 +22,5 @@ First public release.
 - The meetings app only serves your own user, through a one-time login.
 - Calendar feeds are limited and must use https; untrusted text is escaped in notifications and notes.
 - Logs leave out room names, note paths and speaker names; model downloads are pinned.
+
+[0.1.0]: https://github.com/knowhrishi/wirenote/releases/tag/v0.1.0
