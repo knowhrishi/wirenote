@@ -2,9 +2,9 @@
 
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] - unreleased
+## [0.1.0] - 2026-10-26
 
-First public release.
+First public release. Runs on Linux (x86_64 and ARM64) with PipeWire and Python 3.11 to 3.14.
 
 ### Added
 

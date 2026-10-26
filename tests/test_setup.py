@@ -145,3 +145,11 @@ def test_config_value_replaces_a_multiline_value():
     out = with_config_value(out, "b", '"one"')
     assert tomllib.loads(out) == {"a": 1, "calendar_urls": ["z"], "b": "one"}
     assert tomllib.loads(with_config_value(out, "c", "4"))["c"] == 4
+
+
+def test_cli_refuses_to_run_outside_linux(monkeypatch, capsys):
+    from wirenote import cli
+
+    monkeypatch.setattr(cli.sys, "platform", "darwin")
+    assert cli.main(["status"]) == 2
+    assert "Linux" in capsys.readouterr().err

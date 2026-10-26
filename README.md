@@ -13,8 +13,8 @@ When an app starts using your microphone for a call, Wirenote asks whether to re
 
 ## Requirements
 
-- Linux with **PipeWire** (most current distributions), and a desktop with notifications. Tested on **KDE Plasma 6 (Wayland)**; GNOME and others should work but are not tested yet.
-- **Python 3.11** or newer, and [uv](https://docs.astral.sh/uv/).
+- Linux on **x86_64 or ARM64** with **PipeWire** (most current distributions), and a desktop with notifications. Tested on **KDE Plasma 6 (Wayland)**; GNOME and others should work but are not tested yet. macOS and Windows are not supported.
+- **Python 3.11 to 3.14**, and [uv](https://docs.astral.sh/uv/). uv downloads a matching Python if yours is newer or older.
 - **ffmpeg** (for playback in the web app).
 - About 2 GB of disk for the speech models, downloaded once on the first note.
 - Optional: [Ollama](https://ollama.com) for local summaries, or an Anthropic API key for summaries by Claude.

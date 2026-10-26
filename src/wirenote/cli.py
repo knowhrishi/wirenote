@@ -194,6 +194,10 @@ def cmd_dump_streams(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if not sys.platform.startswith("linux"):
+        print("wirenote: runs on Linux only; it needs PipeWire, systemd and D-Bus.",
+              file=sys.stderr)
+        return 2
     os.umask(0o077)   # recordings, transcripts and notes are private
     from .config.migrate import MigrationError, migrate_if_needed
     try:
