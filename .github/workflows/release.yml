@@ -3,13 +3,28 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # A dry run from any branch: every check, the build and the wheel tests, no publishing.
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  checks:
+    name: CI on the release commit
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  models:
+    name: Real models on the release commit
+    uses: ./.github/workflows/models.yml
+    permissions:
+      contents: read
+
   build:
     name: Build
+    needs: [checks, models]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -22,24 +37,38 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
       - name: Tag matches the version in pyproject.toml
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
         run: |
           version=$(uv run --no-project python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
-          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != v$version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT" = "push" ]; then
+            test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != v$version"; exit 1; }
+          fi
       # Checked before anything is published, so a release never goes out with undated notes.
+      # A dry run only warns: the section is dated just before tagging.
       - name: Release notes from CHANGELOG.md
         env:
           PRIVATE: ${{ github.event.repository.private }}
+          EVENT: ${{ github.event_name }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           attested=""
           if [ "$PRIVATE" = "false" ]; then attested="--attested"; fi
           mkdir notes
-          uv run --no-project python scripts/release_notes.py "${GITHUB_REF_NAME#v}" $attested > notes/release-notes.md
-      - run: uv sync --locked
-      - run: uv run pytest -q
+          if ! uv run --no-project python scripts/release_notes.py "$VERSION" $attested > notes/release-notes.md; then
+            if [ "$EVENT" = "push" ]; then exit 1; fi
+            echo "::warning::CHANGELOG.md is not ready for $VERSION; a tag would stop here"
+            echo "Dry run of $VERSION" > notes/release-notes.md
+          fi
+      # `uv build` makes the source archive, then the wheel from that archive, so a
+      # file missing from the sdist breaks the build here rather than for a packager.
       - run: uv build
-      # Artifact attestations are only available for public repositories on personal accounts.
+      # Artifact attestations are only available for public repositories on personal accounts,
+      # and only a tagged build is attested: a dry run's files are never published.
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
-        if: ${{ !github.event.repository.private }}
+        if: ${{ !github.event.repository.private && github.event_name == 'push' }}
         with:
           subject-path: dist/*
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
@@ -53,9 +82,32 @@ jobs:
           path: notes/
           if-no-files-found: error
 
+  wheel:
+    name: Wheel on Python ${{ matrix.python }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: dist
+          path: dist/
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+      # The exact file that goes to PyPI, installed as a user would, against every test.
+      - run: scripts/test_wheel.sh dist ${{ matrix.python }}
+
   publish:
     name: Publish to PyPI
-    needs: build
+    needs: wheel
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -74,6 +126,7 @@ jobs:
   github-release:
     name: GitHub release page
     needs: publish
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
