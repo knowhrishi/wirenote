@@ -1,0 +1,30 @@
+name: Install Debian packages
+description: >-
+  scripts/ci_apt_install.sh, with the downloaded packages kept in the Actions cache.
+  Runs after actions/checkout.
+
+inputs:
+  packages:
+    description: The packages to install, separated by spaces.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Azure's Ubuntu mirror has stalled ffmpeg's 63 MB for 6 minutes and more, which held
+    # up every release; from the cache the same packages install in seconds. The key
+    # changes with the runner's Ubuntu release, the packages and the script.
+    - id: key
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: echo "key=apt-$ImageOS-${PACKAGES// /-}" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      with:
+        path: ${{ runner.temp }}/apt-cache
+        key: ${{ steps.key.outputs.key }}-${{ hashFiles('scripts/ci_apt_install.sh') }}
+    - shell: bash
+      env:
+        CI_APT_CACHE: ${{ runner.temp }}/apt-cache
+        PACKAGES: ${{ inputs.packages }}
+      run: scripts/ci_apt_install.sh $PACKAGES

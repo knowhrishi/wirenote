@@ -6,6 +6,6 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
   - package-ecosystem: github-actions
-    directory: /
+    directories: [/, /.github/actions/*]   # the workflows and the local actions
     schedule:
       interval: weekly

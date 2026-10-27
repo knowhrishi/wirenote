@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Hrishikesh Jadhav
-"""scripts/ci_apt_install.sh: bounded, retried apt installs on CI runners. apt and
-everything run as root are faked."""
+"""scripts/ci_apt_install.sh: bounded, retried apt installs on CI runners, from a cache
+of the packages when there is one. apt, dpkg and everything run as root are faked."""
 
 from __future__ import annotations
 
@@ -14,12 +14,18 @@ SCRIPT = ROOT / "scripts/ci_apt_install.sh"
 
 # Every command the script runs as root is a fake on PATH that logs its arguments.
 # `timeout` notes which mirror apt would use, then exits 124 for the apt-get step
-# named in FAKE_TIMEOUT, as GNU timeout does.
+# named in FAKE_TIMEOUT, as GNU timeout does. An apt-get install pointed at another
+# archive folder leaves a package and apt's lock file there, as the real one does.
 FAKES = {
     "sudo": 'exec "$@"',
     "timeout": 'shift\n[ -f "$CI_APT_MIRRORS" ] && head -n 1 "$CI_APT_MIRRORS" | cut -f 1 >> "$MIRROR_LOG"\n'
                'case " $* " in *" $FAKE_TIMEOUT "*) exit 124;; esac\nexec "$@"',
-    "apt-get": 'echo "apt-get $*" >> "$LOG"\nexit "${FAKE_APT_RC:-0}"',
+    "apt-get": 'echo "apt-get $*" >> "$LOG"\n'
+               'case " $* " in *" install "*) for a; do case $a in Dir::Cache::archives=*)\n'
+               '  touch "${a#*=}ffmpeg_7_amd64.deb" "${a#*=}lock";; esac; done;; esac\n'
+               'exit "${FAKE_APT_RC:-0}"',
+    "dpkg": 'echo "dpkg $*" >> "$LOG"\nexit "${FAKE_DPKG_RC:-0}"',
+    "dpkg-query": '[ -z "$FAKE_NOT_INSTALLED" ] || exit 1\necho "install ok installed"',
     "rm": 'echo "rm $*" >> "$LOG"',
     "fuser": 'echo "fuser $*"',
     "ps": 'echo "  4242    05:01 /usr/bin/dpkg --status-fd 23 --configure man-db"',
@@ -92,3 +98,47 @@ def test_a_single_mirror_is_kept(tmp_path):
     r, _ = run(tmp_path, mirrors=one, FAKE_TIMEOUT="install")
     assert r.returncode == 1 and "skip the mirror" not in r.stderr
     assert (tmp_path / "apt-mirrors.txt").read_text() == one
+
+
+def cached(tmp_path, *names):
+    cache = tmp_path / "apt-cache"
+    cache.mkdir()
+    for name in names:
+        (cache / name).write_bytes(b"")
+    return cache
+
+
+def test_cached_packages_install_without_the_network(tmp_path):
+    cache = cached(tmp_path, "ffmpeg_7_amd64.deb", "libavcodec60_7_amd64.deb")
+    r, log = run(tmp_path, CI_APT_CACHE=str(cache))
+    assert r.returncode == 0, r.stderr
+    assert log[1:] == [f"dpkg -i -G {cache}/ffmpeg_7_amd64.deb {cache}/libavcodec60_7_amd64.deb"]
+
+
+def test_a_download_fills_the_cache(tmp_path):
+    cache = tmp_path / "apt-cache"
+    r, log = run(tmp_path, CI_APT_CACHE=str(cache))
+    assert r.returncode == 0, r.stderr
+    update, install, cleanup = log[1:]
+    assert f"-o Dir::Cache::archives={cache}/" in install
+    assert install.endswith(" install -y --no-install-recommends ffmpeg")
+    assert (cache / "ffmpeg_7_amd64.deb").exists()
+    # apt's lock and partial folder are root's alone; the cache action could not save them.
+    assert cleanup == f"rm -rf {cache}/partial {cache}/lock"
+
+
+def test_cached_packages_that_fail_are_downloaded(tmp_path):
+    cache = cached(tmp_path, "ffmpeg_7_amd64.deb")
+    r, log = run(tmp_path, CI_APT_CACHE=str(cache), FAKE_DPKG_RC="1")
+    assert r.returncode == 0, r.stderr
+    assert "the cached packages did not install" in r.stderr
+    install = log[-1]
+    assert install.endswith(" install -y --no-install-recommends --fix-broken ffmpeg")
+    assert "Dir::Cache::archives" not in install
+
+
+def test_a_cache_without_the_package_is_downloaded(tmp_path):
+    cache = cached(tmp_path, "libavcodec60_7_amd64.deb")
+    r, log = run(tmp_path, CI_APT_CACHE=str(cache), FAKE_NOT_INSTALLED="1")
+    assert r.returncode == 0, r.stderr
+    assert log[-1].endswith(" install -y --no-install-recommends --fix-broken ffmpeg")

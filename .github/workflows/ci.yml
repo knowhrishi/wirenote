@@ -36,7 +36,9 @@ jobs:
       # ffmpeg: the end-to-end test plays a recording back through the web app. That path
       # does not depend on the Python version, so one job is enough; the others skip it.
       - if: matrix.python == '3.13'
-        run: scripts/ci_apt_install.sh ffmpeg
+        uses: ./.github/actions/apt-install
+        with:
+          packages: ffmpeg
       - run: uv sync --locked
       - run: uv run pytest -q
       - run: uv run pyflakes src tests scripts
@@ -50,7 +52,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
-      - run: scripts/ci_apt_install.sh ffmpeg
+      - uses: ./.github/actions/apt-install
+        with:
+          packages: ffmpeg
       - run: uv build
       # A file left out of the wheel, or a dependency not declared, fails here.
       - run: scripts/test_wheel.sh dist 3.13
