@@ -750,3 +750,29 @@ def test_rewrite_note_keeps_template_sections(tmp_path):
     (rec / "summary.json").write_text(json.dumps(data))
     text = rewrite_note(rec, settings_for(tmp_path)).read_text()
     assert "## Summary" in text and "template:" not in text and "Old part" not in text
+
+
+def test_template_sections_and_flagged_moments_share_one_note(tmp_path):
+    from wirenote.capture.recorder import write_flags
+    from wirenote.process.worker import rewrite_note
+
+    rec = make_recording(tmp_path, template="standup")
+    write_flags(rec, [4.4])
+    s = replace(settings_for(tmp_path), flag_before_s=1.0, flag_after_s=0.5)
+    jobs = Jobs(tmp_path / "jobs.db")
+    backend = SectionsBackend()
+    job = run_job(jobs.add(rec), s, jobs, FakeTranscriber(), lambda _s: backend,
+                  voices=no_voices(tmp_path))
+    user = backend.summary_call()[1]
+    assert "Moments Me flagged as important" in user and "[00:00:04] Me: Yes, Friday works." in user
+    note = Path(job.note)
+
+    def check(text):
+        assert "## Blockers\n\n- Ben is blocked on a review" in text
+        assert "## Flagged moments\n\n- [00:00:04] **Me** Yes, Friday works." in text
+        assert text.index("## Summary") < text.index("## Blockers") < text.index("## Flagged moments") \
+            < text.index("## Transcript")
+
+    check(note.read_text())
+    rewrite_note(rec, s)
+    check(note.read_text())
