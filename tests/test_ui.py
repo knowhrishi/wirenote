@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from wirenote.capture.recorder import read_manifest, write_manifest
+from wirenote.capture.recorder import read_manifest, write_flags, write_manifest
 from wirenote.process.merge import Line
 from wirenote.ui import data as data_mod
 from wirenote.ui.data import Invalid, NotFound, Store, _relevant
@@ -261,6 +261,8 @@ def test_add_flag_after_the_call_and_refused_while_recording(store, tmp_path):
     for bad in (-1, float("nan"), float("inf"), 10 ** 9, "3", True):
         with pytest.raises(Invalid):
             st.add_flag(rec_id, bad)
+    assert st.add_flag(rec_id, 2000.0) == [1.5, 4.2, 1800.0]          # the call is 30 min long
+    write_flags(st.rec_dir(rec_id), [1.5, 4.2])
     call = st.call(rec_id)
     assert [(f["t"], f["start"], f["name"]) for f in call["flags"]] == [
         (1.5, 1.0, "Speaker 1"), (4.2, 4.0, "Me")]

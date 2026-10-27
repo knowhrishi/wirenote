@@ -107,8 +107,9 @@ def render(manifest: dict, lines: list[Line], summary: Summary | None, *, title:
         "audio": audio or None,
         "transcript_model": transcript_model,
         "summary_backend": summary_backend if summary else None,
-        "template": summary.template if summary and summary.template != "general" else None,
         "recording_id": manifest["id"],
+        # docs/dev/changes.md › Note files: new keys go at the end.
+        "template": summary.template if summary and summary.template != "general" else None,
     }
     out = ["---"]
     out += [f"{k}: {_yaml(v)}" for k, v in front.items() if v is not None]

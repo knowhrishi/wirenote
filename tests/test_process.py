@@ -747,6 +747,9 @@ def test_template_sections_reach_schema_note_and_summary_json(tmp_path):
     assert "## Summary\n\n- Planned the 2.0 release.\n\n## Updates by person\n\n" \
            "- Ana: finished the release notes\n\n## Blockers\n\n- Ben is blocked on a review" in text
     assert 'template: "standup"' in text
+    # docs/dev/changes.md › Note files: new front matter keys go at the end.
+    keys = [l.split(":")[0] for l in text.split("---\n")[1].splitlines()]
+    assert keys[-2:] == ["recording_id", "template"]
     saved = json.loads((rec / "summary.json").read_text())
     assert saved["template"] == "standup" and saved["sections"]["blockers"] == [
         "Ben is blocked on a review"]

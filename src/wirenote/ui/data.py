@@ -106,7 +106,7 @@ FOLLOWUP_SCHEMA = {"type": "object",
                    "required": ["subject", "body"], "additionalProperties": False}
 
 
-MAX_FLAG_S = 24 * 3600      # nothing is recorded that long (the cap is 4 h)
+MAX_FLAG_S = 24 * 3600      # docs/dev/PLAN.md › Defaults › Flag a finished call
 
 
 class NotFound(Exception):
@@ -380,6 +380,10 @@ class Store:
             raise Invalid("bad time")
         if self.status().get("recording_id") == rec_id:
             raise Invalid("This call is still recording. Flag it with Flag this moment.")
+        m = read_manifest(d)
+        length = max((x.get("end_offset_s") or 0.0 for x in m.get("segments", [])), default=0.0)
+        if length > 0:
+            t = min(t, length)       # a flag after the end is about the end
         flags = read_flags(d)
         added = add_flag(flags, round(float(t), 1))
         if added is None:

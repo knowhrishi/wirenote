@@ -68,7 +68,7 @@ class Settings:
     whispercpp_model: str = "ggml-large-v3-turbo-q5_0.bin"   # a file, or one from ggerganov/whisper.cpp
     # docs/dev/live-design.md: a live transcript during the call, on two CPU threads
     live_transcript: bool = False
-    # › Flagged moments: a flag selects what was said this long before and after it
+    # › Flag window: a flag selects what was said this long before and after it
     flag_before_s: float = 30.0
     flag_after_s: float = 10.0
     # Consecutive lines of one speaker closer than this join into a paragraph
