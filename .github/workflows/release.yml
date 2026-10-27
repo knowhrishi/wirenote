@@ -100,7 +100,8 @@ jobs:
         with:
           name: dist
           path: dist/
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+      - if: matrix.python == '3.13'      # the audio test; see ci.yml
+        run: scripts/ci_apt_install.sh ffmpeg
       # The exact file that goes to PyPI, installed as a user would, against every test.
       - run: scripts/test_wheel.sh dist ${{ matrix.python }}
 
