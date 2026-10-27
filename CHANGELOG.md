@@ -23,13 +23,13 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ### Changed
 
-- A title you give a call in the app, or with `wirenote import --title`, now also names its Markdown note when the note is written again.
 - Notes are ready sooner: the speech engine is now chosen for you. Wirenote uses Parakeet when it knows your language and you have no vocabulary set, and Whisper otherwise. The first note after the update downloads Parakeet's model (about 670 MB) once. If a call comes out worse, transcribe it again with Whisper from the call page's menu. What you need to do: nothing; to keep Whisper for every call, choose Whisper in Settings › Setup.
+- A title you give a call in the app, or with `wirenote import --title`, now also names its Markdown note when the note is written again.
 - The job queue (`jobs.db`) records its schema version, so later releases can change it without breaking existing queues. Nothing to do on upgrade.
 
 ### Fixed
 
-- A summary no longer fails because memory is short. Wirenote waits for enough free memory before Ollama loads its model, instead of the kernel stopping Ollama or another program. If the summary still fails, or Ollama restarts, the note is written with the transcript and the summary is tried again a few minutes later, up to three times.
+- A summary no longer fails because memory is short. Wirenote waits for enough free memory before Ollama loads its model, instead of the kernel stopping Ollama or another program. If the summary still fails, because Ollama restarts or an online API is busy or out of reach, the note is written with the transcript and the summary is tried again a few minutes later, up to three times.
 - `contrib/ollama.service` halves the memory Ollama needs to hold the transcript while it reads it. What you need to do: if you use it, copy it to `~/.config/systemd/user/` again and run `systemctl --user daemon-reload && systemctl --user restart ollama`.
 
 ## [0.2.0] - 2026-10-27

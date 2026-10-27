@@ -569,3 +569,30 @@ def test_the_summary_is_queued_again_until_attempts_are_used_up(tmp_path, monkey
     assert job.state == "done" and tr.calls == 1                 # transcribed once
     text = Path(job.note).read_text()
     assert "not enough free memory" in text and "tries again" not in text
+
+
+def test_an_api_that_is_busy_or_down_is_a_passing_failure(monkeypatch):
+    from wirenote.process import summarize as summ
+    from wirenote.process.summarize import OpenAIBackend
+
+    api = OpenAIBackend("https://openrouter.ai/api/v1", "m", "sk-or-test-key")
+    for code in (429, 502):
+        fake_api(monkeypatch, [code])
+        with pytest.raises(summ.SummaryUnavailable):
+            api.complete_json("s", "u", {})
+    fake_api(monkeypatch, [404])
+    with pytest.raises(SummaryError) as e:
+        api.complete_json("s", "u", {})
+    assert not isinstance(e.value, summ.SummaryUnavailable)
+
+
+def test_an_unreachable_api_is_a_passing_failure(monkeypatch):
+    from wirenote.process import summarize as summ
+    from wirenote.process.summarize import OpenAIBackend
+
+    def refused(req, timeout):
+        raise ConnectionRefusedError(111, "refused")
+    monkeypatch.setattr(summ.urllib.request, "urlopen", refused)
+    monkeypatch.setattr(summ, "listener_uid", lambda port, host="127.0.0.1": None)
+    with pytest.raises(summ.SummaryUnavailable):                   # LM Studio not started yet
+        OpenAIBackend("http://127.0.0.1:1234/v1", "m").complete_json("s", "u", {})

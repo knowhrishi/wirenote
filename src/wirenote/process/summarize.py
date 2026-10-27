@@ -341,9 +341,13 @@ class OpenAIBackend:
             if e.code in (401, 403):
                 raise SummaryError(f"{self.host} rejected the API key ({e.code}); run "
                                    "`wirenote setup openai` or paste a key in Settings") from e
-            raise SummaryError(f"{self.host} returned {e.code}: {detail}") from e
+            # 429 and 5xx (OpenRouter: rate limits, a provider down): worth asking again later.
+            error = SummaryUnavailable if e.code == 429 or e.code >= 500 else SummaryError
+            raise error(f"{self.host} returned {e.code}: {detail}") from e
+        except TimeoutError as e:
+            raise SummaryError(f"{self.host} did not answer within {self.timeout_s:.0f} s") from e
         except (urllib.error.URLError, OSError) as e:
-            raise SummaryError(f"{self.url} not reachable ({e})") from e
+            raise SummaryUnavailable(f"{self.url} not reachable ({e})") from e
         except ValueError as e:
             raise SummaryError(f"{self.host} did not answer with JSON") from e
 
