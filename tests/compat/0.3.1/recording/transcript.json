@@ -1,0 +1,37 @@
+{
+  "model": "/tmp/pytest-of-runner/pytest-0/e2e0/fake-whisper-model",
+  "runs": [
+    {
+      "file": "mic-000.wav",
+      "engine": "whisper",
+      "language": "en",
+      "language_probability": 0.99,
+      "audio_s": 5.7,
+      "speech_s": 2.5
+    },
+    {
+      "file": "system-000.wav",
+      "engine": "whisper",
+      "language": "en",
+      "language_probability": 0.99,
+      "audio_s": 5.7,
+      "speech_s": 2.5
+    }
+  ],
+  "lines": [
+    {
+      "speaker": "Me",
+      "start": 0.2,
+      "end": 2.7,
+      "text": "I will send the changelog by Thursday."
+    },
+    {
+      "speaker": "Others",
+      "start": 0.21,
+      "end": 2.71,
+      "text": "Great, then we ship the release on Friday."
+    }
+  ],
+  "speakers": {},
+  "dropped_echo": []
+}

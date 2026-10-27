@@ -1,6 +1,6 @@
 [project]
 name = "wirenote"
-version = "0.3.0"
+version = "0.3.1"
 description = "Private meeting notes for Linux: detects calls, records, transcribes and summarizes locally."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
