@@ -3,6 +3,9 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Started on the new tag by tag-release.yml: a tag pushed with GITHUB_TOKEN starts
+  # no push run. Also lets a failed release be run again on its tag.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -23,6 +26,7 @@ jobs:
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
       - name: Tag matches the version in pyproject.toml
         run: |
+          test "$GITHUB_REF_TYPE" = tag || { echo "::error::run this on a v* tag, not a branch"; exit 1; }
           version=$(uv run --no-project python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
           test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != v$version"; exit 1; }
       # Checked before anything is published, so a release never goes out with undated notes.

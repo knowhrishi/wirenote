@@ -1,0 +1,52 @@
+name: Tag release
+
+# When a release/vX.Y.Z pull request from prepare-release.yml is merged: tag the
+# merge commit vX.Y.Z and start release.yml on that tag. A tag pushed with
+# GITHUB_TOKEN starts no workflow by itself, so release.yml is started here.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    name: Tag and start the release
+    if: >-
+      github.event.pull_request.merged &&
+      startsWith(github.event.pull_request.head.ref, 'release/v') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write   # pushes the tag
+      actions: write    # starts release.yml
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: ${{ github.event.pull_request.head.ref }}
+      SHA: ${{ github.event.pull_request.merge_commit_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+      - name: The merged version is the one the branch is named after
+        run: |
+          version=$(uv run --no-project python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
+          test "release/v$version" = "$BRANCH" || { echo "::error::$BRANCH merged, but pyproject.toml says $version"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Tag the merge commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "Wirenote $VERSION" "$SHA"
+          gh auth setup-git
+          git push origin "v$VERSION"
+      - name: Start the release
+        run: gh workflow run release.yml --ref "v$VERSION"
+      - name: Delete the release branch
+        run: git push origin --delete "$BRANCH" || true
