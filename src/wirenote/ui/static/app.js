@@ -590,13 +590,15 @@ function myNotesEditor(c, big) {
   const ta = h("textarea", { id: "mynotes-text", placeholder: big ? "Type notes while you talk…\n- decision: …\n- Anna: send the draft by Friday" : "Add your own notes. They shape the summary.", spellcheck: "true" });
   ta.value = c.my_notes || "";
   const grow = () => { ta.style.height = "auto"; ta.style.height = `${Math.max(ta.scrollHeight, big ? 320 : 96)}px`; };
-  let timer = null, last = ta.value;
-  const save = async () => {
+  let timer = null, last = ta.value, saving = Promise.resolve();
+  // One save at a time, so each sends as base what the previous one saved.
+  const save = () => (saving = saving.then(saveNow));
+  const saveNow = async () => {
     if (ta.value === last) return;
     const text = ta.value;
     saved.textContent = "Saving…";
     try {
-      await api(`/api/calls/${c.id}/notes`, { method: "POST", body: { text } });
+      await api(`/api/calls/${c.id}/notes`, { method: "POST", body: { text, base: last } });
       last = text;
       c.my_notes = text;
       saved.textContent = "Saved";
