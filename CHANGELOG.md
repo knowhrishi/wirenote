@@ -4,6 +4,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-27
+
 ### Added
 
 - "What's new": after an update, the meetings app shows what changed since the version you last used, once. Click the version number at the bottom of the sidebar to read every release's notes again, or run `wirenote changelog`.
@@ -68,5 +70,6 @@ First public release. Runs on Linux (x86_64 and ARM64) with PipeWire and Python 
 - Calendar feeds are limited and must use https; untrusted text is escaped in notifications and notes.
 - Logs leave out room names, note paths and speaker names; model downloads are pinned.
 
+[0.3.0]: https://github.com/knowhrishi/wirenote/releases/tag/v0.3.0
 [0.2.0]: https://github.com/knowhrishi/wirenote/releases/tag/v0.2.0
 [0.1.0]: https://github.com/knowhrishi/wirenote/releases/tag/v0.1.0
