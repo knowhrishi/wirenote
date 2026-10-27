@@ -204,3 +204,10 @@ def test_daemon_starts_a_queued_job_when_told(tmp_path):
     d = make(tmp_path)
     assert not d._worker_kick.is_set()
     assert d._control("kick-jobs")["ok"] and d._worker_kick.is_set()
+
+
+def test_word_export_holds_template_sections():
+    s = {**call_data()["summary"], "sections": {"blockers": ["Ben waits for a review"], "empty": []}}
+    text = docx_text(docx_bytes(call_data(summary=s, section_titles={"blockers": "Blockers"})))
+    assert "Blockers" in text and "Ben waits for a review" in text and "Empty" not in text
+    assert text.index("Planned the release") < text.index("Blockers") < text.index("Ship on Friday.")

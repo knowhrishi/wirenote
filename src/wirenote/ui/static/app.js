@@ -694,8 +694,8 @@ function sectionEntries(c) {
 
 // Choose the summary template for one call and redo its summary (docs/usage.md › Summary templates).
 function templateDialog(c) {
-  const select = h("select", {}, [h("option", { value: "" }, "Automatic (by title, then your default)"),
-    ...(c.templates || []).map((t) => h("option", { value: t.id, selected: t.id === c.template }, t.name))]);
+  const select = h("select", {}, [h("option", { value: "", selected: !c.chosen_template }, "Automatic (by title, then your default)"),
+    ...(c.templates || []).map((t) => h("option", { value: t.id, selected: t.id === c.chosen_template }, t.name))]);
   const series = h("input", { type: "checkbox", id: "template-series" });
   const seriesRow = h("label", { class: "check-row tight", for: "template-series" }, series, "Use it for every meeting in this calendar series");
   const show = () => { seriesRow.hidden = !c.in_series || !select.value; };

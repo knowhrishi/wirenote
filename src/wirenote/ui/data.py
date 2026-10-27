@@ -278,8 +278,10 @@ class Store:
             if q in name.lower():
                 return {"where": "people", "text": name}
         s = self._summary(d) or {}
-        for key in ("summary", "decisions", "open_questions"):
-            for item in s.get(key, []):
+        for key, items in (("summary", s.get("summary", [])), ("decisions", s.get("decisions", [])),
+                           ("open_questions", s.get("open_questions", [])),
+                           *(s.get("sections") or {}).items()):
+            for item in items or []:
                 if q in item.lower():
                     return {"where": key, "text": item}
         for a in s.get("action_items", []):
@@ -326,6 +328,7 @@ class Store:
                 "template": used,
                 "templates": self.templates(),
                 "section_titles": {s.key: s.title for s in template.sections} if template else {},
+                "chosen_template": m.get("template"),
                 "in_series": bool((m.get("calendar") or {}).get("uid")),
                 "lines": lines,
                 "people": people,
@@ -589,6 +592,13 @@ class Store:
         if cal.get("attendees"):
             notes.append("Invited: " + ", ".join(cal["attendees"]))
         notes.append("Summary:\n" + "\n".join(f"- {x}" for x in s.get("summary", [])))
+        template = scan()[0].get(s.get("template") or "general")
+        for key, items in (s.get("sections") or {}).items():
+            if items:
+                head = next((x.title for x in template.sections if x.key == key), None) \
+                    if template else None
+                notes.append(f"{head or key.replace('_', ' ').capitalize()}:\n"
+                             + "\n".join(f"- {x}" for x in items))
         if s.get("decisions"):
             notes.append("Decisions:\n" + "\n".join(f"- {x}" for x in s["decisions"]))
         if s.get("action_items"):

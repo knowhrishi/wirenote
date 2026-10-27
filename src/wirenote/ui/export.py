@@ -71,6 +71,9 @@ def body_xml(call: dict) -> str:
             out.extend(_p(f"•\t{item}", "Bullet") for item in items)
 
     section("Summary", s.get("summary") or [])
+    titles = call.get("section_titles") or {}
+    for key, items in (s.get("sections") or {}).items():
+        section(titles.get(key) or key.replace("_", " ").capitalize(), items or [])
     section("Decisions", s.get("decisions") or [])
     actions = s.get("action_items") or []
     if actions:

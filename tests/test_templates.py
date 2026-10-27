@@ -130,3 +130,21 @@ def test_doctor_lists_skipped_files_and_a_missing_default(tmp_path):
     checks = _template_checks(replace(Settings(), default_template="gone"))
     assert [c.status for c in checks] == ["warn", "warn"]
     assert "bad.toml" in checks[0].message and "'gone'" in checks[1].message
+
+
+def test_a_rejected_reprocess_leaves_the_manifest_unchanged(tmp_path, capsys):
+    from wirenote.capture.recorder import read_manifest
+    from wirenote.cli import main
+    from wirenote.config.settings import config_dir
+
+    rec = make_recording(tmp_path)
+    config_dir().mkdir(parents=True, exist_ok=True)
+    (config_dir() / "config.toml").write_text(f'recordings_dir = "{rec.parent}"\n')
+    before = read_manifest(rec)
+    assert main(["reprocess", rec.name, "--summary", "--template", "standup", "--engine", "whisper"]) == 2
+    assert main(["reprocess", rec.name, "--template", "nope", "--engine", "whisper"]) == 2
+    capsys.readouterr()
+    assert read_manifest(rec) == before
+    assert main(["reprocess", rec.name, "--template", "standup", "--engine", "whisper"]) == 0
+    m = read_manifest(rec)
+    assert m["template"] == "standup" and m["transcribe"]["engine"] == "whisper"

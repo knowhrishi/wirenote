@@ -699,3 +699,36 @@ def test_an_online_api_needs_confirmation_but_one_on_this_computer_does_not(stor
         st.update_settings({"openai_url": "http://api.example.com/v1"}, confirm_cloud=True)
     info = st.settings_info()
     assert info["model"] == "qwen/qwen3.8-flash" and "OpenRouter" in info["cloud_disclosure"]
+
+
+def _with_sections(st, rec_id):
+    path = st.rec_dir(rec_id) / "summary.json"
+    data = json.loads(path.read_text())
+    data.update(template="standup", sections={"updates": [], "blockers": ["Ben waits for a review"]})
+    path.write_text(json.dumps(data))
+
+
+def test_followup_includes_template_sections(store, monkeypatch):
+    st, rec_id = store
+    _with_sections(st, rec_id)
+    backend = FakeBackend([{"subject": "s", "body": "b"}])
+    monkeypatch.setattr(data_mod, "make_backend", lambda s: backend)
+    st.followup(rec_id)
+    assert "Blockers:\n- Ben waits for a review" in backend.calls[0][1]
+    assert "Updates by person" not in backend.calls[0][1]          # empty sections stay out
+
+
+def test_search_finds_section_items_by_section_key(store):
+    st, rec_id = store
+    _with_sections(st, rec_id)
+    hit = st.calls("waits for a review")[0]["match"]
+    assert hit == {"where": "blockers", "text": "Ben waits for a review"}
+
+
+def test_chosen_template_is_exposed_and_automatic_clears_it(store):
+    st, rec_id = store
+    assert st.call(rec_id)["chosen_template"] is None
+    st.requeue(rec_id, summary_only=True, template="lecture")
+    assert st.call(rec_id)["chosen_template"] == "lecture"
+    st.requeue(rec_id, summary_only=True, template="")
+    assert st.call(rec_id)["chosen_template"] is None and "template" not in read_manifest(st.rec_dir(rec_id))

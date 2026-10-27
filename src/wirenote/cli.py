@@ -158,19 +158,16 @@ def cmd_reprocess(args) -> int:
     if not args.summary and not any(rec.glob("*.wav")):
         print("wirenote: the audio was deleted; only --summary can be redone")
         return 1
+    from .capture.recorder import read_manifest, write_manifest
+
     if args.template:
-        from .capture.recorder import read_manifest, write_manifest
         from .process.templates import scan
 
         if args.template not in scan()[0]:
             print(f"wirenote: no template {args.template!r}; `wirenote templates` lists them")
             return 2
-        m = read_manifest(rec)
-        m["template"] = args.template
-        write_manifest(rec, m)
     choices = {k: getattr(args, k) for k in ("engine", "model", "language") if getattr(args, k)}
     if choices:
-        from .capture.recorder import read_manifest, write_manifest
         from .process.engines import check_overrides
 
         if args.summary:
@@ -181,8 +178,13 @@ def cmd_reprocess(args) -> int:
         except ValueError as e:
             print(f"wirenote: {e}")
             return 2
+    # Everything is valid: only now change the recording.
+    if args.template or choices:
         m = read_manifest(rec)
-        m["transcribe"] = {**(m.get("transcribe") or {}), **choices}
+        if args.template:
+            m["template"] = args.template
+        if choices:
+            m["transcribe"] = {**(m.get("transcribe") or {}), **choices}
         write_manifest(rec, m)
     job_id = Jobs(state_dir() / "jobs.db").add(rec, summary_only=args.summary)
     print(f"queued job {job_id}; the daemon picks it up within 30 s (`wirenote jobs`)")
