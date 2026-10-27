@@ -209,8 +209,13 @@ def series_templates(state_dir: Path) -> dict[str, str]:
 
 
 def remember_series(state_dir: Path, uid: str, template_id: str) -> None:
+    """Keep template_id for the calendar series uid; an empty id forgets the series, so
+    its meetings go back to the automatic choice."""
     series = series_templates(state_dir)
-    series[uid] = template_id
+    if template_id:
+        series[uid] = template_id
+    else:
+        series.pop(uid, None)
     state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     path = state_dir / SERIES
     tmp = path.with_suffix(".json.tmp")

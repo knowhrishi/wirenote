@@ -109,7 +109,7 @@ The interview template records only what was said. It does not rate, rank or jud
 Wirenote picks the first of these that applies:
 
 1. The template you chose for the call: **Summary template…** in the call page's menu, or `wirenote reprocess ID --summary --template standup`.
-2. The template you chose for the call's calendar series ("Use it for every meeting in this calendar series" in the same dialog).
+2. The template you chose for the call's calendar series ("Use it for every meeting in this calendar series" in the same dialog). To stop, choose **Automatic** in that dialog and tick "Stop using a template for this series".
 3. A template with one of its words in the calendar event's title (for an import, in its title). Whole words only, any capitals: "Daily sync" matches `daily`, "Dailymotion review" does not.
 4. A template whose `apps` lists the call app.
 5. Your default, **Settings › Setup › Default summary template** (`default_template` in `config.toml`).

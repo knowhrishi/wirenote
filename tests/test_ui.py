@@ -103,6 +103,37 @@ def test_requeue_with_template_and_series(store):
     assert "default_template" in st.settings_info()["editable"] and st.settings_info()["templates"]
 
 
+def test_a_series_template_can_be_forgotten(store):
+    from wirenote.process.templates import series_templates
+
+    st, rec_id = store
+    d = st.rec_dir(rec_id)
+    write_manifest(d, {**read_manifest(d), "calendar": {"title": "Sync", "uid": "weekly@test"}})
+    assert st.call(rec_id)["series_template"] is None
+    st.requeue(rec_id, summary_only=True, template="standup", series=True)
+    assert st.call(rec_id)["series_template"] == "standup"
+    st.requeue(rec_id, summary_only=True, template="", series=True)     # Automatic, for the series
+    assert series_templates(st.state_dir) == {} and "template" not in read_manifest(d)
+    assert st.call(rec_id)["series_template"] is None
+
+
+def test_resummarize_body_sets_template_and_series(server):
+    from wirenote.process.templates import series_templates
+
+    app, port, rec_id = server
+    st, d = app.store, app.store.rec_dir(rec_id)
+    write_manifest(d, {**read_manifest(d), "calendar": {"title": "Sync", "uid": "weekly@test"}})
+    path, hdrs = f"/api/calls/{rec_id}/resummarize", {"X-Wirenote-Token": app.token}
+    assert request(port, "POST", path, headers=hdrs, body={"template": "standup", "series": True})[0] == 200
+    assert read_manifest(d)["template"] == "standup"
+    assert series_templates(st.state_dir) == {"weekly@test": "standup"}
+    assert request(port, "POST", path, headers=hdrs, body={})[0] == 200          # unchanged
+    assert read_manifest(d)["template"] == "standup"
+    assert request(port, "POST", path, headers=hdrs, body={"template": "", "series": True})[0] == 200
+    assert "template" not in read_manifest(d) and series_templates(st.state_dir) == {}
+    assert request(port, "POST", path, headers=hdrs, body={"series": True})[0] == 400
+
+
 def test_default_template_is_a_setting_with_a_known_value(store, monkeypatch):
     st, _ = store
     monkeypatch.setattr(data_mod, "poke_daemon", lambda *_a: None)

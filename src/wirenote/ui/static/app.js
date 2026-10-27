@@ -729,8 +729,13 @@ function templateDialog(c) {
   const select = h("select", {}, [h("option", { value: "", selected: !c.chosen_template }, "Automatic (by title, then your default)"),
     ...(c.templates || []).map((t) => h("option", { value: t.id, selected: t.id === c.chosen_template }, t.name))]);
   const series = h("input", { type: "checkbox", id: "template-series" });
-  const seriesRow = h("label", { class: "check-row tight", for: "template-series" }, series, "Use it for every meeting in this calendar series");
-  const show = () => { seriesRow.hidden = !c.in_series || !select.value; };
+  const seriesText = h("span", {});
+  const seriesRow = h("label", { class: "check-row tight", for: "template-series" }, series, seriesText);
+  // Automatic with a template kept for the series: the box lets it go.
+  const show = () => {
+    seriesRow.hidden = !c.in_series || !(select.value || c.series_template);
+    seriesText.textContent = select.value ? "Use it for every meeting in this calendar series" : "Stop using a template for this series";
+  };
   select.onchange = show;
   show();
   const ok = h("button", { class: "btn btn-primary" }, "Redo summary");
@@ -741,7 +746,7 @@ function templateDialog(c) {
     field("Template", select), seriesRow,
     h("div", { class: "row" }, cancel, ok)));
   cancel.onclick = close;
-  ok.onclick = () => { close(); requeue(true, null, { template: select.value, series: series.checked && !!select.value }); };
+  ok.onclick = () => { close(); requeue(true, null, { template: select.value, series: series.checked && !seriesRow.hidden }); };
 }
 
 const ENGINES = [["auto", "Automatic (the fastest that fits)"], ["whisper", "Whisper"], ["parakeet", "Parakeet (faster on a CPU)"], ["whisper.cpp", "whisper.cpp (GPU, if installed)"]];

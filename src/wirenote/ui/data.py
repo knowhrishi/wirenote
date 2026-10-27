@@ -35,7 +35,7 @@ from ..process.merge import Line, as_text, flag_excerpt, paragraphs, stamp
 from ..process.note import action_line, own_note, segment_file, title_for
 from ..process.speakers import Voices, display_name
 from ..process.summarize import Summary, SummaryError, make_backend, pin_local
-from ..process.templates import remember_series, scan
+from ..process.templates import remember_series, scan, series_templates
 from ..process.worker import MY_NOTES, SUMMARY, TRANSCRIPT, read_my_notes, rewrite_note
 
 REC_ID = re.compile(r"^\d{8}-\d{6}-[A-Za-z0-9_.-]{1,64}$")
@@ -316,6 +316,7 @@ class Store:
         summary = self._summary(d)
         used = (summary or {}).get("template") or "general"
         template = scan()[0].get(used)
+        uid = (m.get("calendar") or {}).get("uid")
         talk: dict[str, float] = {}
         for l in lines:
             talk[l["speaker"]] = talk.get(l["speaker"], 0.0) + max(0.0, l["end"] - l["start"])
@@ -332,7 +333,8 @@ class Store:
                 "templates": self.templates(),
                 "section_titles": {s.key: s.title for s in template.sections} if template else {},
                 "chosen_template": m.get("template"),
-                "in_series": bool((m.get("calendar") or {}).get("uid")),
+                "in_series": bool(uid),
+                "series_template": series_templates(self.state_dir).get(str(uid)) if uid else None,
                 "lines": lines,
                 "people": people,
                 "names": {p["label"]: p["name"] for p in people},
@@ -542,14 +544,14 @@ class Store:
         """Queue the call again; choices (engine, model, language) apply to this call's
         transcriptions from now on, and an empty one goes back to the setting. template
         sets the summary template for this call ("" goes back to automatic); series also
-        remembers it for the calendar event's later occurrences."""
+        remembers it for the calendar event's later occurrences, and with "" forgets it."""
         d = self.rec_dir(rec_id)
         if template and template not in scan()[0]:
             raise Invalid("no such summary template")
         uid = (read_manifest(d).get("calendar") or {}).get("uid")
-        if series and not (template and uid):
+        if series and (template is None or not uid):
             raise Invalid("a template can be kept for a series only for a call from a "
-                          "calendar event, and needs a template")
+                          "calendar event, and needs a template or automatic")
         if not summary_only and not any(d.glob("*.wav")):
             raise Invalid("the audio was deleted; only the summary can be redone")
         if summary_only and not (d / TRANSCRIPT).exists():
