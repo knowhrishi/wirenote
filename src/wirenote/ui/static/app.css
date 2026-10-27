@@ -307,6 +307,12 @@ button:disabled { opacity: 0.5; cursor: default; }
   font-size: 12.5px;
   color: var(--text-2);
 }
+a.person { text-decoration: none; }
+a.person:hover { background: var(--line); }
+.speaker-pair { display: inline-flex; align-items: center; gap: 2px; }
+.person-link { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; color: var(--faint); }
+.person-link:hover { background: var(--hover); color: var(--text-2); }
+.person-link .icon { width: 14px; height: 14px; }
 .avatar {
   display: inline-grid;
   place-items: center;

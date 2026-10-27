@@ -11,7 +11,7 @@ const state = {
   query: "",
   status: {},
   call: null,          // the open call (full detail)
-  view: "home",        // home | call | ask | tasks | settings | updates
+  view: "home",        // home | call | ask | tasks | people | settings | updates
   tab: "notes",
   asking: false,
   find: "",
@@ -483,7 +483,7 @@ function recordingView(c) {
   }, 1000);
   return h("div", { class: "page" },
     h("div", { class: "head-row" }, h("div", { class: "grow" }, titleEditor(c), metaLine(c),
-      c.attendees.length ? h("div", { class: "people" }, c.attendees.map((p) => h("span", { class: "person" }, avatar(p), p))) : null)),
+      attendeeChips(c))),
     h("div", { class: "live-head" }, h("span", { class: "dot rec" }), "Recording", clockEl,
       h("span", { class: "flag-count", id: "flag-count" }, flagCount()),
       h("span", { class: "grow" }),
@@ -561,17 +561,29 @@ function callView(c) {
   return page;
 }
 
+// Invitees; each with a person page links there (the server gives the key, never the browser).
+function attendeeChips(c) {
+  if (!c.attendees.length) return null;
+  const keys = c.attendee_people || {};
+  return h("div", { class: "people" }, c.attendees.map((p) => keys[p]
+    ? h("a", { class: "person", href: `#/people/${keys[p]}`, title: `Open the page for ${p}` }, avatar(p), p)
+    : h("span", { class: "person" }, avatar(p), p)));
+}
+
 function speakersRow(c) {
   const people = c.people || [];
-  if (!people.length) return c.attendees.length ? h("div", { class: "people" }, c.attendees.map((p) => h("span", { class: "person" }, avatar(p), p))) : null;
+  if (!people.length) return attendeeChips(c);
   const total = people.reduce((n, p) => n + p.seconds, 0) || 1;
   const unnamed = people.some((p) => p.label !== "Me" && !p.named);
   return h("div", { class: "speakers" },
     people.map((p) => {
       const share = `${Math.round((p.seconds / total) * 100)}%`;
       if (p.label === "Me") return h("span", { class: "speaker-chip" }, avatar("Me"), "Me", h("span", { class: "share" }, share));
-      return h("button", { class: "speaker-chip" + (p.named ? "" : " unnamed"), title: p.named ? `Change who ${p.name} is` : "Who is this? Click to name",
+      const chip = h("button", { class: "speaker-chip" + (p.named ? "" : " unnamed"), title: p.named ? `Change who ${p.name} is` : "Who is this? Click to name",
         onclick: () => speakerDialog(c, p.label) }, avatar(p.name, p.label), p.name, h("span", { class: "share" }, share), icon("pen"));
+      if (!p.person) return chip;
+      return h("span", { class: "speaker-pair" }, chip,
+        h("a", { class: "person-link", href: `#/people/${p.person}`, title: `Open the page for ${p.name}`, "aria-label": `Open the page for ${p.name}` }, icon("users")));
     }),
     unnamed ? h("span", { class: "speakers-hint" }, "Click a speaker to name them") : null);
 }
@@ -1189,6 +1201,90 @@ async function renderTasks() {
   }
 }
 
+// People ------------------------------------------------------------------------
+
+async function renderPeople() {
+  state.view = "people";
+  state.call = null;
+  setPlayer(null);
+  renderList();
+  renderBanner();
+  const page = h("div", { class: "page" }, h("h1", { class: "page-title" }, "People"),
+    h("div", { class: "page-sub" }, "Everyone who spoke or was invited, with your calls and what they owe you."));
+  $("#main").replaceChildren(page);
+  let people;
+  try { ({ people } = await api("/api/people")); } catch (e) { page.append(h("p", { class: "hint" }, e.message)); return; }
+  if (!people.length) {
+    page.append(h("div", { class: "empty-line" }, "No one yet. Name a speaker in a call, or add a calendar, and they show up here."));
+    return;
+  }
+  page.append(h("div", { class: "cards" }, people.map((p) => h("a", { class: "card", href: `#/people/${p.key}` },
+    h("div", { class: "card-title" }, avatar(p.name), p.name),
+    h("div", { class: "card-meta" }, [`${p.calls} call${p.calls === 1 ? "" : "s"}`,
+      p.last_met ? `last ${fmtShort(new Date(p.last_met))}` : "",
+      p.open_actions ? `${p.open_actions} open` : ""].filter(Boolean).join(" · "))))));
+}
+
+async function renderPerson(key) {
+  state.view = "people";
+  state.call = null;
+  setPlayer(null);
+  renderList();
+  renderBanner();
+  const page = h("div", { class: "page" });
+  $("#main").replaceChildren(page);
+  let p;
+  try { p = await api(`/api/people/${key}`); } catch (e) {
+    page.append(h("p", { class: "hint" }, e.message), h("a", { class: "btn", href: "#/people" }, "All people"));
+    return;
+  }
+  const merge = h("button", { class: "btn", onclick: () => samePersonDialog(p) }, icon("merge"), "Same person as…");
+  page.append(h("a", { class: "hint", href: "#/people" }, "All people"),
+    h("div", { class: "head-row" }, h("div", { class: "grow" },
+      h("h1", { class: "page-title" }, p.name),
+      h("div", { class: "meta" },
+        h("span", {}, `${p.calls.length} call${p.calls.length === 1 ? "" : "s"}`),
+        p.seconds ? h("span", {}, `${fmtDuration(p.seconds)} of speech`) : null,
+        p.last_met ? h("span", {}, `last met ${fmtShort(new Date(p.last_met))}`) : null),
+      p.emails.length ? h("div", { class: "page-sub" }, p.emails.join(", ")) : null),
+      h("div", { class: "head-actions" }, merge)));
+  const open = p.actions.filter((a) => !a.done), done = p.actions.filter((a) => a.done);
+  page.append(h("section", { class: "section" },
+    h("h2", {}, "Action items", open.length ? h("span", { class: "n" }, String(open.length)) : null),
+    open.length ? open.map((a) => actionItem(a.call, a, a.index, true)) : h("div", { class: "empty-line" }, "Nothing open."),
+    done.length ? h("details", {}, h("summary", { class: "hint" }, `${done.length} done`),
+      done.map((a) => actionItem(a.call, a, a.index, true))) : null));
+  page.append(h("section", { class: "section" }, h("h2", {}, "Calls", h("span", { class: "n" }, String(p.calls.length))),
+    p.calls.map((c) => h("a", { class: "card", href: `#/call/${c.id}` },
+      h("div", { class: "card-title" }, c.title),
+      h("div", { class: "card-meta" }, [fmtShort(new Date(c.started)),
+        c.role === "spoke" ? `spoke${c.seconds ? ", " + fmtDuration(Math.round(c.seconds)) : ""}` : "invited"].join(" · "))))));
+}
+
+async function samePersonDialog(p) {
+  let others = [];
+  try { others = (await api("/api/people")).people.filter((o) => o.key !== p.key); } catch (e) { toast(e.message); return; }
+  const input = h("input", { type: "text", placeholder: "Name", autocomplete: "off", list: "people-names" });
+  const names = h("datalist", { id: "people-names" }, others.map((o) => h("option", { value: o.name })));
+  const ok = h("button", { class: "btn btn-primary" }, "Merge");
+  const close = openModal(h("div", { class: "dialog wide", role: "dialog", "aria-modal": "true" },
+    h("h3", {}, `Who is ${p.name}?`),
+    h("p", {}, "If this is the same person as someone else on the list, their calls and action items come together on one page. Your recordings and notes stay as they are."),
+    h("div", { class: "field" }, h("label", {}, "Same person as"), input, names),
+    h("div", { class: "row" }, h("button", { class: "btn", onclick: () => close() }, "Cancel"), ok)));
+  const save = async () => {
+    try {
+      const r = await api("/api/people/alias", { method: "POST", body: { name: p.name, same_as: input.value } });
+      close();
+      toast("Merged");
+      location.hash = `#/people/${r.key}`;
+    } catch (e) { toast(e.message); }
+  };
+  ok.onclick = save;
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
+  input.focus();
+}
+
 // Settings ---------------------------------------------------------------------
 
 async function renderSettings() {
@@ -1643,6 +1739,9 @@ function route() {
   if (m) return openCall(decodeURIComponent(m[1]), m[2] || "notes", m[3] !== undefined ? Number(m[3]) : undefined);
   if (hash === "#/ask") return renderAsk();
   if (hash === "#/tasks") return renderTasks();
+  if (hash === "#/people") return renderPeople();
+  const pm = hash.match(/^#\/people\/([0-9a-f]{12})$/);
+  if (pm) return renderPerson(pm[1]);
   if (hash === "#/settings") return renderSettings();
   if (hash === "#/updates") return renderUpdates();
   return renderHome();

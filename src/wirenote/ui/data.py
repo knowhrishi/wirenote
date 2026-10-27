@@ -27,6 +27,9 @@ from ..capture.recorder import add_flag, read_flags, read_manifest, write_flags,
 from ..config.secrets import (calendar_sources, load_secrets, save_secrets, with_config_value,
                               write_config_atomic)
 from ..config.settings import DEFAULT_CONFIG_TOML, Settings, config_dir, parse_settings
+from ..meetings.catalog import load_calls
+from ..meetings.people import (MAX_NAME, build_people, is_person, load_aliases, person_key, resolve,
+                               save_aliases)
 from ..config.vocabulary import load_vocabulary, save_vocabulary
 from ..process.engines import ENGINES, OVERRIDES, check_overrides
 from ..process.jobs import Jobs
@@ -327,6 +330,9 @@ class Store:
                    "seconds": round(talk.get(label, 0.0)),
                    "can_remember": bool((speakers.get(label) or {}).get("embedding"))}
                   for label in sorted(talk, key=lambda l: (l != "Me", -talk[l]))]
+        aliases = load_aliases(self.state_dir)
+        for p in people:
+            p["person"] = self._link(p["name"], aliases) if p["named"] else None
         return {**brief,
                 "summary": summary,
                 "template": used,
@@ -337,6 +343,7 @@ class Store:
                 "series_template": series_templates(self.state_dir).get(str(uid)) if uid else None,
                 "lines": lines,
                 "people": people,
+                "attendee_people": {n: self._link(n, aliases) for n in brief["attendees"]},
                 "names": {p["label"]: p["name"] for p in people},
                 "runs": tr.get("runs", []),
                 "echo_dropped": len(tr.get("dropped_echo", [])),
@@ -680,6 +687,50 @@ class Store:
                             "owner": a.get("owner", ""), "task": a.get("task", ""),
                             "due": a.get("due", ""), "done": bool(a.get("done"))})
         return out
+
+    # People ----------------------------------------------------------------
+
+    @staticmethod
+    def _link(name: str, aliases: dict[str, str]) -> str | None:
+        """The key of the person page for name, or None for Me, Others and the like."""
+        return person_key(resolve(name, aliases)) if is_person(name) else None
+
+    def _people(self):
+        calls = load_calls(self.root)
+        return build_people(calls, load_aliases(self.state_dir)), {c.id: c for c in calls}
+
+    def people(self) -> list[dict]:
+        out = [{"key": person_key(p.name), "name": p.name, "emails": sorted(p.emails),
+                "calls": len(p.calls), "last_met": p.last_met, "seconds": round(p.seconds),
+                "open_actions": sum(1 for a in p.actions if not a["done"])}
+               for p in self._people()[0].values()]
+        return sorted(out, key=lambda p: (p["last_met"], p["name"].casefold()), reverse=True)
+
+    def person(self, key: str) -> dict:
+        people, calls = self._people()
+        for p in people.values():
+            if person_key(p.name) == key:
+                actions = [{**a, "owner": p.name, "title": calls[a["call"]].title,
+                            "started": calls[a["call"]].started} for a in p.actions]
+                return {"key": key, "name": p.name, "emails": sorted(p.emails), "calls": p.calls,
+                        "actions": actions, "last_met": p.last_met, "seconds": round(p.seconds)}
+        raise NotFound("person")
+
+    def alias(self, name: str, same_as: str) -> str:
+        """Say that name is the same person as same_as; gives the key of the merged person."""
+        name, same_as = name.strip(), same_as.strip()
+        if not is_person(name) or not is_person(same_as):
+            raise Invalid("give two names")
+        if len(name) > MAX_NAME or len(same_as) > MAX_NAME:
+            raise Invalid("name too long")
+        aliases = load_aliases(self.state_dir)
+        target = resolve(same_as, aliases)
+        if resolve(name, aliases) == target:
+            raise Invalid("those are already the same person")
+        # Point the old name at the target's spelling, so the merged person is shown that way.
+        aliases[name.casefold()] = same_as
+        save_aliases(self.state_dir, aliases)
+        return person_key(target)
 
     def ask_all(self, question: str) -> dict:
         question = question.strip()

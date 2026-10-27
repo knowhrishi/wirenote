@@ -67,12 +67,14 @@ class Event:
     attendees: tuple[str, ...] = field(default=())
     emails: tuple[str, ...] = field(default=())
     uid: str = ""      # the same for every occurrence of a repeating event
+    people: tuple[tuple[str, str], ...] = ()   # (name, email) per invitee; email "" if none
 
     def as_meta(self) -> dict:
         d = asdict(self)
         d["start"], d["end"] = self.start.isoformat(), self.end.isoformat()
         d["attendees"], d["links"] = list(self.attendees), list(self.links)
         d["emails"] = list(self.emails)
+        d["people"] = [list(p) for p in self.people]
         return d
 
     def service_links(self, service: str | None) -> list[str]:
@@ -157,8 +159,9 @@ def _event(ev) -> Event:
     emails = tuple(re.sub(r"^mailto:", "", str(a), flags=re.IGNORECASE) for a in att)
     names = tuple(str(a.params.get("CN") or e) for a, e in zip(att, emails))
     title = str(ev.get("SUMMARY", "")).strip()[:MAX_TITLE] or "(no title)"
+    people = tuple((n, e if "@" in e else "") for n, e in zip(names, emails))
     return Event(title, start, end, links, names, tuple(e for e in emails if "@" in e),
-                 str(ev.get("UID") or "")[:MAX_TITLE])
+                 str(ev.get("UID") or "")[:MAX_TITLE], people)
 
 
 def _aware(t: dt.datetime) -> dt.datetime:

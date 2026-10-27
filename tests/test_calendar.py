@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 
 from wirenote.calendar.ics import has_call_link, in_window, parse, pick
 
@@ -53,6 +54,19 @@ def test_recurrence_expanded_and_all_day_skipped():
     assert sync.start == at(10) and sync.links == ("https://meet.jit.si/SomeRoom",)
     assert sync.attendees == ("Ana", "bo@example.org")
     assert sync.emails == ("ana@example.org", "bo@example.org")
+
+
+def test_event_people_pairs_names_with_emails():
+    ics = ("BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//t//EN\nBEGIN:VEVENT\nUID:a@t\nSUMMARY:S\n"
+           "DTSTART:20261027T100000Z\nDTEND:20261027T110000Z\n"
+           "ATTENDEE;CN=Ana:mailto:ana@example.org\nATTENDEE:mailto:bo@example.org\n"
+           "ATTENDEE;CN=Room 4:resource-4\nEND:VEVENT\nEND:VCALENDAR\n")
+    (ev,) = parse(ics, at(10))
+    assert ev.people == (("Ana", "ana@example.org"), ("bo@example.org", "bo@example.org"),
+                         ("Room 4", ""))
+    assert ev.as_meta()["people"] == [["Ana", "ana@example.org"], ["bo@example.org", "bo@example.org"],
+                                      ["Room 4", ""]]
+    json.dumps(ev.as_meta())
 
 
 def test_window_edges():

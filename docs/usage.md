@@ -139,6 +139,15 @@ hint = "concerns the customer raised, and how each was answered"
 
 A template has at most 6 sections and 2000 characters of instructions. A file that breaks a rule is skipped, and `wirenote doctor` and `wirenote templates` say which one and why.
 
+## People
+
+**People** in the sidebar lists everyone who spoke in one of your calls or was invited to one. Open a person to see the calls you had with them, how long they spoke, their email addresses from the calendar, and the action items assigned to them. Tick items off there or in the call.
+
+- A person is a name. Speakers count once you have named them (a "Speaker 2" has no page), and so does everyone on a calendar invitation. "Me" and "Others" never do. Wirenote does not know which invitee is you, so you appear as well if your name is on the invitations.
+- The same person under two names, such as "Anna" and "Anna Berg"? Open one of them and click **Same person as…**. Their calls and action items come together. The recordings and notes are not changed. The choice is kept in `people.json` in `~/.local/state/wirenote/`; delete a line there to undo it.
+- In a call, the name chips under the title open that person's page too.
+- Nothing is sent anywhere: the pages are built from your own recordings each time you open them. Calls saved before this version have names but no email addresses, and show up the same way.
+
 ## Import and export
 
 **Import a recording.** Click **Import** in the meetings app, or drop an audio or video file on its window. On the command line:
@@ -246,6 +255,7 @@ wirenote changelog       # what changed in this version; --since 0.1.0 for more
 | `~/.local/state/wirenote/detector.jsonl` | every event, without room names or speaker names |
 | `~/.local/state/wirenote/jobs.db` | processing queue |
 | `~/.local/state/wirenote/series.json` | the summary template you kept for each calendar series |
+| `~/.local/state/wirenote/people.json` | which names you put together as one person |
 
 Everything Wirenote writes is private to your user (mode 600, folders 700).
 
