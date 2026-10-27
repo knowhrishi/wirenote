@@ -99,10 +99,10 @@ A template tells the summary what kind of meeting it is and adds sections to the
 | Template | Extra sections | Picked when the title has |
 | --- | --- | --- |
 | `general` | none | nothing else matched |
-| `one-on-one` | Feedback, Topics for next time | `1:1`, `1-1`, `1on1`, `one on one`, `check-in` |
+| `one-on-one` | Feedback, Topics for next time | `1:1`, `1-1`, `1on1`, `one on one` |
 | `standup` | Updates by person, Blockers | `standup`, `stand-up`, `daily`, `scrum` |
 | `interview` | What the candidate said about their experience, Questions the candidate asked, Follow-ups | `interview`, `screening`, `candidate` |
-| `lecture` | Key concepts, Terms and definitions, Books, papers and links mentioned | `lecture`, `seminar`, `class`, `webinar`, `talk` |
+| `lecture` | Key concepts, Terms and definitions, Books, papers and links mentioned | `lecture`, `seminar`, `class`, `webinar` |
 
 The interview template records only what was said. It does not rate, rank or judge the candidate.
 
@@ -110,8 +110,8 @@ Wirenote picks the first of these that applies:
 
 1. The template you chose for the call: **Summary template…** in the call page's menu, or `wirenote reprocess ID --summary --template standup`.
 2. The template you chose for the call's calendar series ("Use it for every meeting in this calendar series" in the same dialog). To stop, choose **Automatic** in that dialog and tick "Stop using a template for this series".
-3. A template with one of its words in the calendar event's title (for an import, in its title). Whole words only, any capitals: "Daily sync" matches `daily`, "Dailymotion review" does not.
-4. A template whose `apps` lists the call app.
+3. A template with one of its words in the calendar event's title (for an import, in its title). Whole words only, any capitals: "Daily sync" matches `daily`, "Dailymotion review" does not. Your own templates are checked before the built-in ones, so a file with `titles = ["customer interview"]` wins over the built-in `interview`.
+4. A template whose `apps` lists the call app, again your own templates first.
 5. Your default, **Settings › Setup › Default summary template** (`default_template` in `config.toml`).
 6. `general`.
 

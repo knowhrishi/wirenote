@@ -44,8 +44,21 @@ def test_title_match_is_whole_word_casefolded():
     assert pick(cal("DAILY"), ts, {}, "general").id == "standup"
     assert pick(cal("Dailymotion review"), ts, {}, "general").id == "general"
     assert pick(cal("Weekly 1:1 with Ana"), ts, {}, "general").id == "one-on-one"
-    assert pick(cal("Team check-in"), ts, {}, "general").id == "one-on-one"
     assert pick(cal("Classic rock"), ts, {}, "general").id == "general"
+    # Words too loose to pick a template (plan decision): neither is a 1:1 or a lecture.
+    assert pick(cal("Team check-in"), ts, {}, "general").id == "general"
+    assert pick(cal("Quick talk about budget"), ts, {}, "general").id == "general"
+
+
+def test_a_custom_template_wins_a_title_word_over_a_builtin(tmp_path):
+    (tmp_path / "customer-interview.toml").write_text(
+        'name = "Customer interview"\ntitles = ["customer interview"]\n')
+    (tmp_path / "zz-huddle.toml").write_text('name = "Huddle"\napps = ["zoom"]\ntitles = ["daily"]\n')
+    ts = load_templates(tmp_path)
+    cal = lambda title, app="chrome": {"app": app, "calendar": {"title": title}}    # noqa: E731
+    assert pick(cal("Customer interview with Acme"), ts, {}, "general").id == "customer-interview"
+    assert pick(cal("Interview with a candidate"), ts, {}, "general").id == "interview"
+    assert pick(cal("Daily sync"), ts, {}, "general").id == "zz-huddle"
 
 
 def test_custom_file_overrides_builtin_and_bad_files_are_skipped(tmp_path):

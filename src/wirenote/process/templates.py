@@ -63,7 +63,7 @@ BUILTIN: dict[str, Template] = {t.id: t for t in (
                       "feedback either person gave the other, one short point each, saying who gave it"),
               Section("next_time", "Topics for next time",
                       "topics that were put off, or that someone wants to cover at the next meeting")),
-             ("1:1", "1-1", "1on1", "one on one", "check-in")),
+             ("1:1", "1-1", "1on1", "one on one")),
     _builtin("standup", "Standup",
              "A short status meeting. Report what each person said, under their own name.",
              (Section("updates", "Updates by person",
@@ -90,7 +90,7 @@ BUILTIN: dict[str, Template] = {t.id: t for t in (
                       "terms the speaker defined, as 'term: definition' in the speaker's words"),
               Section("references", "Books, papers and links mentioned",
                       "books, papers, tools and links the speaker named, with the author if said")),
-             ("lecture", "seminar", "class", "webinar", "talk")),
+             ("lecture", "seminar", "class", "webinar")),
 )}
 
 
@@ -178,20 +178,22 @@ def pick(manifest: dict, templates: dict[str, Template], series: dict[str, str],
          default: str) -> Template:
     """The template for a call: the one chosen for it, the one remembered for its
     calendar series, a title match, an app match, the default, else General. An id that
-    no longer exists falls through to the next step."""
+    no longer exists falls through to the next step. Your own templates are matched before
+    the built-ins, so a file's words win over a built-in's."""
     cal = manifest.get("calendar") or {}
     # An import has no calendar event; its title is the name it was given.
     title = cal.get("title") or manifest.get("title_override") or manifest.get("title") or ""
     for chosen in (manifest.get("template"), series.get(str(cal.get("uid") or ""))):
         if isinstance(chosen, str) and chosen in templates:
             return templates[chosen]
+    ordered = sorted(templates.values(), key=lambda t: BUILTIN.get(t.id) is t)    # files first
     if title:
-        for t in templates.values():
+        for t in ordered:
             if _has_word(str(title), t.titles):
                 return t
     app = manifest.get("app")
     if app:
-        for t in templates.values():
+        for t in ordered:
             if app in t.apps:
                 return t
     return templates.get(default) or templates.get("general") or BUILTIN["general"]
