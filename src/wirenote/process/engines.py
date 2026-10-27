@@ -123,21 +123,18 @@ class ParakeetEngine:
     def hear(self, audio: np.ndarray) -> Heard:
         spans = speech_spans(audio)
         words: list[Word] = []
-        for i in range(0, len(spans), 8):          # a few at a time: bounded memory
-            batch = spans[i:i + 8]
-            streams = []
-            for s, e in batch:
-                st = self.recognizer.create_stream()
-                st.accept_waveform(SR, audio[s:e])
-                streams.append(st)
-            self.recognizer.decode_streams(streams)
-            for (s, _e), st in zip(batch, streams):
-                r = st.result
-                starts = list(r.timestamps)
-                durs = list(getattr(r, "durations", []) or [])
-                ends = [t + d for t, d in zip(starts, durs)] if len(durs) == len(starts) \
-                    else starts[1:] + [starts[-1] + 0.3 if starts else 0.0]
-                words += tokens_to_words(list(r.tokens), starts, ends, s / SR)
+        for s, e in spans:
+            # One piece at a time. On a 30-min call, batches of 8 peaked at 3.0 GB and were
+            # slower (padding); one at a time stayed at 1.4 GB (docs/dev/engines-design.md).
+            st = self.recognizer.create_stream()
+            st.accept_waveform(SR, audio[s:e])
+            self.recognizer.decode_stream(st)
+            r = st.result
+            starts = list(r.timestamps)
+            durs = list(getattr(r, "durations", []) or [])
+            ends = [t + d for t, d in zip(starts, durs)] if len(durs) == len(starts) \
+                else starts[1:] + [starts[-1] + 0.3 if starts else 0.0]
+            words += tokens_to_words(list(r.tokens), starts, ends, s / SR)
         return Heard(words, None, None, round(sum(e - s for s, e in spans) / SR, 1))
 
 

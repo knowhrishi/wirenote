@@ -11,6 +11,7 @@ before the note exists counts as a failed attempt.
 from __future__ import annotations
 
 import datetime as dt
+import gc
 import json
 import sys
 import traceback
@@ -88,6 +89,10 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
         model = engine.label if engine is not None else engine_label(heard_with, vocabulary)
         log(f"job {job.id}: transcribing {rec.name} with {model}")
         raw, runs, book = transcriber.recording(rec, manifest)
+        # The speech models hold 1-2 GB; let them go before the summary, when Ollama
+        # loads its own model (a 30-min call ran out of memory on a 14 GB laptop).
+        transcriber = engine = None
+        gc.collect()
         kept, dropped = dedupe_echo(raw, settings.echo_overlap, settings.echo_similarity)
         lines = paragraphs(kept, settings.merge_gap_s)
         speakers = _name_speakers(book, lines, manifest, settings, backend, voices)
