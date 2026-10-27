@@ -109,6 +109,10 @@ class Settings:
     # › Calendar window: starts in <=10 min, started <=5 min ago, or in progress
     calendar_before_s: float = 600.0
     calendar_after_start_s: float = 300.0
+    # docs/dev/PLAN.md › Defaults › Meeting prep: on; a banner 5 min before an event with past calls
+    meeting_prep: bool = True
+    # › Meeting prep
+    prep_lead_s: float = 300.0
 
     # UI (docs/dev/ui-design.md): local web app on 127.0.0.1
     ui_port: int = 8765
@@ -179,6 +183,8 @@ DEFAULT_CONFIG_TOML = """# wirenote settings. Defaults come from docs/dev/PLAN.m
 # calendar_refresh_s = 300.0
 # calendar_before_s = 600.0
 # calendar_after_start_s = 300.0
+# meeting_prep = true                # a banner before a meeting you have had calls about
+# prep_lead_s = 300.0
 
 # UI
 # ui_port = 8765                     # wirenote ui serves http://127.0.0.1:<port>/

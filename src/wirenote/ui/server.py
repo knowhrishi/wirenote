@@ -245,6 +245,8 @@ def make_handler(app: App):
                 return self._json({"calls": app.store.calls(q)})
             if path == "/api/upcoming":
                 return self._json({"events": app.store.upcoming()})
+            if path.startswith("/api/prep/"):
+                return self._json(app.store.prep(path.removeprefix("/api/prep/")))
             if path == "/api/actions":
                 return self._json({"items": app.store.action_items()})
             if path == "/api/people":

@@ -30,6 +30,7 @@ from ..config.settings import DEFAULT_CONFIG_TOML, Settings, config_dir, parse_s
 from ..meetings.catalog import load_calls
 from ..meetings.people import (MAX_NAME, build_people, is_person, load_aliases, person_key, resolve,
                                save_aliases)
+from ..meetings.related import event_key, prep_brief, related_calls
 from ..config.vocabulary import load_vocabulary, save_vocabulary
 from ..process.engines import ENGINES, OVERRIDES, check_overrides
 from ..process.jobs import Jobs
@@ -42,6 +43,7 @@ from ..process.templates import remember_series, scan, series_templates
 from ..process.worker import MY_NOTES, SUMMARY, TRANSCRIPT, read_my_notes, rewrite_note
 
 REC_ID = re.compile(r"^\d{8}-\d{6}-[A-Za-z0-9_.-]{1,64}$")
+PREP_KEY = re.compile(r"^[0-9a-f]{12}$")
 LABEL = re.compile(r"^(S\d{1,3}|Others)$")
 MIX = "mix.ogg"
 ASKS = "asks.json"
@@ -1081,10 +1083,23 @@ class Store:
             events = ics.load(sources, dt.datetime.now().astimezone())[0] if sources else []
             self._upcoming = (time.monotonic(), events)
         now = dt.datetime.now().astimezone()
-        soon = [e for e in events if e.end > now and e.start < now + dt.timedelta(hours=18)]
+        soon = sorted((e for e in events if e.end > now and e.start < now + dt.timedelta(hours=18)),
+                      key=lambda e: e.start)[:8]
+        calls = load_calls(self.root) if soon else []
         return [{"title": e.title, "start": e.start.isoformat(), "end": e.end.isoformat(),
-                 "attendees": list(e.attendees), "call": bool(e.service_links(None))}
-                for e in sorted(soon, key=lambda e: e.start)[:8]]
+                 "attendees": list(e.attendees), "call": bool(e.service_links(None)),
+                 "key": event_key(e), "related": len(related_calls(e, calls))}
+                for e in soon]
+
+    def prep(self, key: str) -> dict:
+        """The brief for an event in the calendar, found by its hash key (never by title)."""
+        if not PREP_KEY.match(key or ""):
+            raise NotFound("event")
+        self.upcoming()                         # refreshes the cached events when they are stale
+        for e in self._upcoming[1]:
+            if event_key(e) == key:
+                return prep_brief(e, load_calls(self.root))
+        raise NotFound("event")
 
 
 def _seconds(hhmmss: str) -> float:

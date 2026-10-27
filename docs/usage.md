@@ -148,6 +148,15 @@ A template has at most 6 sections and 2000 characters of instructions. A file th
 - In a call, the name chips under the title open that person's page too.
 - Nothing is sent anywhere: the pages are built from your own recordings each time you open them. Calls saved before this version have names but no email addresses, and show up the same way.
 
+## Before a meeting
+
+With a calendar connected, Wirenote shows a banner 5 minutes before a meeting when you have had calls about it before: the first point of the last summary and how many action items are still open. **Open prep** opens a page with what was said last time, what was decided, the open action items from earlier calls and who is invited. **Coming up** on the home page has a **Prep** link for each such meeting.
+
+- An earlier call counts when it has the same calendar entry (a repeating meeting), or the same title and an invitee in common, or at least two invitees in common.
+- There is no banner while you are recording, and none for a meeting without history. Each meeting gets one banner.
+- To turn it off, set `meeting_prep = false` in `config.toml` and restart: `systemctl --user restart wirenote`. `prep_lead_s = 300.0` is how many seconds ahead the banner comes.
+- Nothing is sent anywhere: the page is built from your own recordings.
+
 ## Import and export
 
 **Import a recording.** Click **Import** in the meetings app, or drop an audio or video file on its window. On the command line:

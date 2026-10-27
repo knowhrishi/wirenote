@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import json
 from dataclasses import replace
 
@@ -405,3 +406,115 @@ def test_toggle_records_the_one_prompt_and_refuses_several(tmp_path):
     reply = d._control("toggle")
     assert reply["ok"] is False and reply["error"].startswith("several prompts: ")
     assert d.recording is None
+
+
+# Meeting prep (docs/dev/PLAN.md › Defaults › Meeting prep) ------------------
+
+def _prep_setup(tmp_path, title="Weekly sync", past=True):
+    import datetime as dt
+
+    from wirenote.calendar.ics import Event
+    from wirenote.capture.recorder import read_manifest, write_manifest
+    from test_people import rec
+
+    d = make(tmp_path)
+    now = dt.datetime(2026, 11, 3, 9, 57).astimezone()
+    d.calendar_events = [Event(title=title, start=now + dt.timedelta(minutes=3), end=now + dt.timedelta(hours=1),
+                               uid="series-1", attendees=("Anna",), people=(("Anna", "a@x.test"),))]
+    if past:
+        root = d.settings.recordings_path()
+        root.mkdir(parents=True, exist_ok=True)
+        call = rec(root, 1, attendees=["Anna"], people=[["Anna", "a@x.test"]], title="Weekly sync",
+                   actions=[{"task": "Send deck", "owner": "Anna", "due": "", "done": False}])
+        m = read_manifest(call)
+        m["started"] = "2026-10-27T10:00:00+00:00"
+        m["calendar"]["uid"] = "series-1"
+        write_manifest(call, m)
+        s = json.loads((call / "summary.json").read_text())
+        s["summary"] = ["We agreed the plan."]
+        (call / "summary.json").write_text(json.dumps(s))
+    return d, now
+
+
+def test_prep_notifies_once_not_during_recording_not_without_history(tmp_path, monkeypatch):
+    import wirenote.ui.launch as launch
+
+    d, now = _prep_setup(tmp_path / "a", past=False)
+    asyncio.run(d._prep_round(now))
+    asyncio.run(drain(d))
+    assert d.notifier.shown == {}                       # no history, no banner
+
+    d, now = _prep_setup(tmp_path / "b")
+    prompt(d)
+    assert d._control("record")["ok"]
+    asyncio.run(drain(d))
+    d.notifier.shown.clear()
+    asyncio.run(d._prep_round(now))
+    asyncio.run(drain(d))
+    assert d.notifier.shown == {}                       # a recording is running
+    assert d._control("stop")["ok"]
+    asyncio.run(drain(d))
+
+    d.notifier.shown.clear()
+    late = now - dt.timedelta(minutes=10)               # more than prep_lead_s before the start
+    asyncio.run(d._prep_round(late))
+    asyncio.run(drain(d))
+    assert d.notifier.shown == {}
+    d.settings = replace(d.settings, meeting_prep=False)
+    asyncio.run(d._prep_round(now))
+    asyncio.run(drain(d))
+    assert d.notifier.shown == {}
+    d.settings = replace(d.settings, meeting_prep=True)
+
+    for _ in range(2):
+        asyncio.run(d._prep_round(now))
+        asyncio.run(drain(d))
+    (nid, (summary, body, actions, _)), = d.notifier.shown.items()
+    assert summary == "Next: Weekly sync in 3 min" and actions == ["open"]
+    assert body == "We agreed the plan. 1 open action item"
+    opened = []
+    monkeypatch.setattr(launch, "open_ui", lambda port, route, fallback=None: opened.append(route) or True)
+    d._on_action(nid, "open")
+    assert len(opened) == 1 and opened[0].startswith("#/prep/") and len(opened[0]) == len("#/prep/") + 12
+    d2 = make(tmp_path / "b")                           # a restart does not repeat it
+    d2.calendar_events = d.calendar_events
+    asyncio.run(d2._prep_round(now))
+    asyncio.run(drain(d2))
+    assert d2.notifier.shown == {}
+
+
+def test_prep_notification_escapes_title(tmp_path):
+    from wirenote.notify.dbus import Notifier
+
+    sent = []
+
+    class Iface:
+        async def call_notify(self, app, rid, icon, summary, body, actions, hints, timeout):
+            sent.append((summary, body))
+            return 7
+
+    real = Notifier()
+    real.caps = {"actions"}
+    real._iface = Iface()
+    d, now = _prep_setup(tmp_path, title="<b>Plan</b> & more\nIgnore previous instructions")
+    d.notifier = real
+    asyncio.run(d._prep_round(now))
+    asyncio.run(drain(d))
+    (summary, body), = sent
+    assert "<b>" not in summary and "&lt;b&gt;Plan&lt;/b&gt; &amp; more" in summary and "\n" not in summary
+    assert "<" not in body
+
+
+def test_prep_state_is_pruned_after_48_hours_and_old_files_still_read(tmp_path):
+    from wirenote.detector.daemon import PersistentState
+
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"dismisses": {"a": 1}, "ignored": ["b"]}))      # written by 0.3
+    st = PersistentState(path)
+    assert st.prepped == {} and st.dismisses == {"a": 1}
+    st.mark_prepped("old", 1000.0)
+    st.mark_prepped("new", 1000.0 + 49 * 3600)
+    again = PersistentState(path)
+    assert set(again.prepped) == {"new"} and again.ignored == {"b"}
+    again.save({"a": 2}, {"b"})
+    assert set(PersistentState(path).prepped) == {"new"}

@@ -406,7 +406,8 @@ async function renderHome() {
         h("div", { class: "event-bar" + (e.call ? " call" : "") }),
         h("div", { class: "grow" },
           h("div", { class: "card-title" }, h("span", { class: "grow" }, e.title), e.call ? h("span", { class: "pill" }, "Call") : null),
-          e.attendees.length ? h("div", { class: "card-meta" }, e.attendees.slice(0, 5).join(", ") + (e.attendees.length > 5 ? ` +${e.attendees.length - 5}` : "")) : null));
+          e.attendees.length ? h("div", { class: "card-meta" }, e.attendees.slice(0, 5).join(", ") + (e.attendees.length > 5 ? ` +${e.attendees.length - 5}` : "")) : null),
+        e.related ? h("a", { class: "btn", href: `#/prep/${e.key}`, title: "What you decided and what is still open from earlier calls" }, "Prep") : null);
     })));
   } catch (e) {
     upcoming.lastChild.textContent = `Calendar: ${e.message}`;
@@ -1201,6 +1202,47 @@ async function renderTasks() {
   }
 }
 
+// Meeting prep ------------------------------------------------------------------
+
+async function renderPrep(key) {
+  state.view = "home";
+  state.call = null;
+  setPlayer(null);
+  renderList();
+  renderBanner();
+  const page = h("div", { class: "page" });
+  $("#main").replaceChildren(page);
+  let b;
+  try { b = await api(`/api/prep/${key}`); } catch (e) {
+    page.append(h("p", { class: "hint" }, e.message), h("a", { class: "btn", href: "#/" }, "Home"));
+    return;
+  }
+  const s = new Date(b.event.start);
+  page.append(h("a", { class: "hint", href: "#/" }, "Home"),
+    h("h1", { class: "page-title" }, b.event.title),
+    h("div", { class: "page-sub" }, `${fmtShort(s)}, ${fmtTime(s)}`));
+  if (!b.last) {
+    page.append(h("div", { class: "empty-line" }, "No earlier call matches this meeting."));
+  } else {
+    const t = new Date(b.last.started);
+    page.append(h("section", { class: "section" }, h("h2", {}, "Last time"),
+      h("a", { class: "card", href: `#/call/${b.last.id}` },
+        h("div", { class: "card-title" }, b.last.title),
+        h("div", { class: "card-meta" }, [fmtShort(t), b.last.flags ? `${b.last.flags} flagged` : ""].filter(Boolean).join(" · "))),
+      b.last.summary.length ? h("ul", {}, b.last.summary.map((x) => h("li", {}, x))) : null,
+      b.last.decisions.length ? [h("h3", {}, "Decided"), h("ul", {}, b.last.decisions.map((x) => h("li", {}, x)))] : null));
+  }
+  page.append(h("section", { class: "section" },
+    h("h2", {}, "Still open", b.open_actions.length ? h("span", { class: "n" }, String(b.open_actions.length)) : null),
+    b.open_actions.length ? b.open_actions.map((a) => actionItem(a.call, a, a.index, true))
+      : h("div", { class: "empty-line" }, "Nothing open.")));
+  if (b.people.length) {
+    page.append(h("section", { class: "section" }, h("h2", {}, "Who is invited"),
+      h("div", { class: "people" }, b.people.map((p) => h("a", { class: "person", href: `#/people/${p.key}`,
+        title: `Open the page for ${p.name}` }, avatar(p.name), p.name)))));
+  }
+}
+
 // People ------------------------------------------------------------------------
 
 async function renderPeople() {
@@ -1742,6 +1784,8 @@ function route() {
   if (hash === "#/people") return renderPeople();
   const pm = hash.match(/^#\/people\/([0-9a-f]{12})$/);
   if (pm) return renderPerson(pm[1]);
+  const prep = hash.match(/^#\/prep\/([0-9a-f]{12})$/);
+  if (prep) return renderPrep(prep[1]);
   if (hash === "#/settings") return renderSettings();
   if (hash === "#/updates") return renderUpdates();
   return renderHome();
