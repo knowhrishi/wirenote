@@ -10,6 +10,7 @@ side leaking into the mic, so it is dropped.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import asdict, dataclass
 from difflib import SequenceMatcher
@@ -79,20 +80,37 @@ def paragraphs(lines: list[Line], max_gap: float) -> list[Line]:
 def clip(line: Line, lo: float, hi: float) -> Line:
     """The part of line said between lo and hi. Speech is taken to run at an even pace, so
     time maps to characters in proportion. The cuts fall between words and are marked
-    with "…", and the part is stamped with its own start."""
+    with "…", and the part is stamped with its own start. A word longer than the window,
+    as in a script written without spaces, is cut between characters instead."""
     span, n = line.end - line.start, len(line.text)
     if (lo <= line.start and hi >= line.end) or span <= 0 or not n:
         return line
     i, j = (lo - line.start) / span * n, (hi - line.start) / span * n
     words = [m.span() for m in _TOKEN.finditer(line.text)]
-    inside = [w for w in words if w[0] >= i and w[1] <= j]
-    if not inside and words:     # the window falls within one word: keep that word
-        inside = [min(words, key=lambda w: abs((w[0] + w[1]) / 2 - (i + j) / 2))]
-    if not inside:
+    if not words:
         return line
-    a, b = inside[0][0], inside[-1][1]
+    a = _cut(words, i, j - i, True)
+    b = _cut(words, j, j - i, False)
+    if a >= b:       # no whole word in the window: keep the nearest, or a character of it
+        w = min(words, key=lambda w: abs((w[0] + w[1]) / 2 - (i + j) / 2))
+        a, b = w
+        if b - a > max(j - i, 1):
+            a = min(max(int((i + j) / 2), w[0]), w[1] - 1)
+            b = a + 1
     text = ("…" if a > words[0][0] else "") + line.text[a:b] + ("…" if b < words[-1][1] else "")
     return Line(line.speaker, line.start + a / n * span, line.start + b / n * span, text)
+
+
+def _cut(words: list[tuple[int, int]], x: float, width: float, start: bool) -> int:
+    """Where to cut at character offset x: inward to the nearest word boundary, or right
+    at x when x falls inside a word longer than the window (width), which would otherwise
+    leave nothing of the window or all of the word."""
+    for s, e in words:
+        if s < x < e and e - s > width:
+            return math.ceil(x) if start else math.floor(x)
+    if start:
+        return min((s for s, _ in words if s >= x), default=words[-1][1])
+    return max((e for _, e in words if e <= x), default=words[0][0])
 
 
 def around(line: Line, t: float, before_s: float, after_s: float,

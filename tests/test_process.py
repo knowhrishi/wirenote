@@ -368,6 +368,73 @@ def test_flags_in_a_long_paragraph_keep_their_own_moment(tmp_path):
         assert f"Point {int(f['t']):03d}" in f["text"] and b.endswith(f["text"])
 
 
+_CJK_DIGITS = "〇一二三四五六七八九"
+
+
+def _cjk_point(i: int) -> str:
+    """Point i in a script written without spaces: 第一〇〇点 for 100."""
+    return "第" + "".join(_CJK_DIGITS[int(d)] for d in f"{i:03d}") + "点"
+
+
+class UnspacedTranscriber:
+    """Ten minutes of one speaker in a script without spaces: one line of 3,600 characters
+    and no word boundary in it."""
+
+    def recording(self, rec_dir, manifest):
+        text = "".join(_cjk_point(i) + "。" for i in range(600))
+        return ([Line("S1", 0.0, 600.0, text)], [{"file": "mic-000.wav", "language": "zh"}], None)
+
+
+def test_text_without_spaces_is_cut_by_characters():
+    from wirenote.process.merge import around
+
+    text = "".join(_cjk_point(i) + "。" for i in range(600))
+    line = Line("S1", 0.0, 600.0, text)
+    part = around(line, 300.0, 30.0, 10.0)
+    assert _cjk_point(300) in part.text and len(part.text) <= 40 * 6 + 2
+    assert part.text.startswith("…") and part.text.endswith("…")
+    assert abs(part.start - 270.0) < 1 and abs(part.end - 310.0) < 1
+    small = around(line, 300.0, 30.0, 10.0, max_chars=20)
+    assert 10 <= len(small.text) <= 20 and abs(small.start - 297.0) < 2
+    # Spaced text still cuts between words.
+    spaced = Line("S1", 0.0, 100.0, " ".join(f"word{i:03d}" for i in range(100)))
+    assert around(spaced, 50.0, 3.0, 1.0).text == "…word047 word048 word049 word050…"
+
+
+def test_flags_in_text_without_spaces_keep_their_own_moment(tmp_path):
+    from wirenote.capture.recorder import write_flags
+    from wirenote.ui.data import Store
+
+    rec = make_recording(tmp_path)
+    flags = [100.0, 300.0, 500.0, 540.0]
+    write_flags(rec, flags)
+    s = replace(settings_for(tmp_path), recordings_dir=str(tmp_path / "recordings"))
+    jobs = Jobs(tmp_path / "state" / "jobs.db")
+    backend = FakeBackend()
+    job = run_job(jobs.add(rec), s, jobs, UnspacedTranscriber(), lambda _s: backend,
+                  voices=no_voices(tmp_path))
+
+    user = [c for c in backend.calls if c[2] is FINAL_SCHEMA][0][1]
+    assert "Make sure the summary covers them:\n" in user
+    block = user.split("Make sure the summary covers them:\n")[1].split("\n\nTranscript:")[0]
+    assert len(block) <= 3000 and _cjk_point(0) not in block
+    for t in flags:
+        assert _cjk_point(int(t)) in block
+    assert all(not l.startswith("[00:00:00]") for l in block.splitlines())
+
+    text = Path(job.note).read_text()
+    bullets = text.split("## Flagged moments\n\n")[1].split("\n\n## ")[0].splitlines()
+    assert len(bullets) == len(flags)
+    for t, b in zip(flags, bullets):
+        assert _cjk_point(int(t)) in b and len(b) < 400
+        assert abs(_seconds_of(b[3:11]) - (t - 30)) <= 2
+
+    got = Store(s, tmp_path / "state", voices=no_voices(tmp_path)).call(rec.name)["flags"]
+    assert [round(f["start"]) for f in got] == [round(t - 30) for t in flags]
+    for f, b in zip(got, bullets):
+        assert _cjk_point(int(f["t"])) in f["text"] and len(f["text"]) < 400 and b.endswith(f["text"])
+
+
 def test_each_summary_part_gets_only_its_own_flags(tmp_path):
     from wirenote.capture.recorder import write_flags
 

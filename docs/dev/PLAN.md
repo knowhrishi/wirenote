@@ -132,7 +132,7 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | Flagged moments | a flag within 2 s of the last one is dropped | A double press must not store two |
 | Flag window | 30 s before and 10 s after each flag | People flag just after hearing something; the summary prompt gets the lines in the window, at most 3000 characters, an equal share per flag with the words nearest it first. Each part of a long call gets only its own flags |
 | Flag a finished call | at most 24 h into it, and no later than its end when its length is known | Nothing is recorded that long (the cap is 4 h); a flag after the end is about the end |
-| Flag in the note | the line closest to each flag, no model; a line longer than the flag window is cut to it, by time in proportion to its characters, at word boundaries | The same list every time; one speaker can make a paragraph minutes long; the app shows the same excerpt with jump links |
+| Flag in the note | the line closest to each flag, no model; a line longer than the flag window is cut to it, by time in proportion to its characters, at word boundaries; a word longer than the window, as in a script written without spaces, is cut between characters | The same list every time; one speaker can make a paragraph minutes long; the app shows the same excerpt with jump links |
 | Live transcript | off | It uses CPU during the call |
 | Live engine | Parakeet where it knows the language, else Whisper `small`; downloaded models only; 2 threads | Fast enough to keep up; never a download during a call |
 | Live pieces | read every 1.5 s; cut after 0.5 s of silence (at least 2 s) or at 15 s | Whole sentences, a few seconds behind |
