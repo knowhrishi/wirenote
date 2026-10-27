@@ -20,7 +20,7 @@ from ..capture import wav
 from ..config.settings import Settings
 from .engines import make_engine
 from .merge import Line
-from .speakers import Diarizer, SpeakerBook, assign_sentence, sentences
+from .speakers import Diarizer, SpeakerBook, assign_sentence, fold_short_speakers, sentences
 
 MIN_SEGMENT_S = 0.5
 
@@ -83,4 +83,9 @@ class Transcriber:
             got, run = self.segment(path, seg["start_offset_s"], seg["track"], book)
             lines += got
             runs.append(run)
+        found = len(book.prints)
+        lines = fold_short_speakers(lines, book)
+        if len(book.prints) < found:
+            log(f"{found - len(book.prints)} speaker(s) with only a few seconds folded into "
+                "the speaker heard nearest")
         return lines, runs, book

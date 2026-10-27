@@ -139,6 +139,7 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | OpenAI-compatible API | `https://openrouter.ai/api/v1`, model `anthropic/claude-sonnet-5.5` | One key reaches most models; Sonnet summarizes well at half the price of Opus |
 | API on another computer | https only; a confirmation per destination host | The key and transcript never travel in clear; a new host is a new place your calls go |
 | API on this computer | counts as local: owner check, no key, Ollama's Ask budget | Same as Ollama |
+| Shortest speaker | 8 s of speech in the whole call; less joins the speaker heard nearest in time | A laugh or a word through a bad line was split off as its own speaker; on a 30-min call with three people, five of seven speakers had 9 s together |
 | Summary memory | wait until free RAM plus free swap holds the Ollama model's file + 1 GB; check every 15 s, at most 5 min | Loading without room gets Ollama or another program killed |
 | Summary passing failure | ask again once after 30 s; then write the note and queue the summary again after 60 s, up to 3 attempts | Ollama restarts in seconds and memory frees up; the transcript is never held back |
 

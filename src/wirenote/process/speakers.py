@@ -6,6 +6,8 @@
   model, CPU only. Speakers are labelled S1, S2, ... in order of first speech.
 - Whisper's word timestamps are split at speaker changes, so one line never
   mixes two people.
+- A "speaker" with only a few seconds in the whole call is folded into the one
+  heard nearest in time (fold_short_speakers).
 - Names, in this order: a remembered voice (voices.json, taught by renaming a
   speaker in the app), then the summary backend's reading of the transcript
   ("Thanks, Anna") checked against the calendar attendees, else "Speaker N".
@@ -17,7 +19,7 @@ import datetime as dt
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -27,6 +29,8 @@ from .models import EMB_REPO, SEG_FILE, SEG_REPO, hub_file  # noqa: F401 - re-ex
 
 EMBED_SECONDS = 30.0      # speech per speaker used for its voice print
 MIN_TURN_S = 0.8          # shorter turns are too short for a reliable voice print
+# docs/dev/PLAN.md › Defaults › Shortest speaker
+MIN_SPEAKER_S = 8.0       # less speech in a whole call is not taken for a person of its own
 
 
 @dataclass(frozen=True)
@@ -193,6 +197,42 @@ class SpeakerBook:
 
     def add_time(self, label: str, seconds: float) -> None:
         self.seconds[label] = self.seconds.get(label, 0.0) + seconds
+
+
+def fold_short_speakers(lines: list, book: SpeakerBook, min_s: float = MIN_SPEAKER_S) -> list:
+    """Give the lines of every speaker with less than min_s of speech to the speaker heard
+    nearest in time, then number the rest S1, S2, ... in order of first speech.
+
+    Diarization splits off a laugh, a cough or a word through a bad line as a speaker of
+    its own, and a voice print from a second or two matches nobody: on a 30-min call with
+    three people it found seven, five of them with 9 s between them. The speaker with
+    the most speech always stays, so a short call keeps its one voice."""
+    labels = list(book.prints)
+    if len(labels) < 2:
+        return lines
+    longest = max(labels, key=lambda l: book.seconds.get(l, 0.0))
+    short = {l for l in labels if l != longest and book.seconds.get(l, 0.0) < min_s}
+    if not short:
+        return lines
+    keep = [l for l in lines if l.speaker in book.prints and l.speaker not in short]
+
+    def distance(a, b) -> tuple[float, float]:
+        return max(0.0, max(a.start, b.start) - min(a.end, b.end)), abs(a.start - b.start)
+    out = []
+    for line in lines:
+        if line.speaker in short:
+            near = min(keep, key=lambda k: distance(k, line), default=None)
+            line = replace(line, speaker=near.speaker if near else longest)
+        out.append(line)
+    order = []
+    for line in sorted(out, key=lambda l: l.start):
+        if line.speaker in book.prints and line.speaker not in order:
+            order.append(line.speaker)
+    order += [l for l in labels if l not in short and l not in order]
+    new = {old: f"S{i}" for i, old in enumerate(order, 1)}
+    book.prints = {new[o]: book.prints[o] for o in order}
+    book.seconds = {new[o]: book.seconds.get(o, 0.0) for o in order}
+    return [replace(l, speaker=new.get(l.speaker, l.speaker)) for l in out]
 
 
 # Remembered voices ---------------------------------------------------------

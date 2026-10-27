@@ -20,7 +20,7 @@ Open **Wirenote** from the app menu, or run `wirenote open`. It is a local web p
 - **Transcript tab:** searchable, with timestamps that play the audio from there.
 - **Ask:** questions about one call, answered from its transcript.
 - **Record a meeting:** records without a call app (a meeting room, a phone on speaker). A call page opens where you can take notes while you talk.
-- **Who said what:** the other people are told apart and named from the call ("This is Anna…"), the calendar invite, or a voice you taught it. Click a speaker to name them, tick "Recognize this voice" so later calls know them, or merge two speakers that are one person.
+- **Who said what:** the other people are told apart and named from the call ("This is Anna…"), the calendar invite, or a voice you taught it. Click a speaker to name them, tick "Recognize this voice" so later calls know them, or merge two speakers that are one person. Someone who speaks less than about 8 seconds in the whole call is counted with the person who spoke just before or after.
 - **Your notes:** typed during or after the call. They shape the summary, and "Update summary" rebuilds it with them.
 - **Follow-up email:** a recap from the notes, to copy or open in your mail app.
 - **Action items:** everything agreed across all meetings, yours first.
