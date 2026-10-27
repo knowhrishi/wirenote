@@ -26,11 +26,12 @@ from http import HTTPStatus
 from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from .. import __version__
 from ..config.settings import Settings
 from ..net.peer import tcp_owner
+from ..capture.importer import MAX_IMPORT_BYTES
 from .data import Invalid, NotFound, Store
 from .launch import redeem_login_code
 
@@ -38,6 +39,7 @@ STATIC = Path(__file__).parent / "static"
 mimetypes.add_type("font/woff2", ".woff2")
 mimetypes.add_type("text/javascript", ".js")
 
+DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 ROUTE_CALL = re.compile(r"^/api/calls/([^/]+)(/[a-z-]+)?(?:/(\d+))?$")
 NEXT_ROUTE = re.compile(r"^#/[\w/?=.&%-]*$")
 COOKIE = "wirenote_session"
@@ -260,6 +262,12 @@ def make_handler(app: App):
                 return self._json(app.store.call(m.group(1)))
             if m and m.group(2) == "/audio":
                 return self._file(app.store.mixed_audio(m.group(1)), "audio/ogg")
+            if m and m.group(2) == "/docx":
+                body, name = app.store.export_docx(m.group(1))
+                ascii_name = name.encode("ascii", "replace").decode().replace("?", "_").replace('"', "")
+                return self._send(200, body, DOCX, {
+                    "Content-Disposition": f'attachment; filename="{ascii_name}"; '
+                                           f"filename*=UTF-8''{quote(name)}"})
             if m and m.group(2) == "/live":
                 after = parse_qs(url.query).get("after", ["0"])[0]
                 return self._json(app.store.live(m.group(1), int(after) if after.isdigit() else 0))
@@ -304,8 +312,24 @@ def make_handler(app: App):
             return run
 
         def do_POST(self):
+            if urlsplit(self.path).path == "/api/import":
+                # A file, not JSON: streamed to disk instead of read by _body().
+                if self._allowed(write=True):
+                    self._dispatch(self._import)
+                return
             if self._allowed(write=True):
                 self._dispatch(self._read_body_first(self._post))
+
+        def _import(self):
+            try:
+                size = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                size = 0
+            if not 0 < size <= MAX_IMPORT_BYTES:
+                self.close_connection = True     # the body is not read; this connection ends
+            filename = unquote(self.headers.get("X-Filename", ""))
+            self._json(app.store.import_upload(self.rfile.read, size, filename,
+                                               self.headers.get("X-Last-Modified", "")))
 
         def do_PUT(self):
             if self._allowed(write=True):

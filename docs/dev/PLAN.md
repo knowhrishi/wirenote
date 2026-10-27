@@ -132,6 +132,9 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | Live engine | Parakeet where it knows the language, else Whisper `small`; downloaded models only; 2 threads | Fast enough to keep up; never a download during a call |
 | Live pieces | read every 1.5 s; cut after 0.5 s of silence (at least 2 s) or at 15 s | Whole sentences, a few seconds behind |
 | Live echo check | a mic line waits at most 10 s for the system track | The far side's voice in the mic is dropped, as in the note |
+| Import size | up to 4 GB | Several hours of video; the upload is streamed to disk, never held in memory |
+| Import length | the first 4 h | The same cap as a recording |
+| Import conversion | ffmpeg, at most 30 min | A 4 h video converts in a few minutes; a stuck ffmpeg must not block the app |
 
 ## Prompt, capture and processing
 

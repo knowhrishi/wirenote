@@ -51,6 +51,8 @@ def segment_file(rec: Path, seg: dict) -> Path | None:
 
 
 def title_for(manifest: dict, summary: Summary | None) -> str:
+    if manifest.get("title_override"):          # renamed in the app, or `import --title`
+        return manifest["title_override"]
     cal = manifest.get("calendar") or {}
     if cal.get("title"):
         return cal["title"]
@@ -58,7 +60,7 @@ def title_for(manifest: dict, summary: Summary | None) -> str:
         return summary.title
     if manifest.get("service") and manifest.get("room"):
         return f"{manifest['service']} {manifest['room']}"
-    if manifest.get("app") == "manual":
+    if manifest.get("app") in ("manual", "import"):
         return manifest.get("name") or "Meeting"
     return f"{manifest.get('name') or manifest.get('app', 'Call')} call"
 

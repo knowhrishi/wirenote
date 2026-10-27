@@ -166,6 +166,7 @@ function avatar(name, key) {
 
 function sourceLabel(c) {
   if (c.app === "manual") return "In person";
+  if (c.app === "import") return `Imported · ${c.name}`;
   return c.service ? `${c.service} · ${c.name}` : c.name || c.app;
 }
 
@@ -575,6 +576,8 @@ function moreMenu(c) {
       c.summary ? item("mail", "Draft follow-up email", () => followupDialog(c)) : null,
       c.summary ? item("copy", "Copy notes as Markdown", copyNotes) : null,
       c.note ? item("file", "Open Markdown file", () => post(`/api/calls/${c.id}/open`)) : null,
+      c.has_transcript ? item("download", "Download as Word (.docx)", () => { location.href = `/api/calls/${encodeURIComponent(c.id)}/docx`; }) : null,
+      c.has_transcript ? item("printer", "Print or save as PDF", () => printCall(c)) : null,
       item("folder", "Show recording folder", () => post(`/api/calls/${c.id}/folder`)),
       h("hr"),
       c.has_transcript ? item("sparkle", "Redo summary", () => requeue(true)) : null,
@@ -587,6 +590,75 @@ function moreMenu(c) {
   });
   wrap.append(btn);
   return wrap;
+}
+
+// Printing (and so "Save as PDF") shows only #print-view: the notes and the whole
+// transcript, whatever tab is open (app.css › @media print).
+function printCall(c) {
+  const s = c.summary || {};
+  const names = c.names || {};
+  const list = (head, xs) => (xs && xs.length ? [h("h2", {}, head), h("ul", {}, xs.map((x) => h("li", {}, x)))] : []);
+  const started = new Date(c.started);
+  const people = (c.people || []).filter((p) => p.label !== "Me").map((p) => p.name);
+  $("#print-view").replaceChildren(
+    h("h1", {}, c.title),
+    h("p", { class: "print-meta" }, [`${fmtDate(started)}, ${fmtTime(started)}`, c.duration_s ? fmtDuration(c.duration_s) : null, sourceLabel(c)].filter(Boolean).join(" · ")),
+    people.length ? h("p", {}, h("b", {}, "With: "), people.join(", ")) : null,
+    ...list("Summary", s.summary), ...list("Decisions", s.decisions),
+    ...(s.action_items && s.action_items.length ? [h("h2", {}, "Action items"), h("ul", { class: "print-actions" },
+      s.action_items.map((a) => h("li", {}, a.done ? "☑ " : "☐ ", h("b", {}, `${a.owner}: `), a.task + (a.due ? ` (due: ${a.due})` : ""))))] : []),
+    ...list("Open questions", s.open_questions),
+    ...(c.my_notes && c.my_notes.trim() ? [h("h2", {}, "My notes"), h("pre", { class: "print-notes" }, c.my_notes.trim())] : []),
+    h("h2", {}, "Transcript"),
+    ...(c.lines || []).map((l) => h("p", { class: "print-line" }, h("b", {}, names[l.speaker] || l.speaker), h("span", { class: "print-time" }, clock(l.start)), l.text)));
+  window.print();
+}
+
+// Import ---------------------------------------------------------------------
+
+function importFile(file) {
+  if (!file) return;
+  const xhr = new XMLHttpRequest();      // fetch() cannot report upload progress
+  xhr.open("POST", "/api/import");
+  xhr.setRequestHeader("X-Wirenote-Token", TOKEN);
+  xhr.setRequestHeader("Content-Type", "application/octet-stream");
+  xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+  if (file.lastModified) xhr.setRequestHeader("X-Last-Modified", String(file.lastModified));
+  let shown = -1;
+  xhr.upload.onprogress = (e) => {
+    const pct = e.lengthComputable ? Math.floor((e.loaded / e.total) * 100) : 0;
+    if (pct !== shown) { shown = pct; toast(pct < 100 ? `Uploading ${file.name}… ${pct}%` : "Converting the audio…"); }
+  };
+  xhr.onload = async () => {
+    let r = {};
+    try { r = JSON.parse(xhr.responseText); } catch { /* shown below */ }
+    if (xhr.status !== 200) { toast(r.error || `Import failed (HTTP ${xhr.status})`); return; }
+    toast("Imported. The note is being written.");
+    await refreshList();
+    location.hash = `#/call/${r.id}`;
+  };
+  xhr.onerror = () => toast("Import failed: the upload stopped.");
+  toast(`Uploading ${file.name}…`);
+  xhr.send(file);
+}
+
+function wireImport() {
+  const input = $("#import-file");
+  $("#import-btn").addEventListener("click", () => input.click());
+  input.addEventListener("change", () => { importFile(input.files[0]); input.value = ""; });
+  const hint = $("#drop-hint");
+  const hasFile = (e) => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+  let depth = 0;
+  window.addEventListener("dragenter", (e) => { if (hasFile(e)) { depth++; hint.hidden = false; } });
+  window.addEventListener("dragleave", (e) => { if (hasFile(e) && --depth <= 0) { depth = 0; hint.hidden = true; } });
+  window.addEventListener("dragover", (e) => { if (hasFile(e)) e.preventDefault(); });
+  window.addEventListener("drop", (e) => {
+    if (!hasFile(e)) return;
+    e.preventDefault();
+    depth = 0;
+    hint.hidden = true;
+    importFile(e.dataTransfer.files[0]);
+  });
 }
 
 async function post(path) {
@@ -1521,6 +1593,7 @@ function wireKeys() {
 async function start() {
   wirePlayer();
   wireKeys();
+  wireImport();
   await Promise.all([refreshStatus(), refreshList()]);
   window.addEventListener("hashchange", route);
   route();

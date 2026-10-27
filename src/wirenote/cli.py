@@ -105,6 +105,49 @@ def cmd_jobs(args) -> int:
     return 0
 
 
+def cmd_import(args) -> int:
+    import datetime as dt
+
+    from .capture.importer import ImportFailed, import_audio
+    from .process.jobs import Jobs
+    from .tools.setup import _poke_daemon
+
+    started = None
+    if args.date:
+        try:
+            started = dt.datetime.fromisoformat(args.date)
+        except ValueError:
+            print(f"wirenote: --date: expected e.g. 2026-10-27 14:00, not {args.date!r}")
+            return 2
+    try:
+        rec = import_audio(Path(args.file).expanduser(), _settings().recordings_path(),
+                           title=args.title, started=started)
+    except ImportFailed as e:
+        print(f"wirenote: {e}")
+        return 1
+    job_id = Jobs(state_dir() / "jobs.db").add(rec)
+    _poke_daemon("kick-jobs")
+    print(f"imported as {rec.name}; queued job {job_id} (`wirenote jobs`, or `wirenote open {rec.name}`)")
+    return 0
+
+
+def cmd_export(args) -> int:
+    from .ui.data import NotFound, Store
+    from .ui.export import docx_bytes, export_name
+
+    try:
+        call = Store(_settings(), state_dir()).call(args.recording)
+    except NotFound:
+        print(f"wirenote: no recording {args.recording}")
+        return 1
+    out = Path(args.output).expanduser() if args.output else Path(export_name(call, "docx"))
+    if out.is_dir():
+        out = out / export_name(call, "docx")
+    out.write_bytes(docx_bytes(call))
+    print(out)
+    return 0
+
+
 def cmd_reprocess(args) -> int:
     from .process.jobs import Jobs
 
@@ -281,6 +324,15 @@ def main(argv: list[str] | None = None) -> int:
     jobs = sub.add_parser("jobs", help="list recent processing jobs")
     jobs.add_argument("-n", type=int, default=10)
     jobs.set_defaults(fn=cmd_jobs)
+    imp = sub.add_parser("import", help="make a note from an audio or video file")
+    imp.add_argument("file")
+    imp.add_argument("--title", help="the call's title; otherwise the summary's")
+    imp.add_argument("--date", help="when it started, e.g. 2026-10-27 14:00; default: the file's time")
+    imp.set_defaults(fn=cmd_import)
+    exp = sub.add_parser("export", help="save a call's notes and transcript as a Word file")
+    exp.add_argument("recording", help="recording id, e.g. 20261027-100000-chrome")
+    exp.add_argument("-o", "--output", help="file or folder; default: here, named after the call")
+    exp.set_defaults(fn=cmd_export)
     rep = sub.add_parser("reprocess", help="queue a recording again")
     rep.add_argument("recording", help="recording id, e.g. 20261027-100000-chrome")
     rep.add_argument("--summary", action="store_true",

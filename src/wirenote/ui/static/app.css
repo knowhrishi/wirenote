@@ -735,6 +735,28 @@ a.card:hover { border-color: var(--line-2); box-shadow: var(--shadow); }
 .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--rec); flex: none; }
 .record-btn.recording { background: var(--rec); border-color: var(--rec); color: #fff; }
 .record-btn.recording .rec-dot { background: #fff; border-radius: 2px; }
+.import-btn { display: flex; align-items: center; justify-content: center; gap: 8px; margin: -4px 12px 10px; padding: 6px 12px;
+  border-radius: 9px; font-size: 13px; font-weight: 520; color: var(--muted); }
+.import-btn:hover { background: var(--hover); color: var(--text); }
+.import-btn .icon { width: 15px; height: 15px; }
+.drop-hint { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 80%, transparent);
+  pointer-events: none; }
+.drop-hint > div { padding: 28px 40px; border: 2px dashed var(--accent); border-radius: 16px; background: var(--bg); font-size: 16px; font-weight: 600; color: var(--accent-ink); }
+.print-view { display: none; }
+@media print {
+  @page { margin: 18mm; }
+  body { background: #fff; color: #000; }
+  .app, .toast, .modal, .drop-hint { display: none !important; }
+  .print-view { display: block; font-size: 11pt; line-height: 1.45; }
+  .print-view h1 { font-size: 20pt; margin: 0 0 4pt; }
+  .print-view h2 { font-size: 13pt; margin: 16pt 0 6pt; break-after: avoid; }
+  .print-view ul { margin: 0; padding-left: 18pt; }
+  .print-view .print-actions { list-style: none; padding-left: 0; }
+  .print-meta { color: #555; margin: 0 0 6pt; }
+  .print-notes { white-space: pre-wrap; font: inherit; margin: 0; }
+  .print-line { margin: 0 0 5pt; break-inside: avoid; }
+  .print-time { color: #777; margin: 0 8pt; font-variant-numeric: tabular-nums; }
+}
 .nav { display: grid; gap: 1px; padding: 0 8px 10px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
 .nav-item {
   display: flex;

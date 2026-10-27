@@ -419,6 +419,51 @@ class Store:
         if read_manifest(d).get("note"):
             rewrite_note(d, self.settings)
 
+    # Import and export ---------------------------------------------------------
+
+    def import_upload(self, read, size: int, filename: str, modified_ms: str = "") -> dict:
+        """An uploaded file, read in pieces with read(n), becomes a recording and a job.
+        The upload is kept only until ffmpeg has converted it."""
+        import datetime as dt
+        import tempfile
+
+        from ..capture.importer import MAX_IMPORT_BYTES, ImportFailed, import_audio
+
+        if not 0 < size <= MAX_IMPORT_BYTES:
+            raise Invalid(f"files up to {MAX_IMPORT_BYTES // 1024 ** 3} GB can be imported")
+        name = Path(filename.replace("\\", "/")).name[:200] or "upload"
+        started = None
+        if modified_ms.isdigit():
+            try:
+                started = dt.datetime.fromtimestamp(int(modified_ms) / 1000).astimezone()
+            except (OverflowError, OSError, ValueError):
+                started = None
+        self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".import-", dir=self.root) as tmp:
+            src = Path(tmp) / name
+            left = size
+            with src.open("wb") as f:
+                while left:
+                    chunk = read(min(left, 1 << 20))
+                    if not chunk:
+                        raise Invalid("the upload stopped before the end")
+                    f.write(chunk)
+                    left -= len(chunk)
+            try:
+                rec = import_audio(src, self.root, started=started)
+            except ImportFailed as e:
+                raise Invalid(str(e)) from e
+        with self._jobs_lock:
+            job = self.jobs.add(rec)
+        poke_daemon("kick-jobs")
+        return {"id": rec.name, "job": job}
+
+    def export_docx(self, rec_id: str) -> tuple[bytes, str]:
+        from .export import docx_bytes, export_name
+
+        call = self.call(rec_id)
+        return docx_bytes(call), export_name(call, "docx")
+
     # Processing ------------------------------------------------------------
 
     def requeue(self, rec_id: str, summary_only: bool, choices: dict | None = None) -> int:
@@ -441,7 +486,9 @@ class Store:
             m["transcribe"] = {k: v for k, v in kept.items() if v != defaults[k]}
             write_manifest(d, m)
         with self._jobs_lock:
-            return self.jobs.add(d, summary_only=summary_only)
+            job = self.jobs.add(d, summary_only=summary_only)
+        poke_daemon("kick-jobs")
+        return job
 
     def _backend(self):
         try:

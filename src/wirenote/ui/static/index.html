@@ -20,6 +20,10 @@
       <button id="record-btn" class="record-btn" type="button">
         <span class="rec-dot" aria-hidden="true"></span><span id="record-label">Record a meeting</span>
       </button>
+      <button id="import-btn" class="import-btn" type="button" title="Make a note from an audio or video file. You can also drop a file on this window.">
+        <svg class="icon" aria-hidden="true"><use href="/static/icons.svg#upload"/></svg>Import a recording
+      </button>
+      <input id="import-file" type="file" accept="audio/*,video/*,.m4a,.mp3,.wav,.ogg,.opus,.flac,.webm,.mp4,.mkv" hidden>
       <nav class="nav" aria-label="Sections">
         <a class="nav-item" href="#/" data-nav="home"><svg class="icon"><use href="/static/icons.svg#home"/></svg>Home</a>
         <a class="nav-item" href="#/ask" data-nav="ask"><svg class="icon"><use href="/static/icons.svg#sparkle"/></svg>Ask your meetings</a>
@@ -52,6 +56,8 @@
       </div>
     </div>
   </div>
+  <div id="print-view" class="print-view"></div>
+  <div id="drop-hint" class="drop-hint" hidden><div>Drop the recording to make a note from it</div></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="modal" class="modal" hidden></div>
 </body>

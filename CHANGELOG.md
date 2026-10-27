@@ -14,11 +14,14 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - Live transcript, off unless you turn it on in Settings › Setup: see what is said while you record, a few seconds behind, under your notes on the call page. It uses two CPU threads during the call. If its model is not downloaded yet, it starts from the call after your next note.
 - Transcribe one call again with another engine, model or language: "Transcribe again…" in the call page's menu, or `wirenote reprocess ID --engine parakeet --language de`. Your settings stay as they are.
 - The note's footer names the speech engine that made the transcript.
+- Import a recording made elsewhere, such as a phone recording, a meeting app's own recording or a video: click Import in the meetings app, drop the file on its window, or run `wirenote import FILE`. It becomes a note like a call. Needs ffmpeg (`sudo apt install ffmpeg`).
+- Export a call: "Download as Word (.docx)" and "Print or save as PDF" in the call page's menu, or `wirenote export ID`.
 - End-to-end tests: a recorded Jitsi call runs through the real daemon, worker and web app, with PipeWire and Ollama faked; a nightly run uses the real speech models.
 - Releases test the built wheel on Python 3.11 to 3.14 before publishing, and data written by every earlier release is checked to still read.
 
 ### Changed
 
+- A title you give a call in the app, or with `wirenote import --title`, now also names its Markdown note when the note is written again.
 - Notes are ready sooner: the speech engine is now chosen for you. Wirenote uses Parakeet when it knows your language and you have no vocabulary set, and Whisper otherwise. The first note after the update downloads Parakeet's model (about 670 MB) once. If a call comes out worse, transcribe it again with Whisper from the call page's menu. What you need to do: nothing; to keep Whisper for every call, choose Whisper in Settings › Setup.
 - The job queue (`jobs.db`) records its schema version, so later releases can change it without breaking existing queues. Nothing to do on upgrade.
 

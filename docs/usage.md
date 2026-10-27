@@ -25,6 +25,7 @@ Open **Wirenote** from the app menu, or run `wirenote open`. It is a local web p
 - **Follow-up email:** a recap from the notes, to copy or open in your mail app.
 - **Action items:** everything agreed across all meetings, yours first.
 - **Ask your meetings:** questions across all past calls, with links to the moments.
+- **Import:** make a note from a recording made elsewhere (a phone, Zoom's own recording, a video). See "Import and export" below.
 - **Settings:** summaries, transcription, the consent line, the Claude key, calendars, a vocabulary of names and terms, remembered voices, the setup check, and updates.
 - **Updates:** click the version number at the bottom of the sidebar for what changed in each release. After an update, the app shows what is new once.
 
@@ -56,6 +57,21 @@ A backend change applies to the next note. To redo an older note's summary:
 ```sh
 wirenote reprocess 20261027-100000-chrome --summary
 ```
+
+## Import and export
+
+**Import a recording.** Click **Import** in the meetings app, or drop an audio or video file on its window. On the command line:
+
+```sh
+wirenote import ~/Downloads/team-sync.m4a --title "Team sync" --date "2026-10-27 14:00"
+```
+
+Wirenote converts the file with ffmpeg (`sudo apt install ffmpeg` if it is missing) and makes a note from it like from a call. Every voice in the file is told apart as Speaker 1, 2, …; none is taken for you, because there is no separate mic track. Without `--date`, the call is dated by the file's time. Your file is not changed, and no copy of it is kept: Wirenote keeps only the converted audio, which is deleted with the other recordings after `audio_retention_days`. Files up to 4 GB can be imported; only the first 4 hours are used.
+
+**Export a call.** In the call page's menu (⋯):
+
+- **Download as Word (.docx):** the summary, decisions, action items, your notes and the transcript, for Word, LibreOffice or Google Docs. On the command line: `wirenote export <id>`, or `-o ~/Documents` to choose where it goes.
+- **Print or save as PDF:** opens your browser's print dialog with the notes and transcript. Choose "Save as PDF" as the printer to get a PDF.
 
 ## Speech engines
 
@@ -122,6 +138,8 @@ wirenote record          # answer the open prompt with Record
 wirenote record --now    # record a meeting without a call app
 wirenote jobs            # recent notes and failures
 wirenote reprocess <id>  # transcribe again (--engine, --model, --language); --summary keeps the transcript
+wirenote import <file>   # make a note from an audio or video file (--title, --date)
+wirenote export <id>     # save a call as a Word file (-o file or folder)
 wirenote doctor          # check every part of the setup; --fix makes your files private again
 wirenote setup install   # install or update the services and the app-menu entry
 wirenote setup uninstall # remove them; --purge also deletes recordings and settings

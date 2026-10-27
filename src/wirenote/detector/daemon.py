@@ -794,6 +794,9 @@ class Daemon:
         if cmd == "refresh-calendar":
             self._calendar_kick.set()
             return {"ok": True, "app": None}
+        if cmd == "kick-jobs":           # a job was queued elsewhere: start it now, not in 30 s
+            self._worker_kick.set()
+            return {"ok": True, "app": None}
         if cmd == "reload-settings":
             # The UI's Settings page changed config.toml; keep running on the old
             # settings if the file cannot be read.
