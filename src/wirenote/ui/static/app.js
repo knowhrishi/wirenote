@@ -588,6 +588,7 @@ function moreMenu(c) {
       item("folder", "Show recording folder", () => post(`/api/calls/${c.id}/folder`)),
       h("hr"),
       c.has_transcript ? item("sparkle", "Redo summary", () => requeue(true)) : null,
+      c.has_transcript ? item("sparkle", "Summary template…", () => templateDialog(c)) : null,
       c.has_audio ? item("refresh", "Transcribe again…", () => transcribeAgainDialog(c)) : null,
       h("hr"),
       c.has_audio ? item("audio-off", "Delete audio, keep notes", deleteAudio, "danger") : null,
@@ -611,7 +612,7 @@ function printCall(c) {
     h("h1", {}, c.title),
     h("p", { class: "print-meta" }, [`${fmtDate(started)}, ${fmtTime(started)}`, c.duration_s ? fmtDuration(c.duration_s) : null, sourceLabel(c)].filter(Boolean).join(" · ")),
     people.length ? h("p", {}, h("b", {}, "With: "), people.join(", ")) : null,
-    ...list("Summary", s.summary), ...list("Decisions", s.decisions),
+    ...list("Summary", s.summary), ...sectionEntries(c).flatMap(([head, xs]) => list(head, xs)), ...list("Decisions", s.decisions),
     ...(s.action_items && s.action_items.length ? [h("h2", {}, "Action items"), h("ul", { class: "print-actions" },
       s.action_items.map((a) => h("li", {}, a.done ? "☑ " : "☐ ", h("b", {}, `${a.owner}: `), a.task + (a.due ? ` (due: ${a.due})` : ""))))] : []),
     ...list("Open questions", s.open_questions),
@@ -672,14 +673,43 @@ async function post(path) {
   try { await api(path, { method: "POST" }); } catch (e) { toast(e.message); }
 }
 
-async function requeue(summaryOnly, choices) {
+async function requeue(summaryOnly, choices, extra) {
   const c = state.call;
   try {
-    await api(`/api/calls/${c.id}/${summaryOnly ? "resummarize" : "retranscribe"}`, { method: "POST", body: choices ? { choices } : {} });
+    await api(`/api/calls/${c.id}/${summaryOnly ? "resummarize" : "retranscribe"}`, { method: "POST", body: { ...(choices ? { choices } : {}), ...(extra || {}) } });
     toast(summaryOnly ? "Updating the summary…" : "Transcribing again…");
     await refreshList();
     openCall(c.id);
   } catch (e) { toast(e.message); }
+}
+
+// The sections a summary template adds, as [title, points] for the ones that have points.
+function sectionEntries(c) {
+  const titles = c.section_titles || {};
+  const spelled = (k) => k.replace(/_/g, " ").replace(/^./, (ch) => ch.toUpperCase());
+  return Object.entries((c.summary && c.summary.sections) || {})
+    .filter(([, xs]) => xs && xs.length)
+    .map(([k, xs]) => [titles[k] || spelled(k), xs]);
+}
+
+// Choose the summary template for one call and redo its summary (docs/usage.md › Summary templates).
+function templateDialog(c) {
+  const select = h("select", {}, [h("option", { value: "" }, "Automatic (by title, then your default)"),
+    ...(c.templates || []).map((t) => h("option", { value: t.id, selected: t.id === c.template }, t.name))]);
+  const series = h("input", { type: "checkbox", id: "template-series" });
+  const seriesRow = h("label", { class: "check-row tight", for: "template-series" }, series, "Use it for every meeting in this calendar series");
+  const show = () => { seriesRow.hidden = !c.in_series || !select.value; };
+  select.onchange = show;
+  show();
+  const ok = h("button", { class: "btn btn-primary" }, "Redo summary");
+  const cancel = h("button", { class: "btn" }, "Cancel");
+  const close = openModal(h("div", { class: "dialog wide", role: "dialog", "aria-modal": "true" },
+    h("h3", {}, "Summary template"),
+    h("p", {}, "A template adds the sections a kind of meeting needs, such as Blockers for a standup. Your transcript stays as it is; only the summary is made again."),
+    field("Template", select), seriesRow,
+    h("div", { class: "row" }, cancel, ok)));
+  cancel.onclick = close;
+  ok.onclick = () => { close(); requeue(true, null, { template: select.value, series: series.checked && !!select.value }); };
 }
 
 const ENGINES = [["auto", "Automatic (the fastest that fits)"], ["whisper", "Whisper"], ["parakeet", "Parakeet (faster on a CPU)"], ["whisper.cpp", "whisper.cpp (GPU, if installed)"]];
@@ -727,6 +757,7 @@ function notesMarkdown(c) {
   if (people.length) out.push(`With: ${people.join(", ")}`, "");
   const list = (head, xs) => { if (xs && xs.length) out.push(`## ${head}`, "", ...xs.map((x) => `- ${x}`), ""); };
   list("Summary", s.summary);
+  for (const [head, xs] of sectionEntries(c)) list(head, xs);
   list("Decisions", s.decisions);
   if (s.action_items.length) {
     out.push("## Action items", "", ...s.action_items.map((a) => `- [${a.done ? "x" : " "}] **${a.owner}**: ${a.task}${a.due ? ` (due: ${a.due})` : ""}`), "");
@@ -871,6 +902,7 @@ function notesView(c) {
 
   wrap.append(h("section", { class: "section" }, h("h2", {}, "Summary", cloudBadge(c.summary_backend)),
     s.summary.length ? bulletList(s.summary) : h("div", { class: "empty-line" }, "—")));
+  for (const [head, items] of sectionEntries(c)) wrap.append(h("section", { class: "section" }, h("h2", {}, head), bulletList(items)));
 
   wrap.append(h("section", { class: "section" },
     h("h2", {}, "Action items", s.action_items.length ? h("span", { class: "n" }, String(s.action_items.length)) : null),
@@ -1173,6 +1205,8 @@ function setupCard(s) {
     ollama_model: text("ollama_model"), anthropic_model: text("anthropic_model"),
     openai_url: text("openai_url", "https://openrouter.ai/api/v1"), openai_model: text("openai_model"),
     summary_language: text("summary_language", "auto"),
+    default_template: h("select", {}, [...(s.templates || []).map((t) => h("option", { value: t.id, selected: t.id === e.default_template }, t.name)),
+      ...((s.templates || []).some((t) => t.id === e.default_template) ? [] : [h("option", { value: e.default_template, selected: true }, `${e.default_template} (missing)`)])]),
     whisper_model: text("whisper_model"), whisper_language: text("whisper_language", "auto"),
     asr_engine: h("select", {}, ENGINES.map(([v, label]) => h("option", { value: v, selected: v === e.asr_engine }, label))),
     consent_line: h("textarea", { class: "short", maxlength: "500", placeholder: "e.g. Is it OK if I record this call for my notes?" }),
@@ -1241,6 +1275,7 @@ function setupCard(s) {
     field("Summaries and Ask", backend, "Ollama, Off, and an API server on this laptop keep everything here."),
     ollamaRow, claudeRow, keyBox, openaiRows, openaiKeyBox,
     field("Summary language", inputs.summary_language, "auto: the language of the call, or e.g. English, German."),
+    field("Default summary template", inputs.default_template, "For calls whose title and app match no template. Your own templates are files in ~/.config/wirenote/templates; see docs/usage.md."),
     field("Whisper model", inputs.whisper_model, "e.g. large-v3-turbo, medium, small."),
     field("Call language", inputs.whisper_language, "auto, or a code like en, de."),
     field("Speech engine", inputs.asr_engine, "Automatic uses Parakeet, several times faster on a CPU, when it knows your language and no vocabulary is set; otherwise Whisper. whisper.cpp uses a GPU if you installed a whisper-cli built for it."),

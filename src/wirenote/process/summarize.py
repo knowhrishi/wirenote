@@ -30,6 +30,7 @@ from ..config.secrets import load_secrets, secrets_path
 from ..config.settings import Settings
 from ..net.peer import listener_uid, trusted_owner
 from .merge import Line, as_text
+from .templates import BUILTIN, Template
 
 _LIST = {"type": "array", "items": {"type": "string"}}
 _ACTIONS = {"type": "array", "items": {
@@ -40,10 +41,31 @@ _ACTIONS = {"type": "array", "items": {
 _NOTES = {"summary": _LIST, "decisions": _LIST, "action_items": _ACTIONS,
           "open_questions": _LIST}
 
+# The schemas of a template without sections (General, and most calls): the same objects
+# every time, so a caller can compare with `is`.
 CHUNK_SCHEMA = {"type": "object", "properties": _NOTES, "required": list(_NOTES),
                 "additionalProperties": False}
 FINAL_SCHEMA = {"type": "object", "properties": {"title": {"type": "string"}, **_NOTES},
                 "required": ["title", *_NOTES], "additionalProperties": False}
+
+
+def _with_sections(base: dict, t: Template) -> dict:
+    if not t.sections:
+        return base
+    props = {**base["properties"], "sections": {
+        "type": "object", "properties": {s.key: _LIST for s in t.sections},
+        "required": [s.key for s in t.sections], "additionalProperties": False}}
+    return {"type": "object", "properties": props, "required": list(props),
+            "additionalProperties": False}
+
+
+def chunk_schema(t: Template = BUILTIN["general"]) -> dict:
+    return _with_sections(CHUNK_SCHEMA, t)
+
+
+def final_schema(t: Template = BUILTIN["general"]) -> dict:
+    return _with_sections(FINAL_SCHEMA, t)
+
 
 SYSTEM = """You write meeting notes from a call transcript.
 Speakers: "Me" is the person who recorded the call. Other people appear by name, \
@@ -68,6 +90,7 @@ TITLE_FIELD = "\n- title: a short title for the meeting, at most 8 words."
 COMBINE = """These are notes for consecutive parts of one call, in order. Merge them \
 into notes for the whole call: remove repeats, keep every distinct decision, \
 action item and open question, and keep the summary to at most 8 points."""
+COMBINE_SECTIONS = " Merge each of the sections fields the same way."
 
 
 class SummaryError(Exception):
@@ -108,6 +131,8 @@ class Summary:
     decisions: list[str] = field(default_factory=list)
     action_items: list[ActionItem] = field(default_factory=list)
     open_questions: list[str] = field(default_factory=list)
+    sections: dict[str, list[str]] = field(default_factory=dict)   # the template's, by key
+    template: str = "general"
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -382,25 +407,36 @@ def chunks(lines: list[Line], chunk_s: float) -> list[list[Line]]:
     return out
 
 
-def summarize(lines: list[Line], backend: Backend, chunk_s: float, language: str,
-              context: str = "", names: dict[str, str] | None = None) -> Summary:
-    if not lines:
-        raise SummaryError("empty transcript")
+def system_prompt(language: str, t: Template) -> str:
+    """SYSTEM plus the template's meeting type and one field line per section. Only the
+    template's own words go in: a meeting's title is never part of the instructions."""
     lang = "the same language as the transcript" if language == "auto" else language
     system = SYSTEM.format(language=lang)
+    if t.instructions or t.sections:
+        system += f"\nMeeting type: {t.name}. {t.instructions}".rstrip()
+    return system + "".join(f"\n- sections.{s.key}: {s.hint}" for s in t.sections)
+
+
+def summarize(lines: list[Line], backend: Backend, chunk_s: float, language: str,
+              context: str = "", names: dict[str, str] | None = None,
+              template: Template = BUILTIN["general"]) -> Summary:
+    if not lines:
+        raise SummaryError("empty transcript")
+    system = system_prompt(language, template)
     head = f"{context}\n\n" if context else ""
     parts = chunks(lines, chunk_s)
     if len(parts) == 1:
         data = _ask(backend, system + TITLE_FIELD,
-                    f"{head}Transcript:\n{as_text(lines, names)}", FINAL_SCHEMA)
-        return _to_summary(data)
+                    f"{head}Transcript:\n{as_text(lines, names)}", final_schema(template))
+        return _to_summary(data, template)
     notes = []
     for i, part in enumerate(parts, 1):
         user = f"{head}Transcript, part {i} of {len(parts)}:\n{as_text(part, names)}"
-        notes.append(_ask(backend, system, user, CHUNK_SCHEMA))
-    user = f"{head}{COMBINE}\n\n" + "\n\n".join(
+        notes.append(_ask(backend, system, user, chunk_schema(template)))
+    combine = COMBINE + (COMBINE_SECTIONS if template.sections else "")
+    user = f"{head}{combine}\n\n" + "\n\n".join(
         f"Part {i}:\n{json.dumps(n, ensure_ascii=False)}" for i, n in enumerate(notes, 1))
-    return _to_summary(_ask(backend, system + TITLE_FIELD, user, FINAL_SCHEMA))
+    return _to_summary(_ask(backend, system + TITLE_FIELD, user, final_schema(template)), template)
 
 
 def _ask(backend: Backend, system: str, user: str, schema: dict) -> dict:
@@ -440,12 +476,19 @@ def _check(data: dict, schema: dict) -> None:
             raise TypeError(f"{key}: expected a string")
         if want == "array" and not isinstance(value, list):
             raise TypeError(f"{key}: expected a list")
+        if want == "object":
+            if not isinstance(value, dict):
+                raise TypeError(f"{key}: expected an object")
+            _check(value, schema["properties"][key])
 
 
-def _to_summary(data: dict) -> Summary:
+def _to_summary(data: dict, t: Template = BUILTIN["general"]) -> Summary:
     strs = lambda xs: [str(x).strip() for x in xs if str(x).strip()]  # noqa: E731
     items = [ActionItem(str(a.get("owner") or "Unassigned").strip(), str(a.get("task", "")).strip(),
                         str(a.get("due") or "").strip())
              for a in data.get("action_items", []) if isinstance(a, dict) and a.get("task")]
+    raw = data.get("sections") if isinstance(data.get("sections"), dict) else {}
+    sections = {s.key: strs(raw.get(s.key) or []) for s in t.sections}     # only the template's keys
     return Summary(str(data.get("title", "")).strip(), strs(data.get("summary", [])),
-                   strs(data.get("decisions", [])), items, strs(data.get("open_questions", [])))
+                   strs(data.get("decisions", [])), items, strs(data.get("open_questions", [])),
+                   sections, t.id)

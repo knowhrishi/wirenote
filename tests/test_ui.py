@@ -76,6 +76,41 @@ def test_rename_and_requeue_rules(store):
     assert st.calls()[0]["state"] == "queued"
 
 
+def test_requeue_with_template_and_series(store):
+    from wirenote.capture.recorder import write_manifest
+    from wirenote.process.templates import series_templates
+
+    st, rec_id = store
+    d = st.rec_dir(rec_id)
+    with pytest.raises(Invalid, match="template"):
+        st.requeue(rec_id, summary_only=True, template="no-such-template")
+    with pytest.raises(Invalid, match="calendar"):
+        st.requeue(rec_id, summary_only=True, template="standup", series=True)
+    assert read_manifest(d).get("template") is None and series_templates(st.state_dir) == {}
+    m = read_manifest(d)
+    write_manifest(d, {**m, "calendar": {"title": "Sync", "uid": "weekly@test"}})
+    st.requeue(rec_id, summary_only=True, template="standup", series=True)
+    assert read_manifest(d)["template"] == "standup"
+    assert series_templates(st.state_dir) == {"weekly@test": "standup"}
+    assert st.calls()[0]["state"] == "queued"
+    st.requeue(rec_id, summary_only=True, template="")            # back to automatic
+    assert "template" not in read_manifest(d)
+    st.requeue(rec_id, summary_only=True)                        # no template given: unchanged
+    info = st.call(rec_id)
+    assert [t["id"] for t in info["templates"]][:2] == ["general", "one-on-one"]
+    assert info["template"] == "general" and info["section_titles"] == {}
+    assert info["in_series"] is True
+    assert "default_template" in st.settings_info()["editable"] and st.settings_info()["templates"]
+
+
+def test_default_template_is_a_setting_with_a_known_value(store, monkeypatch):
+    st, _ = store
+    monkeypatch.setattr(data_mod, "poke_daemon", lambda *_a: None)
+    assert st.update_settings({"default_template": "lecture"}, False)["editable"]["default_template"] == "lecture"
+    with pytest.raises(Invalid, match="default_template"):
+        st.update_settings({"default_template": "nope"}, False)
+
+
 def test_ask_cites_timestamps_and_keeps_history(store, monkeypatch):
     st, rec_id = store
     backend = FakeBackend([{"answer": "Friday.", "citations": ["00:00:01", "bogus"]}])

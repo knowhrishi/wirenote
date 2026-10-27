@@ -77,6 +77,53 @@ A backend change applies to the next note. To redo an older note's summary:
 wirenote reprocess 20261027-100000-chrome --summary
 ```
 
+### Summary templates
+
+A template tells the summary what kind of meeting it is and adds sections to the note. Five come with Wirenote:
+
+| Template | Extra sections | Picked when the title has |
+| --- | --- | --- |
+| `general` | none | nothing else matched |
+| `one-on-one` | Feedback, Topics for next time | `1:1`, `1-1`, `1on1`, `one on one`, `check-in` |
+| `standup` | Updates by person, Blockers | `standup`, `stand-up`, `daily`, `scrum` |
+| `interview` | What the candidate said about their experience, Questions the candidate asked, Follow-ups | `interview`, `screening`, `candidate` |
+| `lecture` | Key concepts, Terms and definitions, Books, papers and links mentioned | `lecture`, `seminar`, `class`, `webinar`, `talk` |
+
+The interview template records only what was said. It does not rate, rank or judge the candidate.
+
+Wirenote picks the first of these that applies:
+
+1. The template you chose for the call: **Summary template…** in the call page's menu, or `wirenote reprocess ID --summary --template standup`.
+2. The template you chose for the call's calendar series ("Use it for every meeting in this calendar series" in the same dialog).
+3. A template with one of its words in the calendar event's title (for an import, in its title). Whole words only, any capitals: "Daily sync" matches `daily`, "Dailymotion review" does not.
+4. A template whose `apps` lists the call app.
+5. Your default, **Settings › Setup › Default summary template** (`default_template` in `config.toml`).
+6. `general`.
+
+The title only selects a template. It is never given to the model as an instruction. Redoing a summary with another template keeps the transcript; the new sections appear in the note as `## Section title` after the summary, and the note's front matter gets `template:`. `wirenote templates` lists every template, where it comes from and its match words. Calls made before this release keep their notes as they are.
+
+**Your own templates** are TOML files in `~/.config/wirenote/templates/`. The file name, without `.toml`, is the template's id. A file named like a built-in (`standup.toml`) replaces it.
+
+```toml
+# ~/.config/wirenote/templates/sales-call.toml
+name = "Sales call"
+instructions = "A call with a customer or prospect. Keep to what each side said."
+titles = ["demo", "discovery call"]     # whole words in the meeting title that pick this template
+apps = ["zoom"]                         # optional: call apps that pick it
+
+[[section]]
+key = "needs"                           # a-z, 0-9 and _, starting with a letter, 32 characters at most
+title = "What the customer needs"       # the heading in the note
+hint = "needs and problems the customer described, one point each"   # tells the model what goes in
+
+[[section]]
+key = "objections"
+title = "Objections"
+hint = "concerns the customer raised, and how each was answered"
+```
+
+A template has at most 6 sections and 2000 characters of instructions. A file that breaks a rule is skipped, and `wirenote doctor` and `wirenote templates` say which one and why.
+
 ## Import and export
 
 **Import a recording.** Click **Import** in the meetings app, or drop an audio or video file on its window. On the command line:
@@ -156,7 +203,8 @@ wirenote stop            # stop the recording (also works if the notification wa
 wirenote record          # answer the open prompt with Record
 wirenote record --now    # record a meeting without a call app
 wirenote jobs            # recent notes and failures
-wirenote reprocess <id>  # transcribe again (--engine, --model, --language); --summary keeps the transcript
+wirenote reprocess <id>  # transcribe again (--engine, --model, --language); --summary keeps the transcript; --template ID
+wirenote templates       # the summary templates and the words that pick them
 wirenote import <file>   # make a note from an audio or video file (--title, --date)
 wirenote export <id>     # save a call as a Word file (-o file or folder)
 wirenote doctor          # check every part of the setup; --fix makes your files private again
@@ -176,9 +224,11 @@ wirenote changelog       # what changed in this version; --since 0.1.0 for more
 | `~/.local/share/wirenote/recordings/<id>/` | `mic-000.wav`, `system-000.wav`, `manifest.json`, `transcript.json`, `summary.json`; the audio is deleted 30 days after the note (`audio_retention_days`) |
 | `~/.config/wirenote/config.toml` | settings; every option is listed there, commented out |
 | `~/.config/wirenote/apps.toml` | which apps count as calls |
+| `~/.config/wirenote/templates/*.toml` | your own summary templates |
 | `~/.config/wirenote/secrets.toml` | Claude API key and calendar links (mode 600) |
 | `~/.local/state/wirenote/detector.jsonl` | every event, without room names or speaker names |
 | `~/.local/state/wirenote/jobs.db` | processing queue |
+| `~/.local/state/wirenote/series.json` | the summary template you kept for each calendar series |
 
 Everything Wirenote writes is private to your user (mode 600, folders 700).
 

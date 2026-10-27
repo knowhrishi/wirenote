@@ -96,6 +96,8 @@ class Settings:
     # docs/dev/PLAN.md › Processing: long calls are summarized in chunks of about 15 min
     summary_chunk_s: float = 900.0
     summary_language: str = "auto"     # "auto": the transcript's language
+    # docs/dev/PLAN.md › Defaults › Summary template: a template id, see `wirenote templates`
+    default_template: str = "general"
 
     # Calendar (M4) ----------------------------------------------------------
     calendar_urls: tuple = ()          # ICS URLs or file paths
@@ -165,6 +167,7 @@ DEFAULT_CONFIG_TOML = """# wirenote settings. Defaults come from docs/dev/PLAN.m
 # openai_model = "anthropic/claude-sonnet-5.5"  # API key: ~/.config/wirenote/secrets.toml
 # summary_chunk_s = 900.0
 # summary_language = "auto"          # or "German", "English"
+# default_template = "general"       # for calls no title or app rule matches; see `wirenote templates`
 
 # Calendar
 # calendar_urls = []                 # ICS URLs or files; none means no calendar matching

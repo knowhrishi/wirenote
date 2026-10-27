@@ -35,6 +35,7 @@ from ..process.merge import Line, as_text, paragraphs, stamp
 from ..process.note import action_line, own_note, segment_file, title_for
 from ..process.speakers import Voices, display_name
 from ..process.summarize import Summary, SummaryError, make_backend, pin_local
+from ..process.templates import remember_series, scan
 from ..process.worker import MY_NOTES, SUMMARY, TRANSCRIPT, read_my_notes, rewrite_note
 
 REC_ID = re.compile(r"^\d{8}-\d{6}-[A-Za-z0-9_.-]{1,64}$")
@@ -81,7 +82,7 @@ subject: a short subject line."""
 EDITABLE = ("consent_line", "summary_backend", "ollama_model", "anthropic_model",
             "openai_url", "openai_model",
             "whisper_model", "whisper_language", "summary_language", "asr_engine",
-            "live_transcript")
+            "live_transcript", "default_template")
 SWITCHES = ("live_transcript",)    # the EDITABLE settings that are true or false
 LIVE_READ = 256 * 1024             # most of live.jsonl sent per poll
 BACKENDS = ("ollama", "anthropic", "openai", "none")
@@ -307,6 +308,9 @@ class Store:
         note = self._note(m)
         has_audio = any(d.glob("*.wav"))
         lines = tr.get("lines", [])
+        summary = self._summary(d)
+        used = (summary or {}).get("template") or "general"
+        template = scan()[0].get(used)
         talk: dict[str, float] = {}
         for l in lines:
             talk[l["speaker"]] = talk.get(l["speaker"], 0.0) + max(0.0, l["end"] - l["start"])
@@ -318,7 +322,11 @@ class Store:
                    "can_remember": bool((speakers.get(label) or {}).get("embedding"))}
                   for label in sorted(talk, key=lambda l: (l != "Me", -talk[l]))]
         return {**brief,
-                "summary": self._summary(d),
+                "summary": summary,
+                "template": used,
+                "templates": self.templates(),
+                "section_titles": {s.key: s.title for s in template.sections} if template else {},
+                "in_series": bool((m.get("calendar") or {}).get("uid")),
                 "lines": lines,
                 "people": people,
                 "names": {p["label"]: p["name"] for p in people},
@@ -481,10 +489,23 @@ class Store:
 
     # Processing ------------------------------------------------------------
 
-    def requeue(self, rec_id: str, summary_only: bool, choices: dict | None = None) -> int:
+    def templates(self) -> list[dict]:
+        """The summary templates to choose from, built-in first (a bad file is left out)."""
+        return [{"id": t.id, "name": t.name} for t in scan()[0].values()]
+
+    def requeue(self, rec_id: str, summary_only: bool, choices: dict | None = None,
+                template: str | None = None, series: bool = False) -> int:
         """Queue the call again; choices (engine, model, language) apply to this call's
-        transcriptions from now on, and an empty one goes back to the setting."""
+        transcriptions from now on, and an empty one goes back to the setting. template
+        sets the summary template for this call ("" goes back to automatic); series also
+        remembers it for the calendar event's later occurrences."""
         d = self.rec_dir(rec_id)
+        if template and template not in scan()[0]:
+            raise Invalid("no such summary template")
+        uid = (read_manifest(d).get("calendar") or {}).get("uid")
+        if series and not (template and uid):
+            raise Invalid("a template can be kept for a series only for a call from a "
+                          "calendar event, and needs a template")
         if not summary_only and not any(d.glob("*.wav")):
             raise Invalid("the audio was deleted; only the summary can be redone")
         if summary_only and not (d / TRANSCRIPT).exists():
@@ -500,6 +521,15 @@ class Store:
             defaults = {k: getattr(self.settings, v) for k, v in OVERRIDES.items()}
             m["transcribe"] = {k: v for k, v in kept.items() if v != defaults[k]}
             write_manifest(d, m)
+        if template is not None:
+            m = read_manifest(d)
+            if template:
+                m["template"] = template
+            else:
+                m.pop("template", None)
+            write_manifest(d, m)
+            if series:
+                remember_series(self.state_dir, str(uid), template)
         with self._jobs_lock:
             job = self.jobs.add(d, summary_only=summary_only)
         poke_daemon("kick-jobs")
@@ -685,6 +715,7 @@ class Store:
                 "vocabulary": load_vocabulary(), "voices": self.voices.names(),
                 "calendars": self.calendars(),
                 "editable": {k: getattr(s, k) for k in EDITABLE},
+                "templates": self.templates(),
                 "anthropic_key_set": bool(secrets.get("anthropic_api_key")
                                           or os.environ.get("ANTHROPIC_API_KEY")),
                 "openai_key_set": bool(secrets.get("openai_api_key")),
@@ -708,6 +739,8 @@ class Store:
                 raise Invalid(f"{k}: one line of plain text")
         if "asr_engine" in changes and changes["asr_engine"] not in ENGINES:
             raise Invalid(f"asr_engine: one of {', '.join(ENGINES)}")
+        if "default_template" in changes and changes["default_template"] not in scan()[0]:
+            raise Invalid("default_template: one of " + ", ".join(scan()[0]))
         backend = changes.get("summary_backend")
         if backend is not None and backend not in BACKENDS:
             raise Invalid(f"summary_backend: one of {', '.join(BACKENDS)}")

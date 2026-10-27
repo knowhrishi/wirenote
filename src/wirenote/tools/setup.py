@@ -356,6 +356,18 @@ def _summary_checks(s: Settings) -> list[Check]:
     return [Check("warn", "summaries are off (summary_backend = \"none\")")]
 
 
+def _template_checks(s: Settings) -> list[Check]:
+    from ..process.templates import scan, templates_dir
+
+    found, skipped = scan()
+    out = [Check("warn", f"summary template file {name} is skipped: {why}", f"fix it in {templates_dir()}")
+           for name, why in skipped]
+    if s.default_template not in found:
+        out.append(Check("warn", f"default_template {s.default_template!r} does not exist; "
+                                 "calls use General", "wirenote templates"))
+    return out
+
+
 def _calendar_checks(s: Settings) -> list[Check]:
     sources = calendar_sources(s.calendar_urls)
     if not sources:
@@ -425,7 +437,8 @@ def _update_checks(s: Settings) -> list[Check]:
 
 def checks(s: Settings) -> list[Check]:
     return [*_daemon_checks(), *_pipewire_checks(), *_model_checks(s), *_summary_checks(s),
-            *_calendar_checks(s), *_desktop_checks(s), *_file_checks(s), *_update_checks(s)]
+            *_template_checks(s), *_calendar_checks(s), *_desktop_checks(s), *_file_checks(s),
+            *_update_checks(s)]
 
 
 def doctor(fix: bool = False) -> int:

@@ -41,7 +41,7 @@ class FakeBackend:
             raise reply
         if reply is not None:
             return reply
-        return GOOD if schema is FINAL_SCHEMA else {k: GOOD[k] for k in CHUNK_SCHEMA["required"]}
+        return GOOD if "title" in schema["required"] else {k: GOOD[k] for k in CHUNK_SCHEMA["required"]}
 
 
 # Merge -------------------------------------------------------------------------
@@ -596,3 +596,106 @@ def test_an_unreachable_api_is_a_passing_failure(monkeypatch):
     monkeypatch.setattr(summ, "listener_uid", lambda port, host="127.0.0.1": None)
     with pytest.raises(summ.SummaryUnavailable):                   # LM Studio not started yet
         OpenAIBackend("http://127.0.0.1:1234/v1", "m").complete_json("s", "u", {})
+
+
+# Templates ---------------------------------------------------------------------
+
+STANDUP_REPLY = {**GOOD, "sections": {"updates": ["Ana: finished the release notes"],
+                                      "blockers": ["Ben is blocked on a review"]}}
+
+
+class SectionsBackend(FakeBackend):
+    """Answers a template's summary request with STANDUP_REPLY; the speaker-name request
+    that comes first in a worker run gets the plain fake answer."""
+
+    def complete_json(self, system, user, schema):
+        if "sections" in schema["properties"] and "title" in schema["required"]:
+            self.calls.append((system, user, schema))
+            return STANDUP_REPLY
+        return super().complete_json(system, user, schema)
+
+    def summary_call(self):
+        return next(c for c in self.calls if "sections" in c[2]["properties"])
+
+
+def test_template_sections_reach_schema_note_and_summary_json(tmp_path):
+    rec = make_recording(tmp_path, template="standup")
+    jobs = Jobs(tmp_path / "jobs.db")
+    backend = SectionsBackend()
+    job = run_job(jobs.add(rec), settings_for(tmp_path), jobs, FakeTranscriber(),
+                  lambda s: backend, voices=no_voices(tmp_path))
+    props = backend.summary_call()[2]["properties"]["sections"]
+    assert props["required"] == ["updates", "blockers"] and props["additionalProperties"] is False
+    text = Path(job.note).read_text()
+    assert "## Summary\n\n- Planned the 2.0 release.\n\n## Updates by person\n\n" \
+           "- Ana: finished the release notes\n\n## Blockers\n\n- Ben is blocked on a review" in text
+    assert 'template: "standup"' in text
+    saved = json.loads((rec / "summary.json").read_text())
+    assert saved["template"] == "standup" and saved["sections"]["blockers"] == [
+        "Ben is blocked on a review"]
+
+
+def test_general_notes_have_no_template_key_and_no_extra_sections(tmp_path):
+    rec = make_recording(tmp_path)
+    jobs = Jobs(tmp_path / "jobs.db")
+    backend = FakeBackend()
+    job = run_job(jobs.add(rec), settings_for(tmp_path), jobs, FakeTranscriber(),
+                  lambda s: backend, voices=no_voices(tmp_path))
+    call = [c for c in backend.calls if c[2] is FINAL_SCHEMA][0]
+    assert "Meeting type" not in call[0]
+    assert "template:" not in Path(job.note).read_text()
+    assert json.loads((rec / "summary.json").read_text())["sections"] == {}
+
+
+def test_chunked_summary_keeps_sections():
+    from wirenote.process.templates import BUILTIN
+
+    lines = [Line("Me", t, t + 5, f"point {t}") for t in range(0, 2700, 300)]
+    standup = BUILTIN["standup"]
+    chunk = {k: GOOD[k] for k in CHUNK_SCHEMA["required"]}
+    backend = FakeBackend([{**chunk, "sections": {"updates": [f"u{i}"], "blockers": []}}
+                           for i in range(3)] + [STANDUP_REPLY])
+    s = summarize(lines, backend, 900, "auto", template=standup)
+    assert all("sections" in c[2]["required"] for c in backend.calls)
+    assert "sections" not in CHUNK_SCHEMA["required"]
+    assert "sections.updates" in backend.calls[0][0]
+    assert '"updates": ["u0"]' in backend.calls[-1][1]          # the chunk notes reach the combine step
+    assert s.template == "standup" and s.sections == {
+        "updates": ["Ana: finished the release notes"], "blockers": ["Ben is blocked on a review"]}
+
+
+def test_sections_the_model_adds_or_misses_are_handled():
+    from wirenote.process.templates import BUILTIN
+
+    odd = {**GOOD, "sections": {"updates": [" a ", ""], "blockers": [], "extra": ["x"]}}
+    s = summarize([Line("Me", 0, 1, "x")], FakeBackend([odd]), 900, "auto", template=BUILTIN["standup"])
+    assert s.sections == {"updates": ["a"], "blockers": []}
+    with pytest.raises(SummaryError, match="unusable JSON twice"):
+        summarize([Line("Me", 0, 1, "x")], FakeBackend([{**GOOD, "sections": {"updates": []}},
+                                                         {**GOOD, "sections": "no"}]),
+                  900, "auto", template=BUILTIN["standup"])
+
+
+def test_rewrite_note_keeps_template_sections(tmp_path):
+    from wirenote.process.worker import rewrite_note
+
+    rec = make_recording(tmp_path, template="standup")
+    jobs = Jobs(tmp_path / "jobs.db")
+    job = run_job(jobs.add(rec), settings_for(tmp_path), jobs, FakeTranscriber(),
+                  lambda s: SectionsBackend(), voices=no_voices(tmp_path))
+    rewrite_note(rec, settings_for(tmp_path))
+    text = Path(job.note).read_text()
+    assert "## Blockers\n\n- Ben is blocked on a review" in text and 'template: "standup"' in text
+    # A template file that is gone still leaves the section, under its key.
+    data = json.loads((rec / "summary.json").read_text())
+    data["sections"] = {"old_part": ["kept"]}
+    data["template"] = "deleted-template"
+    (rec / "summary.json").write_text(json.dumps(data))
+    rewrite_note(rec, settings_for(tmp_path))
+    assert "## Old part\n\n- kept" in Path(job.note).read_text()
+    # A summary.json from 0.3 has neither key.
+    for k in ("sections", "template"):
+        data.pop(k)
+    (rec / "summary.json").write_text(json.dumps(data))
+    text = rewrite_note(rec, settings_for(tmp_path)).read_text()
+    assert "## Summary" in text and "template:" not in text and "Old part" not in text

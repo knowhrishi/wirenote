@@ -20,7 +20,7 @@ import traceback
 from pathlib import Path
 
 from ..capture.recorder import read_manifest, write_manifest
-from ..config.settings import Settings
+from ..config.settings import Settings, state_dir
 from ..config.vocabulary import load_vocabulary
 from .engines import engine_label, with_overrides
 from .jobs import MAX_ATTEMPTS, Job, Jobs
@@ -28,7 +28,9 @@ from .live import LIVE, prefetch
 from .merge import Line, as_text, dedupe_echo, paragraphs
 from .note import action_line, note_path, own_note, render, segment_file, title_for
 from .speakers import Voices, display_name, guess_names
-from .summarize import Summary, SummaryError, SummaryUnavailable, make_backend, summarize
+from .summarize import (ActionItem, Summary, SummaryError, SummaryUnavailable, make_backend,
+                        summarize)
+from .templates import Template, load_templates, pick, series_templates
 
 TRANSCRIPT = "transcript.json"
 SUMMARY = "summary.json"
@@ -112,12 +114,15 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
     names = speaker_names(speakers)
     my_notes = read_my_notes(rec)
     summary, error, backend_name, retry = None, backend_error, None, False
+    template = pick(manifest, load_templates(), series_templates(state_dir()),
+                    settings.default_template)
     if backend is not None and lines:
         backend_name = backend.name
-        log(f"job {job.id}: summarizing with {backend_name}")
+        log(f"job {job.id}: summarizing with {backend_name}, template {template.id}")
         try:
             summary = summarize(lines, backend, settings.summary_chunk_s, settings.summary_language,
-                                context=_context(manifest, vocabulary, my_notes), names=names)
+                                context=_context(manifest, vocabulary, my_notes), names=names,
+                                template=template)
         except SummaryError as e:
             error = str(e)
             log(f"job {job.id}: no summary: {error}")
@@ -128,7 +133,7 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
         (rec / SUMMARY).write_text(json.dumps(summary.as_dict(), indent=2, ensure_ascii=False))
 
     path = _write_note(rec, manifest, lines, summary, settings, backend_name, error, names, my_notes,
-                       model)
+                       model, template)
     manifest.update(note=str(path), summary_error=error, summary_backend=backend_name,
                     note_written=dt.datetime.now().astimezone().isoformat(timespec="seconds"))
     write_manifest(rec, manifest)
@@ -182,7 +187,8 @@ def _name_speakers(book, lines: list[Line], manifest: dict, settings: Settings, 
 
 def _write_note(rec: Path, manifest: dict, lines: list[Line], summary: Summary | None,
                 settings: Settings, backend_name: str | None, error: str | None,
-                names: dict[str, str], my_notes: str, transcript_model: str) -> Path:
+                names: dict[str, str], my_notes: str, transcript_model: str,
+                template: Template | None = None) -> Path:
     title = title_for(manifest, summary)
     started = dt.datetime.fromisoformat(manifest["started"])
     path = note_path(settings.notes_path(), started, title)
@@ -197,7 +203,7 @@ def _write_note(rec: Path, manifest: dict, lines: list[Line], summary: Summary |
     tmp.write_text(render(manifest, lines, summary, title=title, duration_min=duration,
                           audio=audio, transcript_model=transcript_model,
                           summary_backend=backend_name, summary_error=error, names=names,
-                          my_notes=my_notes))
+                          my_notes=my_notes, template=template))
     tmp.replace(path)
     return path
 
@@ -214,8 +220,8 @@ def rewrite_note(rec: Path, settings: Settings) -> Path | None:
     try:
         s = json.loads((rec / SUMMARY).read_text())
         summary = Summary(s.get("title", ""), s.get("summary", []), s.get("decisions", []), [],
-                          s.get("open_questions", []))
-        from .summarize import ActionItem
+                          s.get("open_questions", []), s.get("sections") or {},
+                          s.get("template") or "general")
         summary.action_items = [ActionItem(a["owner"], a["task"], a.get("due", ""))
                                 for a in s.get("action_items", [])]
         done = [bool(a.get("done")) for a in s.get("action_items", [])]
@@ -224,7 +230,8 @@ def rewrite_note(rec: Path, settings: Settings) -> Path | None:
     names = speaker_names(data.get("speakers", {}))
     path = _write_note(rec, manifest, lines, summary, settings, manifest.get("summary_backend"),
                        manifest.get("summary_error"), names, read_my_notes(rec),
-                       data.get("model") or settings.whisper_model)
+                       data.get("model") or settings.whisper_model,
+                       load_templates().get(summary.template) if summary else None)
     if done and any(done):
         text = path.read_text()
         for a, d in zip(summary.action_items, done):

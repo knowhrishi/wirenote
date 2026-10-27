@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .merge import Line, stamp
 from .summarize import Summary
+from .templates import Template
 
 
 # Calendar titles (anyone can send an invite) and LLM output (a transcript can carry
@@ -70,6 +71,15 @@ def note_path(notes_root: Path, started: dt.datetime, title: str) -> Path:
     return notes_root / f"{started:%Y}" / f"{started:%m}" / f"{started:%Y-%m-%d %H%M} {safe}.md"
 
 
+def section_title(key: str, template: Template | None) -> str:
+    """A section's heading: the template's title, or the key spelled out when the template
+    is gone (its file was deleted after the summary was made)."""
+    for s in template.sections if template else ():
+        if s.key == key:
+            return s.title
+    return key.replace("_", " ").capitalize()
+
+
 def _yaml(value) -> str:
     # JSON scalars and flow lists are valid YAML.
     return json.dumps(value, ensure_ascii=False)
@@ -78,7 +88,8 @@ def _yaml(value) -> str:
 def render(manifest: dict, lines: list[Line], summary: Summary | None, *, title: str,
            duration_min: float, audio: list[str], transcript_model: str,
            summary_backend: str | None, summary_error: str | None = None,
-           names: dict[str, str] | None = None, my_notes: str = "") -> str:
+           names: dict[str, str] | None = None, my_notes: str = "",
+           template: Template | None = None) -> str:
     names = names or {}
     cal = manifest.get("calendar") or {}
     front = {
@@ -94,6 +105,7 @@ def render(manifest: dict, lines: list[Line], summary: Summary | None, *, title:
         "audio": audio or None,
         "transcript_model": transcript_model,
         "summary_backend": summary_backend if summary else None,
+        "template": summary.template if summary and summary.template != "general" else None,
         "recording_id": manifest["id"],
     }
     out = ["---"]
@@ -102,6 +114,10 @@ def render(manifest: dict, lines: list[Line], summary: Summary | None, *, title:
 
     if summary:
         out += ["## Summary", ""] + [f"- {md_safe(p)}" for p in summary.summary] + [""]
+        for key, points in summary.sections.items():
+            if points:
+                out += [f"## {md_safe(section_title(key, template))}", ""]
+                out += [f"- {md_safe(p)}" for p in points] + [""]
         if summary.decisions:
             out += ["## Decisions", ""] + [f"- {md_safe(d)}" for d in summary.decisions] + [""]
         if summary.action_items:

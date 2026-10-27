@@ -140,6 +140,8 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | API on another computer | https only; a confirmation per destination host | The key and transcript never travel in clear; a new host is a new place your calls go |
 | API on this computer | counts as local: owner check, no key, Ollama's Ask budget | Same as Ollama |
 | Shortest speaker | 8 s of speech in the whole call; less joins the speaker heard nearest in time | A laugh or a word through a bad line was split off as its own speaker; on a 30-min call with three people, five of seven speakers had 9 s together |
+| Summary template | `general`; picked per call: the one you chose, the one kept for its calendar series, a whole-word match of the meeting title, a call-app match, the default | A standup, an interview and a lecture need different sections; the title only selects, it is never part of the instructions |
+| Template files | at most 6 sections, 2000 characters of instructions, a section key of `a-z`, `0-9`, `_` (32 at most), 64 KB per file | A summary request stays small and a bad file is skipped, not guessed at |
 | Summary memory | wait until free RAM plus free swap holds the Ollama model's file + 1 GB; check every 15 s, at most 5 min | Loading without room gets Ollama or another program killed |
 | Summary passing failure | ask again once after 30 s; then write the note and queue the summary again after 60 s, up to 3 attempts | Ollama restarts in seconds and memory frees up; the transcript is never held back |
 

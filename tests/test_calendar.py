@@ -192,3 +192,10 @@ def test_ordinary_long_running_series_still_expand():
                  _series("daily", "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR", "20100104T093000Z", "Standup"))
     titles = [e.title for e in parse(feed, at(10))]
     assert "Team sync" in titles and "Standup" in titles
+
+
+def test_event_uid_is_kept_in_meta():
+    events = {e.title: e for e in events_at(at(10, 5))}
+    assert events["Weekly sync"].uid == "weekly@test"
+    assert events["Weekly sync"].as_meta()["uid"] == "weekly@test"
+    assert events["Lunch"].uid == "lunch@test"

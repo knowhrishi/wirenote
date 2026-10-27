@@ -4,6 +4,10 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+
+- Summary templates. A standup now gets "Updates by person" and "Blockers", a 1:1 gets "Feedback" and "Topics for next time", an interview gets what the candidate said, their questions and follow-ups (it never rates the candidate), and a lecture gets key concepts, terms and references. Wirenote picks one from the calendar event's title, or you choose: "Summary template…" in the call page's menu, `wirenote reprocess ID --summary --template standup`, or a default in Settings › Setup. You can keep a choice for every meeting in a calendar series. Write your own as a file in `~/.config/wirenote/templates/`; see "Summary templates" in docs/usage.md. `wirenote templates` lists them.
+
 ### Fixed
 
 - The meetings app showed nothing in 0.3.0: no calls, no settings, only an empty window. Your recordings and notes were never touched; they show again after the update. What you need to do: run `wirenote update`.

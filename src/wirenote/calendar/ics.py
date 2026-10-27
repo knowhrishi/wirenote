@@ -66,6 +66,7 @@ class Event:
     links: tuple[str, ...] = ()
     attendees: tuple[str, ...] = field(default=())
     emails: tuple[str, ...] = field(default=())
+    uid: str = ""      # the same for every occurrence of a repeating event
 
     def as_meta(self) -> dict:
         d = asdict(self)
@@ -156,7 +157,8 @@ def _event(ev) -> Event:
     emails = tuple(re.sub(r"^mailto:", "", str(a), flags=re.IGNORECASE) for a in att)
     names = tuple(str(a.params.get("CN") or e) for a, e in zip(att, emails))
     title = str(ev.get("SUMMARY", "")).strip()[:MAX_TITLE] or "(no title)"
-    return Event(title, start, end, links, names, tuple(e for e in emails if "@" in e))
+    return Event(title, start, end, links, names, tuple(e for e in emails if "@" in e),
+                 str(ev.get("UID") or "")[:MAX_TITLE])
 
 
 def _aware(t: dt.datetime) -> dt.datetime:

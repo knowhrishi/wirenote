@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Hrishikesh Jadhav
-"""wirenote command line: run | status | stop | record | jobs | reprocess | setup | calendar | doctor | ui | open |
-update | changelog."""
+"""wirenote command line: run | status | stop | record | jobs | reprocess | templates | setup | calendar |
+doctor | ui | open | update | changelog."""
 
 from __future__ import annotations
 
@@ -158,6 +158,16 @@ def cmd_reprocess(args) -> int:
     if not args.summary and not any(rec.glob("*.wav")):
         print("wirenote: the audio was deleted; only --summary can be redone")
         return 1
+    if args.template:
+        from .capture.recorder import read_manifest, write_manifest
+        from .process.templates import scan
+
+        if args.template not in scan()[0]:
+            print(f"wirenote: no template {args.template!r}; `wirenote templates` lists them")
+            return 2
+        m = read_manifest(rec)
+        m["template"] = args.template
+        write_manifest(rec, m)
     choices = {k: getattr(args, k) for k in ("engine", "model", "language") if getattr(args, k)}
     if choices:
         from .capture.recorder import read_manifest, write_manifest
@@ -176,6 +186,21 @@ def cmd_reprocess(args) -> int:
         write_manifest(rec, m)
     job_id = Jobs(state_dir() / "jobs.db").add(rec, summary_only=args.summary)
     print(f"queued job {job_id}; the daemon picks it up within 30 s (`wirenote jobs`)")
+    return 0
+
+
+def cmd_templates(_args) -> int:
+    from .process.templates import BUILTIN, scan, templates_dir
+
+    found, skipped = scan()
+    print(f"{'id':<14} {'name':<16} {'source':<9} match words")
+    for t in found.values():
+        source = "built-in" if t is BUILTIN.get(t.id) else "file"
+        match = ", ".join([*t.titles, *(f"app:{a}" for a in t.apps)]) or "-"
+        print(f"{t.id:<14} {t.name:<16} {source:<9} {match}")
+    for name, why in skipped:
+        print(f"skipped {name}: {why}")
+    print(f"\nYour own: put a .toml file in {templates_dir()} (docs/usage.md › Summary templates).")
     return 0
 
 
@@ -339,11 +364,14 @@ def main(argv: list[str] | None = None) -> int:
     rep.add_argument("recording", help="recording id, e.g. 20261027-100000-chrome")
     rep.add_argument("--summary", action="store_true",
                      help="keep the transcript, redo only the summary and the note")
+    rep.add_argument("--template", metavar="ID",
+                     help="summary template for this call (`wirenote templates` lists them)")
     rep.add_argument("--engine", choices=["auto", "whisper", "parakeet", "whisper.cpp"],
                      help="speech engine for this call from now on")
     rep.add_argument("--model", help="Whisper model for this call, e.g. large-v3, medium")
     rep.add_argument("--language", help="language of this call, e.g. de, en, or auto")
     rep.set_defaults(fn=cmd_reprocess)
+    sub.add_parser("templates", help="list the summary templates").set_defaults(fn=cmd_templates)
     st = sub.add_parser("setup", help="install the services, choose the summary backend, "
                                       "or set the consent line")
     st.add_argument("what", choices=["install", "uninstall", "ollama", "claude", "openai", "consent"])

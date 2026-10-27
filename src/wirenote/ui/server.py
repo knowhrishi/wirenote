@@ -380,7 +380,10 @@ def make_handler(app: App):
             rec_id, action, index = m.group(1), m.group(2), m.group(3)
             body = self._body()
             if action == "/resummarize":
-                return self._json({"job": store.requeue(rec_id, summary_only=True)})
+                template = body.get("template")
+                return self._json({"job": store.requeue(
+                    rec_id, summary_only=True, series=bool(body.get("series")),
+                    template=None if template is None else str(template))})
             if action == "/retranscribe":
                 return self._json({"job": store.requeue(rec_id, summary_only=False,
                                                         choices=body.get("choices"))})
