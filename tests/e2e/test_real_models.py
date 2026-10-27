@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Hrishikesh Jadhav
-"""End to end with the real speech models: Whisper `tiny.en` and speaker separation.
+"""End to end with the real speech models: Whisper `tiny.en`, Parakeet, and speaker separation.
 
 The everyday end-to-end test fakes the model, so it cannot notice when a new
 faster-whisper, CTranslate2, onnxruntime or sherpa-onnx (Dependabot bumps them
 weekly) breaks transcription. This one can. It downloads about 100 MB of models,
-so it runs only with `pytest -m models`: nightly, and before every release.
+and Parakeet another 670 MB, so it runs only with `pytest -m models`: nightly, and
+before every release.
 Speech comes from espeak-ng, so no recording of a real person is needed.
 """
 
@@ -46,12 +47,14 @@ def speech(text: str, path: Path, voice: str) -> float:
     return n / 16000
 
 
-def test_real_models_turn_speech_into_a_note(tmp_path):
+def talk_and_note(tmp_path: Path, settings: dict | None = None) -> tuple[str, str]:
+    """One short spoken call; returns what the note says Me and the others said."""
     mic = tmp_path / "mic.wav"
     system = tmp_path / "system.wav"
     seconds = max(speech("I will send the changelog by Thursday.", mic, "en-us"),
                   speech("Great. Then we ship the release on Friday.", system, "en-gb"))
-    world = World(tmp_path / "world", models=True, mic_wav=mic, system_wav=system)
+    world = World(tmp_path / "world", models=True, mic_wav=mic, system_wav=system,
+                  settings=settings)
     try:
         world.start_daemon()
         world.wait_for(lambda: "prompt" in world.event_names(), 30, "the Record prompt")
@@ -66,9 +69,20 @@ def test_real_models_turn_speech_into_a_note(tmp_path):
         me = " ".join(line for line in lines if line.startswith("**Me**")).lower()
         others = " ".join(line for line in lines
                           if line.startswith("**") and not line.startswith("**Me**")).lower()
-        # tiny.en mishears espeak's "changelog"; the weekdays come through reliably.
-        assert "thursday" in me and "friday" not in me, lines
-        assert "friday" in others and "thursday" not in others, lines
         assert world.stop_daemon() == 0
+        return me, others
     finally:
         world.close()
+
+
+def test_real_models_turn_speech_into_a_note(tmp_path):
+    me, others = talk_and_note(tmp_path)
+    # tiny.en mishears espeak's "changelog"; the weekdays come through reliably.
+    assert "thursday" in me and "friday" not in me, me
+    assert "friday" in others and "thursday" not in others, others
+
+
+def test_parakeet_turns_speech_into_a_note(tmp_path):
+    me, others = talk_and_note(tmp_path, {"asr_engine": "parakeet"})
+    assert "thursday" in me and "friday" not in me, me
+    assert "friday" in others and "thursday" not in others, others

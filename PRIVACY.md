@@ -20,7 +20,7 @@ The meetings app is a web page served on 127.0.0.1, so other computers cannot re
 
 ## Connections Wirenote makes
 
-- **Hugging Face, once per model.** On the first note, the speech model (Whisper large-v3-turbo) and the two speaker models are downloaded from huggingface.co at fixed revisions. After that they are read from `~/.cache/huggingface` and Hugging Face is not contacted again.
+- **Hugging Face, once per model.** On the first note, the speech model (Whisper large-v3-turbo, or the Parakeet or whisper.cpp model if you chose that engine) and the two speaker models are downloaded from huggingface.co at fixed revisions. After that they are read from `~/.cache/huggingface` and Hugging Face is not contacted again.
 - **Ollama, on your computer.** Local summaries go to Ollama on 127.0.0.1. Wirenote checks that the Ollama there runs as your own user before sending anything.
 - **Your calendars, if you add any.** The ICS links you add are fetched over https every 5 minutes.
 - **Anthropic, only if you choose Claude.** See below.

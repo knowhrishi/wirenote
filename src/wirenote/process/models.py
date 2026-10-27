@@ -18,6 +18,9 @@ PINS = {
     "mobiuslabsgmbh/faster-whisper-large-v3-turbo": "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf",
     SEG_REPO: "9403a6902bb58e3d5ae8c7e77c3422de279db2e0",
     EMB_REPO: "0743f301363dec56491a490f6d6cbc9d67f9a3bf",
+    # Checked on 2026-10-27 (docs/dev/engines-design.md).
+    "csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8": "2bda32ec70b097a55adaa07d9a7173915b43cc78",
+    "ggerganov/whisper.cpp": "5359861c739e955e79d9a303bcbc70fb988958b1",
 }
 
 

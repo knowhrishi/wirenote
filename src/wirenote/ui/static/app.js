@@ -527,7 +527,7 @@ function moreMenu(c) {
       item("folder", "Show recording folder", () => post(`/api/calls/${c.id}/folder`)),
       h("hr"),
       c.has_transcript ? item("sparkle", "Redo summary", () => requeue(true)) : null,
-      c.has_audio ? item("refresh", "Transcribe again", () => requeue(false)) : null,
+      c.has_audio ? item("refresh", "Transcribe again…", () => transcribeAgainDialog(c)) : null,
       h("hr"),
       c.has_audio ? item("audio-off", "Delete audio, keep notes", deleteAudio, "danger") : null,
       item("trash", "Delete meeting", deleteCall, "danger"));
@@ -542,14 +542,38 @@ async function post(path) {
   try { await api(path, { method: "POST" }); } catch (e) { toast(e.message); }
 }
 
-async function requeue(summaryOnly) {
+async function requeue(summaryOnly, choices) {
   const c = state.call;
   try {
-    await api(`/api/calls/${c.id}/${summaryOnly ? "resummarize" : "retranscribe"}`, { method: "POST" });
+    await api(`/api/calls/${c.id}/${summaryOnly ? "resummarize" : "retranscribe"}`, { method: "POST", body: choices ? { choices } : {} });
     toast(summaryOnly ? "Updating the summary…" : "Transcribing again…");
     await refreshList();
     openCall(c.id);
   } catch (e) { toast(e.message); }
+}
+
+const ENGINES = [["auto", "Automatic (the fastest that fits)"], ["whisper", "Whisper"], ["parakeet", "Parakeet (faster on a CPU)"], ["whisper.cpp", "whisper.cpp (GPU, if installed)"]];
+
+// Transcribe one call again, with another engine, model or language (docs/dev/engines-design.md).
+function transcribeAgainDialog(c) {
+  const t = c.transcribe || {};
+  const engine = h("select", {}, ENGINES.map(([v, label]) => h("option", { value: v, selected: v === t.engine }, label)));
+  const model = h("input", { type: "text", value: t.model || "", placeholder: "large-v3-turbo", spellcheck: "false", maxlength: "100" });
+  const language = h("input", { type: "text", value: t.language || "auto", placeholder: "auto, de, en…", spellcheck: "false", maxlength: "20" });
+  const modelRow = field("Whisper model", model, "e.g. large-v3-turbo, large-v3, medium.");
+  const langRow = field("Language", language, "auto, or a code like de or en. Parakeet always detects it.");
+  const show = () => { modelRow.hidden = !["auto", "whisper"].includes(engine.value); langRow.hidden = engine.value === "parakeet"; };
+  engine.onchange = show;
+  show();
+  const ok = h("button", { class: "btn btn-primary" }, "Transcribe again");
+  const cancel = h("button", { class: "btn" }, "Cancel");
+  const close = openModal(h("div", { class: "dialog wide", role: "dialog", "aria-modal": "true" },
+    h("h3", {}, "Transcribe again"),
+    h("p", {}, `Now: ${c.transcript_model || "not transcribed yet"}. The new transcript replaces it. Speakers are named again from remembered voices and the call.`),
+    field("Speech engine", engine), modelRow, langRow,
+    h("div", { class: "row" }, cancel, ok)));
+  cancel.onclick = close;
+  ok.onclick = () => { close(); requeue(false, { engine: engine.value, model: model.value, language: language.value }); };
 }
 
 async function deleteAudio() {
@@ -1018,6 +1042,7 @@ function setupCard(s) {
     ollama_model: text("ollama_model"), anthropic_model: text("anthropic_model"),
     summary_language: text("summary_language", "auto"),
     whisper_model: text("whisper_model"), whisper_language: text("whisper_language", "auto"),
+    asr_engine: h("select", {}, ENGINES.map(([v, label]) => h("option", { value: v, selected: v === e.asr_engine }, label))),
     consent_line: h("textarea", { class: "short", maxlength: "500", placeholder: "e.g. Is it OK if I record this call for my notes?" }),
   };
   inputs.consent_line.value = e.consent_line;
@@ -1072,6 +1097,7 @@ function setupCard(s) {
     field("Summary language", inputs.summary_language, "auto: the language of the call, or e.g. English, German."),
     field("Whisper model", inputs.whisper_model, "e.g. large-v3-turbo, medium, small."),
     field("Call language", inputs.whisper_language, "auto, or a code like en, de."),
+    field("Speech engine", inputs.asr_engine, "Automatic uses Parakeet, several times faster on a CPU, when it knows your language and no vocabulary is set; otherwise Whisper. whisper.cpp uses a GPU if you installed a whisper-cli built for it."),
     field("Consent line", inputs.consent_line, "Copied to the clipboard when you press Record, to paste into the call chat."),
     h("div", { class: "row-end" }, save),
     h("dl", { class: "kv" },

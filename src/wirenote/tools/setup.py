@@ -240,15 +240,43 @@ def _pipewire_checks() -> list[Check]:
 
 
 def _model_checks(s: Settings) -> list[Check]:
+    from ..config.vocabulary import load_vocabulary
+    from ..process.engines import ENGINES, PARAKEET_FILES, PARAKEET_REPO, WHISPERCPP_REPO, choose
     from ..process.models import EMB_REPO, SEG_FILE, SEG_REPO, hub_file, whisper_path
 
     out = []
-    try:
-        whisper_path(s.whisper_model, local_only=True)
-        out.append(Check("ok", f"Whisper model {s.whisper_model} is downloaded"))
-    except Exception:  # noqa: BLE001
-        out.append(Check("warn", f"Whisper model {s.whisper_model} downloads on the first note "
-                                 "(about 1.6 GB for large-v3-turbo)"))
+    engine = choose(s, load_vocabulary()) if s.asr_engine in ENGINES else s.asr_engine
+    how = " (automatic)" if s.asr_engine == "auto" else ""
+    if engine not in ENGINES:
+        out.append(Check("bad", f"asr_engine = {s.asr_engine!r} is not one of {', '.join(ENGINES)}",
+                         "fix it in config.toml"))
+    elif engine == "parakeet":
+        try:
+            for name in PARAKEET_FILES:
+                hub_file(PARAKEET_REPO, name, local_only=True)
+            out.append(Check("ok", f"speech engine Parakeet{how}; its model is downloaded"))
+        except Exception:  # noqa: BLE001
+            out.append(Check("warn", f"speech engine Parakeet{how}; its model downloads on the "
+                                     "first note (about 670 MB)"))
+    elif engine == "whisper.cpp":
+        exe = shutil.which(s.whispercpp_bin)
+        out.append(_ok(bool(exe), f"speech engine whisper.cpp: {exe}",
+                       f"speech engine whisper.cpp, but {s.whispercpp_bin} is not installed",
+                       "see docs/usage.md › Speech engines, or set asr_engine = \"whisper\""))
+        if not Path(s.whispercpp_model).expanduser().is_file():
+            try:
+                hub_file(WHISPERCPP_REPO, s.whispercpp_model, local_only=True)
+                out.append(Check("ok", f"whisper.cpp model {s.whispercpp_model} is downloaded"))
+            except Exception:  # noqa: BLE001
+                out.append(Check("warn", f"whisper.cpp model {s.whispercpp_model} downloads on "
+                                         "the first note"))
+    else:
+        try:
+            whisper_path(s.whisper_model, local_only=True)
+            out.append(Check("ok", f"speech engine Whisper{how}: {s.whisper_model} is downloaded"))
+        except Exception:  # noqa: BLE001
+            out.append(Check("warn", f"speech engine Whisper{how}: {s.whisper_model} downloads on "
+                                     "the first note (about 1.6 GB for large-v3-turbo)"))
     if s.diarize:
         try:
             hub_file(SEG_REPO, SEG_FILE, local_only=True)

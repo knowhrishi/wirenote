@@ -91,7 +91,7 @@ class FakeOllama:
 
 class World:
     def __init__(self, root: Path, models: bool = False, mic_wav: Path | None = None,
-                 system_wav: Path | None = None) -> None:
+                 system_wav: Path | None = None, settings: dict | None = None) -> None:
         self.root = root
         self.home = root / "home"
         self.hangup_file = root / "hangup"
@@ -137,6 +137,7 @@ class World:
             "whisper_language": "en", "diarize": models,
             "summary_backend": "ollama", "ollama_url": self.ollama.url,
             "ollama_model": "fake:latest", "ui_port": self.ui_port,
+            **(settings or {}),
         }
         cfg = self.home / ".config" / "wirenote"
         cfg.mkdir(mode=0o700)

@@ -28,6 +28,7 @@ from ..config.secrets import (calendar_sources, load_secrets, save_secrets, with
                               write_config_atomic)
 from ..config.settings import DEFAULT_CONFIG_TOML, Settings, config_dir, parse_settings
 from ..config.vocabulary import load_vocabulary, save_vocabulary
+from ..process.engines import ENGINES, OVERRIDES, check_overrides
 from ..process.jobs import Jobs
 from ..process.merge import Line, as_text, paragraphs, stamp
 from ..process.note import action_line, own_note, segment_file, title_for
@@ -76,7 +77,7 @@ subject: a short subject line."""
 # Settings the UI may change; everything else stays
 # in config.toml.
 EDITABLE = ("consent_line", "summary_backend", "ollama_model", "anthropic_model",
-            "whisper_model", "whisper_language", "summary_language")
+            "whisper_model", "whisper_language", "summary_language", "asr_engine")
 BACKENDS = ("ollama", "anthropic", "none")
 UPDATE_UNIT = "wirenote-update"
 MAX_SETTING = 500
@@ -305,6 +306,8 @@ class Store:
                 "runs": tr.get("runs", []),
                 "echo_dropped": len(tr.get("dropped_echo", [])),
                 "transcript_model": tr.get("model"),
+                "transcribe": {**{k: getattr(self.settings, v) for k, v in OVERRIDES.items()},
+                               **(m.get("transcribe") or {})},
                 "note": str(note) if note and note.exists() else None,
                 "has_audio": has_audio,
                 "audio_deleted": m.get("audio_deleted"),
@@ -387,12 +390,25 @@ class Store:
 
     # Processing ------------------------------------------------------------
 
-    def requeue(self, rec_id: str, summary_only: bool) -> int:
+    def requeue(self, rec_id: str, summary_only: bool, choices: dict | None = None) -> int:
+        """Queue the call again; choices (engine, model, language) apply to this call's
+        transcriptions from now on, and an empty one goes back to the setting."""
         d = self.rec_dir(rec_id)
         if not summary_only and not any(d.glob("*.wav")):
             raise Invalid("the audio was deleted; only the summary can be redone")
         if summary_only and not (d / TRANSCRIPT).exists():
             raise Invalid("no transcript yet")
+        if choices is not None and not summary_only:
+            if not isinstance(choices, dict):
+                raise Invalid("choices must be an object")
+            try:
+                kept = check_overrides(choices)
+            except ValueError as e:
+                raise Invalid(str(e)) from e
+            m = read_manifest(d)
+            defaults = {k: getattr(self.settings, v) for k, v in OVERRIDES.items()}
+            m["transcribe"] = {k: v for k, v in kept.items() if v != defaults[k]}
+            write_manifest(d, m)
         with self._jobs_lock:
             return self.jobs.add(d, summary_only=summary_only)
 
@@ -590,6 +606,8 @@ class Store:
                 raise Invalid(f"{k}: expected text of at most {MAX_SETTING} characters")
             if k != "consent_line" and not v.isprintable():
                 raise Invalid(f"{k}: one line of plain text")
+        if "asr_engine" in changes and changes["asr_engine"] not in ENGINES:
+            raise Invalid(f"asr_engine: one of {', '.join(ENGINES)}")
         backend = changes.get("summary_backend")
         if backend is not None and backend not in BACKENDS:
             raise Invalid(f"summary_backend: one of {', '.join(BACKENDS)}")

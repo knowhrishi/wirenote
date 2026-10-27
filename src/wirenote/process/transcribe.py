@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Hrishikesh Jadhav
-"""Transcribe each recorded segment with faster-whisper (docs/dev/PLAN.md › Processing, step 1).
+"""Transcribe each recorded segment (docs/dev/PLAN.md › Processing, step 1).
 
-CPU, int8; voice-activity filter on, word timestamps on, language auto-detect
-unless configured. Samples are decoded here (16 kHz mono s16 from pw-record)
-because faster-whisper's own decoder breaks with the installed PyAV.
+The speech engine (process/engines.py: by default Parakeet or faster-whisper, whichever
+fits; or whisper.cpp) turns the audio into timed words; everything after that is the same.
+Samples are decoded here (16 kHz mono s16 from pw-record) because faster-whisper's
+own decoder breaks with the installed PyAV.
 
-The vocabulary (names, product terms) goes in as hotwords, which faster-whisper
-puts into every window's prompt. On the system track, speakers are separated
-(process/speakers.py) and lines are split at speaker changes.
+On the system track, speakers are separated (process/speakers.py) and lines are
+split at speaker changes.
 """
 
 from __future__ import annotations
@@ -18,8 +18,9 @@ from pathlib import Path
 
 from ..capture import wav
 from ..config.settings import Settings
+from .engines import make_engine
 from .merge import Line
-from .speakers import Diarizer, SpeakerBook, Word, assign_sentence, sentences
+from .speakers import Diarizer, SpeakerBook, assign_sentence, sentences
 
 MIN_SEGMENT_S = 0.5
 
@@ -30,16 +31,8 @@ def log(msg: str) -> None:
 
 class Transcriber:
     def __init__(self, settings: Settings, vocabulary: list[str] | None = None) -> None:
-        from faster_whisper import WhisperModel
-
         self.settings = settings
-        from .models import whisper_path
-
-        self.model = WhisperModel(whisper_path(settings.whisper_model), device="cpu",
-                                  compute_type="int8")
-        # Each term as its own sentence: Whisper copies the prompt's style, and a bare
-        # comma list made it drop sentence punctuation (docs/dev/features-2-design.md).
-        self.hotwords = " ".join(f"{t.rstrip('.')}." for t in vocabulary or [])[:600] or None
+        self.engine = make_engine(settings, vocabulary or [])
         self.diarizer = None
         if settings.diarize:
             try:
@@ -53,15 +46,11 @@ class Transcriber:
         if wav.duration_s(path) < MIN_SEGMENT_S:
             return [], {"file": path.name, "skipped": "too short"}
         audio = wav.load_float(path)
-        lang = None if self.settings.whisper_language == "auto" else self.settings.whisper_language
-        segments, info = self.model.transcribe(audio, language=lang, vad_filter=True,
-                                               word_timestamps=True, hotwords=self.hotwords)
-        segments = [s for s in segments if s.text.strip()]
-        run = {"file": path.name, "language": info.language,
-               "language_probability": round(info.language_probability, 2),
-               "audio_s": round(info.duration, 1), "speech_s": round(info.duration_after_vad, 1)}
-
-        words = [Word(w.start, w.end, w.word) for s in segments for w in (s.words or [])]
+        heard = self.engine.hear(audio)
+        run = {"file": path.name, "engine": self.engine.name, "language": heard.language,
+               "language_probability": heard.language_probability,
+               "audio_s": round(len(audio) / 16000, 1), "speech_s": heard.speech_s}
+        words = heard.words
         text = lambda ws: "".join(w.text for w in ws).strip()  # noqa: E731
         line = lambda who, ws: Line(who, round(offset_s + ws[0].start, 2),  # noqa: E731
                                     round(offset_s + ws[-1].end, 2), text(ws))

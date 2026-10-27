@@ -10,11 +10,15 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - `wirenote update` installs the newest version and restarts Wirenote. It never ends a recording: it refuses during a call, or with `--wait` updates once the call ends. `wirenote update --check` only checks, and `wirenote update --to 0.2.0` goes back to an earlier version. It works for installs made with uv or pipx.
 - Update checks, off unless you turn them on. Once a day, Wirenote asks pypi.org whether a new version is out. If one is, you get one notification, never during a call, and a banner in the app with its notes and an Update button. `wirenote setup install` asks whether you want them, and Settings › Updates has the switch. See PRIVACY.md for what this sends.
 - `wirenote --version`.
+- Two more speech engines. **Parakeet** turns speech into text several times faster on a normal CPU and knows 25 European languages. **whisper.cpp** uses a `whisper-cli` you build yourself, for example to transcribe on an AMD or Intel GPU. Choose in Settings › Setup; see "Speech engines" in docs/usage.md.
+- Transcribe one call again with another engine, model or language: "Transcribe again…" in the call page's menu, or `wirenote reprocess ID --engine parakeet --language de`. Your settings stay as they are.
+- The note's footer names the speech engine that made the transcript.
 - End-to-end tests: a recorded Jitsi call runs through the real daemon, worker and web app, with PipeWire and Ollama faked; a nightly run uses the real speech models.
 - Releases test the built wheel on Python 3.11 to 3.14 before publishing, and data written by every earlier release is checked to still read.
 
 ### Changed
 
+- Notes are ready sooner: the speech engine is now chosen for you. Wirenote uses Parakeet when it knows your language and you have no vocabulary set, and Whisper otherwise. The first note after the update downloads Parakeet's model (about 670 MB) once. If a call comes out worse, transcribe it again with Whisper from the call page's menu. What you need to do: nothing; to keep Whisper for every call, choose Whisper in Settings › Setup.
 - The job queue (`jobs.db`) records its schema version, so later releases can change it without breaking existing queues. Nothing to do on upgrade.
 
 ## [0.2.0] - 2026-10-27
