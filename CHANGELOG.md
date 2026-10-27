@@ -4,6 +4,10 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+
+- Flag a moment while you record: press `F` in the meetings app, click "Flag this moment", or run `wirenote flag`. The summary pays attention to what was said around each flag, and the note lists them under "Flagged moments". After a call, click the flag on a transcript line to add one, also on imported recordings. `wirenote toggle` stops the recording or starts one; bind both commands to a keyboard shortcut in your desktop to use them from any window.
+
 ## [0.3.1] - 2026-10-27
 
 ### Fixed

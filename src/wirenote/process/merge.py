@@ -75,6 +75,26 @@ def paragraphs(lines: list[Line], max_gap: float) -> list[Line]:
     return out
 
 
+def flagged_lines(lines: list[Line], flags: list[float], before_s: float, after_s: float
+                  ) -> list[tuple[float, Line]]:
+    """The lines that overlap [t - before_s, t + after_s] for each flag t, as (t, line) in
+    time order. A line several flags reach is listed once, with the first of them.
+    People flag just after hearing something, so the window reaches further back."""
+    picked: dict[int, tuple[float, Line]] = {}
+    for t in sorted(flags):
+        for i, line in enumerate(lines):
+            if i not in picked and line.end >= t - before_s and line.start <= t + after_s:
+                picked[i] = (t, line)
+    return sorted(picked.values(), key=lambda p: (p[1].start, p[1].speaker))
+
+
+def nearest_line(lines: list[Line], t: float) -> Line | None:
+    """The line being said at t, else the one closest in time (the earlier on a tie)."""
+    def gap(l: Line) -> float:
+        return 0.0 if l.start <= t <= l.end else min(abs(t - l.start), abs(t - l.end))
+    return min(lines, key=lambda l: (gap(l), l.start), default=None)
+
+
 def stamp(seconds: float) -> str:
     s = int(seconds)
     return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"

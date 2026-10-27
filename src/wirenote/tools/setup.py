@@ -30,7 +30,8 @@ def _settings() -> Settings:
     return load_settings(config_dir() / "config.toml")
 
 
-def _poke_daemon(command: str) -> None:
+def control(command: str) -> dict:
+    """Send one command to the daemon and return its reply."""
     from ..detector.daemon import control_socket_path
     import socket
 
@@ -39,9 +40,13 @@ def _poke_daemon(command: str) -> None:
             s.settimeout(3)
             s.connect(str(control_socket_path()))
             s.sendall(f"{command}\n".encode())
-            s.makefile().readline()
-    except OSError:
-        pass
+            return json.loads(s.makefile().readline())
+    except (OSError, ValueError):
+        return {"ok": False, "error": "daemon not running"}
+
+
+def _poke_daemon(command: str) -> None:
+    control(command)
 
 
 # setup -------------------------------------------------------------------------

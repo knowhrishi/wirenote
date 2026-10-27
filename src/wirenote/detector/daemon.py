@@ -785,6 +785,22 @@ class Daemon:
                 self._ops.put_nowait((self._safe_close, nid))
             self._handle(tracker.record(key, now))
             return {"ok": True, "app": key}
+        if cmd == "flag":
+            rec = self.recording
+            if rec is None:
+                return {"ok": False, "error": "not recording"}
+            t = rec.flag()
+            self.log.write("control", command="flag", app=rec.meta.app, stored=t is not None)
+            self._write_status(force=True)
+            # Pressed twice in a row, it answers with the flag already there.
+            return {"ok": True, "app": rec.meta.app, "t": t if t is not None else rec.flags[-1]}
+        if cmd == "toggle":
+            # One key for the whole flow: stop, or answer the open prompt, or record now.
+            if tracker.recording_key is not None:
+                return self._control("stop")
+            if any(t.state is State.PROMPTED for t in tracker.apps.values()):
+                return self._control("record")      # several prompts get its error
+            return self._control("record-now")
         if cmd == "record-now":
             if tracker.recording_key is not None:
                 return {"ok": False, "error": f"already recording {tracker.recording_key}"}
@@ -826,6 +842,7 @@ class Daemon:
                   "notification_buttons": self.notifier.has_actions if self.notify_ok else None,
                   "recording": self.detector.tracker.recording_key,
                   "recording_id": self.recording.id if self.recording else None,
+                  "flags": len(self.recording.flags) if self.recording else 0,
                   "jobs": self.jobs.counts(), "apps": apps}
         path = self.state_dir / "status.json"
         tmp = path.with_suffix(".tmp")

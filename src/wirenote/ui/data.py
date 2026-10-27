@@ -23,7 +23,7 @@ import threading
 import time
 from pathlib import Path
 
-from ..capture.recorder import read_manifest, write_manifest
+from ..capture.recorder import add_flag, read_flags, read_manifest, write_flags, write_manifest
 from ..config.secrets import (calendar_sources, load_secrets, save_secrets, with_config_value,
                               write_config_atomic)
 from ..config.settings import DEFAULT_CONFIG_TOML, Settings, config_dir, parse_settings
@@ -31,7 +31,7 @@ from ..config.vocabulary import load_vocabulary, save_vocabulary
 from ..process.engines import ENGINES, OVERRIDES, check_overrides
 from ..process.jobs import Jobs
 from ..process.live import LIVE
-from ..process.merge import Line, as_text, paragraphs, stamp
+from ..process.merge import Line, as_text, nearest_line, paragraphs, stamp
 from ..process.note import action_line, own_note, segment_file, title_for
 from ..process.speakers import Voices, display_name
 from ..process.summarize import Summary, SummaryError, make_backend, pin_local
@@ -103,6 +103,9 @@ UPDATE_DISCLOSURE = ("Once a day, Wirenote asks pypi.org for the newest version 
 FOLLOWUP_SCHEMA = {"type": "object",
                    "properties": {"subject": {"type": "string"}, "body": {"type": "string"}},
                    "required": ["subject", "body"], "additionalProperties": False}
+
+
+MAX_FLAG_S = 24 * 3600      # nothing is recorded that long (the cap is 4 h)
 
 
 class NotFound(Exception):
@@ -332,9 +335,46 @@ class Store:
                 "audio_deleted": m.get("audio_deleted"),
                 "end_reason": m.get("end_reason"),
                 "my_notes": read_my_notes(d),
+                "flags": self._flags(d, lines, speakers),
                 "followup": _read_json(d / FOLLOWUP),
                 "asks": _read_json(d / ASKS, []) or [],
                 "known_voices": [v["name"] for v in self.voices.names()]}
+
+    def _flags(self, d: Path, lines: list[dict], speakers: dict) -> list[dict]:
+        """Each flag with the transcript line closest to it (None before there is one)."""
+        found = [Line(**l) for l in lines]
+        out = []
+        for t in read_flags(d):
+            line = nearest_line(found, t)
+            out.append({"t": t, "start": line.start if line else t,
+                        "speaker": line.speaker if line else None,
+                        "name": display_name(line.speaker, speakers) if line else None,
+                        "text": line.text if line else ""})
+        return out
+
+    def control(self, command: str) -> dict:
+        """Send the daemon a command (flag); its reply, or an error if it is not running."""
+        from ..tools.setup import control
+
+        return control(command)
+
+    def add_flag(self, rec_id: str, t: float) -> list[float]:
+        """Flag a moment of a finished call (a line of the transcript, an imported call).
+        While the call records the daemon owns flags.json, so the app flags through it."""
+        d = self.rec_dir(rec_id)
+        if isinstance(t, bool) or not isinstance(t, (int, float)) or not 0 <= t <= MAX_FLAG_S:
+            raise Invalid("bad time")
+        if self.status().get("recording_id") == rec_id:
+            raise Invalid("This call is still recording. Flag it with Flag this moment.")
+        flags = read_flags(d)
+        added = add_flag(flags, round(float(t), 1))
+        if added is None:
+            return flags
+        write_flags(d, added)
+        state, _ = self._job_state(d)
+        if state == "done" and read_manifest(d).get("note"):
+            rewrite_note(d, self.settings)
+        return added
 
     def rename(self, rec_id: str, title: str) -> None:
         d = self.rec_dir(rec_id)

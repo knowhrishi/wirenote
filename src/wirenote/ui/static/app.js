@@ -282,6 +282,7 @@ function renderBanner() {
     h("span", { class: "elapsed" }, clock(recordingElapsed())),
     h("span", { class: "grow" }),
     st.recording_id ? h("a", { class: "btn", href: `#/call/${st.recording_id}` }, icon("pen"), "Take notes") : null,
+    h("button", { class: "btn", title: "Flag this moment (F)", onclick: flagMoment }, icon("flag"), "Flag"),
     h("button", { class: "btn btn-stop", onclick: stopRecording }, icon("stop"), "Stop"));
   b.hidden = false;
 }
@@ -291,6 +292,34 @@ async function stopRecording() {
     const r = await api("/api/stop", { method: "POST" });
     toast(r.ok ? "Recording stopped. Writing the note…" : r.error);
     refreshStatus();
+  } catch (e) { toast(e.message); }
+}
+
+// Flag a moment: while recording through the daemon (it knows the clock), after the call on a
+// transcript line. Either way the note lists it under "Flagged moments".
+async function flagMoment() {
+  if (!state.status.recording) return toast("Not recording");
+  try {
+    const r = await api("/api/flag", { method: "POST" });
+    if (!r.ok) return toast(r.error);
+    toast(`Flagged at ${clock(r.t)}`);
+    await refreshStatus();
+    renderBanner();
+    const n = $("#flag-count");
+    if (n) n.textContent = flagCount();
+  } catch (e) { toast(e.message); }
+}
+
+function flagCount() {
+  const n = state.status.flags || 0;
+  return n ? `${n} flagged` : "";
+}
+
+async function flagLine(c, line) {
+  try {
+    const r = await api(`/api/calls/${c.id}/flags`, { method: "POST", body: { t: line.start } });
+    toast(r.flags.length > (c.flags || []).length ? "Flagged. The note now lists it." : "Already flagged");
+    openCall(c.id, state.tab);
   } catch (e) { toast(e.message); }
 }
 
@@ -456,7 +485,10 @@ function recordingView(c) {
     h("div", { class: "head-row" }, h("div", { class: "grow" }, titleEditor(c), metaLine(c),
       c.attendees.length ? h("div", { class: "people" }, c.attendees.map((p) => h("span", { class: "person" }, avatar(p), p))) : null)),
     h("div", { class: "live-head" }, h("span", { class: "dot rec" }), "Recording", clockEl,
-      h("span", { class: "grow" }), h("button", { class: "btn btn-stop", onclick: stopRecording }, icon("stop"), "Stop")),
+      h("span", { class: "flag-count", id: "flag-count" }, flagCount()),
+      h("span", { class: "grow" }),
+      h("button", { class: "btn", title: "Flag this moment (F)", onclick: flagMoment }, icon("flag"), "Flag this moment"),
+      h("button", { class: "btn btn-stop", onclick: stopRecording }, icon("stop"), "Stop")),
     myNotesEditor(c, true),
     h("div", { class: "live-tip" }, "Jot what matters: decisions, who does what, names. A word or two is enough; the summary fills in the rest from the transcript."),
     liveTranscript(c));
@@ -859,6 +891,7 @@ function notesView(c) {
   const s = c.summary;
   const wrap = h("div", {});
   wrap.append(myNotesEditor(c, false));
+  if ((c.flags || []).length) wrap.append(flaggedView(c));
   if (!s) {
     if (c.has_transcript) {
       wrap.append(h("p", { class: "empty-line" }, "No summary for this call. The full transcript is in the Transcript tab."));
@@ -881,6 +914,16 @@ function notesView(c) {
   if (s.open_questions.length) wrap.append(h("section", { class: "section" }, h("h2", {}, "Open questions"), bulletList(s.open_questions, "questions")));
   if (c.has_transcript) wrap.append(askView(c));
   return wrap;
+}
+
+// The moments you flagged, each with the line closest to it and a link to the transcript.
+function flaggedView(c) {
+  return h("section", { class: "section flagged" },
+    h("h2", {}, "Flagged moments", h("span", { class: "n" }, String(c.flags.length))),
+    h("ul", { class: "flag-list" }, c.flags.map((f) => h("li", {},
+      h("button", { class: "t-time", title: "Show in the transcript", onclick: () => jumpTo(f.start, false) }, clock(f.start)),
+      h("span", { class: "flag-text" }, f.name ? h("b", {}, `${f.name} `) : null, f.text || "No transcript line here"),
+      h("button", { class: "jump", title: "Jump to this moment in the transcript", onclick: () => jumpTo(f.start, false) }, icon("jump"))))));
 }
 
 function actionItem(callId, a, i, withCall) {
@@ -1013,9 +1056,12 @@ function transcriptView(c) {
       const who = me ? h("div", { class: "t-speaker me" }, "Me")
         : h("button", { class: "t-speaker others", title: "Name this speaker", onclick: () => speakerDialog(c, l.speaker) }, name);
       if (!me) who.style.setProperty("color", colorFor(l.speaker));
-      return h("div", { class: "t-line", "data-start": String(l.start) },
+      const flagged = (c.flags || []).some((f) => f.start === l.start);
+      return h("div", { class: "t-line" + (flagged ? " flagged" : ""), "data-start": String(l.start) },
         h("button", { class: "t-time", title: "Play from here", onclick: () => { seekAudio(l.start); playAudio(); } }, clock(l.start)),
-        h("div", {}, who, h("div", { class: "t-text" }, highlighted(l.text, q))));
+        h("div", {}, who, h("div", { class: "t-text" }, highlighted(l.text, q))),
+        flagged ? h("span", { class: "t-flag on", title: "Flagged" }, icon("flag"))
+          : h("button", { class: "t-flag", title: "Flag this moment", onclick: () => flagLine(c, l) }, icon("flag")));
     }));
     count.textContent = q ? `${hits} match${hits === 1 ? "" : "es"}` : "";
     const first = body.querySelector("mark");
@@ -1604,6 +1650,7 @@ function wireKeys() {
     if (e.key === "Escape" && $("#modal").hidden === false) { $("#modal").click(); return; }
     if (typing) return;
     if (e.key === "/") { e.preventDefault(); search.focus(); }
+    else if ((e.key === "f" || e.key === "F") && !e.ctrlKey && !e.metaKey && !e.altKey && state.status.recording) { e.preventDefault(); flagMoment(); }
     else if (e.key === " " && state.call && state.call.has_audio) { e.preventDefault(); audio().paused ? playAudio() : audio().pause(); }
     else if (e.key === "ArrowLeft" && state.call && audio().getAttribute("src")) seekAudio(Math.max(0, audio().currentTime - 15));
     else if (e.key === "ArrowRight" && state.call && audio().getAttribute("src")) seekAudio(audio().currentTime + 15);

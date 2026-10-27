@@ -12,7 +12,7 @@ import wave
 from pathlib import Path
 
 from wirenote.capture import wav
-from wirenote.capture.recorder import Recording, RecordingMeta, read_manifest, recover
+from wirenote.capture.recorder import Recording, RecordingMeta, read_flags, read_manifest, recover
 
 
 def pw_header(data_size: int = 0) -> bytes:
@@ -172,3 +172,25 @@ def test_recover_ignores_unrelated_dirs(tmp_path):
     done.mkdir()
     (done / "manifest.json").write_text(json.dumps({"ended": "x", "segments": []}))
     assert recover(tmp_path) == []
+
+
+def test_flag_offsets_use_the_transcript_clock_and_dedupe(tmp_path):
+    h = Harness(tmp_path)
+    run(h.rec.start(None))
+    h.now = h.rec.t0 + 65
+    assert h.rec.flag() == 65.0
+    h.now += 1
+    assert h.rec.flag() is None                     # within 2 s of the last one
+    assert read_flags(h.rec.dir) == [65.0]
+    h.now += 9
+    assert h.rec.flag() == 75.0
+    assert read_flags(h.rec.dir) == [65.0, 75.0]
+    assert not list(h.rec.dir.glob("*.tmp"))        # written atomically
+
+
+def test_read_flags_ignores_a_missing_or_broken_file(tmp_path):
+    assert read_flags(tmp_path) == []
+    (tmp_path / "flags.json").write_text("not json")
+    assert read_flags(tmp_path) == []
+    (tmp_path / "flags.json").write_text('[{"t": 3.5}, {"x": 1}, {"t": "no"}, {"t": -1}]')
+    assert read_flags(tmp_path) == [3.5]

@@ -351,3 +351,57 @@ def test_update_loop_checks_only_when_turned_on(tmp_path, monkeypatch):
     d.settings = replace(d.settings, update_check=True)
     asyncio.run(one_round(d))
     assert checked == [tmp_path]
+
+
+def test_flag_rules(tmp_path):
+    from wirenote.capture.recorder import read_flags
+
+    d = make(tmp_path)
+    assert d._control("flag") == {"ok": False, "error": "not recording"}
+    prompt(d)
+    assert d._control("record")["ok"]
+    asyncio.run(drain(d))
+    reply = d._control("flag")
+    assert reply["ok"] is True and reply["app"] == "discord" and reply["t"] >= 0
+    assert read_flags(d.recording.dir) == [reply["t"]]
+    assert d._control("flag")["ok"] is True                 # twice within 2 s: stored once
+    assert len(read_flags(d.recording.dir)) == 1
+    d._write_status(force=True)
+    assert json.loads((tmp_path / "status.json").read_text())["flags"] == 1
+    rec_dir = d.recording.dir
+    assert d._control("stop")["ok"]
+    asyncio.run(drain(d))
+    assert read_flags(rec_dir) == [reply["t"]]              # kept after the stop
+    assert d._control("flag") == {"ok": False, "error": "not recording"}
+    assert json.loads((tmp_path / "status.json").read_text())["flags"] == 0
+
+
+def test_toggle_starts_and_stops_a_manual_recording(tmp_path):
+    d = make(tmp_path)
+    assert d._control("toggle") == {"ok": True, "app": "manual"}
+    asyncio.run(drain(d))
+    assert d.recording is not None and d.recording.meta.app == "manual"
+    assert d._control("toggle")["ok"] is True               # recording: stop
+    asyncio.run(drain(d))
+    assert d.recording is None and d.jobs.next_queued() is not None
+
+
+def test_toggle_records_the_one_prompt_and_refuses_several(tmp_path):
+    d = make(tmp_path)
+    nid = prompt(d)
+    assert d._control("toggle") == {"ok": True, "app": "discord"}
+    asyncio.run(drain(d))
+    assert d.recording is not None and nid in d.notifier.closed
+    assert d._control("toggle")["ok"] is True
+    asyncio.run(drain(d))
+
+    other = tmp_path / "two"
+    other.mkdir()
+    d = make(other)
+    two = {**DISCORD, "zoom": Observation("zoom", "Zoom", "meeting", frozenset({2}))}
+    for now in (0.0, 2.0):
+        d._handle(d.detector.tracker.update(now, two))
+    asyncio.run(drain(d))
+    reply = d._control("toggle")
+    assert reply["ok"] is False and reply["error"].startswith("several prompts: ")
+    assert d.recording is None

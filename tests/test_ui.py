@@ -187,6 +187,50 @@ def test_audio_is_served_with_ranges(server, tmp_path):
     assert read_manifest(app.store.rec_dir(rec_id))["id"] == rec_id
 
 
+def test_add_flag_after_the_call_and_refused_while_recording(store, tmp_path):
+    st, rec_id = store
+    assert st.add_flag(rec_id, 4.2) == [4.2]
+    assert st.add_flag(rec_id, 5.0) == [4.2]                       # within 2 s: dropped
+    assert st.add_flag(rec_id, 1.5) == [1.5, 4.2]
+    for bad in (-1, float("nan"), float("inf"), 10 ** 9, "3", True):
+        with pytest.raises(Invalid):
+            st.add_flag(rec_id, bad)
+    call = st.call(rec_id)
+    assert [(f["t"], f["start"], f["name"]) for f in call["flags"]] == [
+        (1.5, 1.0, "Speaker 1"), (4.2, 4.0, "Me")]
+    assert call["flags"][1]["text"] == "Yes, Friday works."
+    assert "## Flagged moments\n\n- [00:00:01] **Speaker 1** Shall we ship" in Path(call["note"]).read_text()
+
+    (tmp_path / "state" / "status.json").write_text(json.dumps({"recording_id": rec_id}))
+    with pytest.raises(Invalid, match="still recording"):
+        st.add_flag(rec_id, 9.0)
+    assert st.call(rec_id)["state"] == "recording"                 # the file is the daemon's now
+    with pytest.raises(NotFound):
+        st.add_flag("../x", 1.0)
+
+
+def test_flag_control_reaches_the_daemon_or_says_it_is_not_running(store, monkeypatch, tmp_path):
+    st, _ = store
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "run"))
+    assert st.control("flag") == {"ok": False, "error": "daemon not running"}
+    sent = []
+    monkeypatch.setattr("wirenote.tools.setup.control", lambda c: sent.append(c) or {"ok": True, "t": 3.0})
+    assert st.control("flag") == {"ok": True, "t": 3.0} and sent == ["flag"]
+
+
+def test_flag_routes(server, monkeypatch):
+    app, port, rec_id = server
+    monkeypatch.setattr("wirenote.tools.setup.control", lambda c: {"ok": True, "app": "x", "t": 1.0})
+    status, body = request(port, "POST", "/api/flag", headers={"X-Wirenote-Token": app.token}, body={})
+    assert status == 200 and json.loads(body)["t"] == 1.0
+    status, body = request(port, "POST", f"/api/calls/{rec_id}/flags",
+                           headers={"X-Wirenote-Token": app.token}, body={"t": 4.2})
+    assert status == 200 and json.loads(body) == {"flags": [4.2]}
+    status, _ = request(port, "POST", f"/api/calls/{rec_id}/flags",
+                        headers={"X-Wirenote-Token": app.token}, body={"t": "soon"})
+    assert status == 400
+
+
 # Features 2: notes, speakers, action items, ask across calls, follow-up -------
 
 def test_my_notes_are_saved_and_rewritten_into_the_note(store):
