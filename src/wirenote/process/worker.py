@@ -19,13 +19,13 @@ import sys
 import traceback
 from pathlib import Path
 
-from ..capture.recorder import read_manifest, write_manifest
+from ..capture.recorder import read_flags, read_manifest, write_manifest
 from ..config.settings import Settings, state_dir
 from ..config.vocabulary import load_vocabulary
 from .engines import engine_label, with_overrides
 from .jobs import MAX_ATTEMPTS, Job, Jobs
 from .live import LIVE, prefetch
-from .merge import Line, as_text, dedupe_echo, paragraphs
+from .merge import Line, as_text, dedupe_echo, flagged_lines, paragraphs
 from .note import action_line, note_path, own_note, render, segment_file, title_for
 from .speakers import Voices, display_name, guess_names
 from .summarize import (ActionItem, Summary, SummaryError, SummaryUnavailable, make_backend,
@@ -121,8 +121,9 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
         log(f"job {job.id}: summarizing with {backend_name}, template {template.id}")
         try:
             summary = summarize(lines, backend, settings.summary_chunk_s, settings.summary_language,
-                                context=_context(manifest, vocabulary, my_notes), names=names,
-                                template=template)
+                                context=_context(manifest, vocabulary, my_notes,
+                                                 _flagged(lines, read_flags(rec), settings, names)),
+                                names=names, template=template)
         except SummaryError as e:
             error = str(e)
             log(f"job {job.id}: no summary: {error}")
@@ -133,7 +134,7 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
         (rec / SUMMARY).write_text(json.dumps(summary.as_dict(), indent=2, ensure_ascii=False))
 
     path = _write_note(rec, manifest, lines, summary, settings, backend_name, error, names, my_notes,
-                       model, template)
+                       model, template, read_flags(rec))
     manifest.update(note=str(path), summary_error=error, summary_backend=backend_name,
                     note_written=dt.datetime.now().astimezone().isoformat(timespec="seconds"))
     write_manifest(rec, manifest)
@@ -188,7 +189,7 @@ def _name_speakers(book, lines: list[Line], manifest: dict, settings: Settings, 
 def _write_note(rec: Path, manifest: dict, lines: list[Line], summary: Summary | None,
                 settings: Settings, backend_name: str | None, error: str | None,
                 names: dict[str, str], my_notes: str, transcript_model: str,
-                template: Template | None = None) -> Path:
+                template: Template | None = None, flags: list[float] | None = None) -> Path:
     title = title_for(manifest, summary)
     started = dt.datetime.fromisoformat(manifest["started"])
     path = note_path(settings.notes_path(), started, title)
@@ -203,7 +204,7 @@ def _write_note(rec: Path, manifest: dict, lines: list[Line], summary: Summary |
     tmp.write_text(render(manifest, lines, summary, title=title, duration_min=duration,
                           audio=audio, transcript_model=transcript_model,
                           summary_backend=backend_name, summary_error=error, names=names,
-                          my_notes=my_notes, template=template))
+                          my_notes=my_notes, template=template, flags=flags))
     tmp.replace(path)
     return path
 
@@ -231,7 +232,7 @@ def rewrite_note(rec: Path, settings: Settings) -> Path | None:
     path = _write_note(rec, manifest, lines, summary, settings, manifest.get("summary_backend"),
                        manifest.get("summary_error"), names, read_my_notes(rec),
                        data.get("model") or settings.whisper_model,
-                       load_templates().get(summary.template) if summary else None)
+                       load_templates().get(summary.template) if summary else None, read_flags(rec))
     if done and any(done):
         text = path.read_text()
         for a, d in zip(summary.action_items, done):
@@ -244,7 +245,17 @@ def rewrite_note(rec: Path, settings: Settings) -> Path | None:
     return path
 
 
-def _context(manifest: dict, vocabulary: list[str], my_notes: str) -> str:
+FLAGGED_CAP = 3000
+
+
+def _flagged(lines: list[Line], flags: list[float], settings: Settings,
+             names: dict[str, str]) -> str:
+    """What was said around the moments Me flagged, for the summary prompt."""
+    near = flagged_lines(lines, flags, settings.flag_before_s, settings.flag_after_s)
+    return as_text([l for _, l in near], names)[:FLAGGED_CAP]
+
+
+def _context(manifest: dict, vocabulary: list[str], my_notes: str, flagged: str = "") -> str:
     bits = [f"Call started {manifest['started']} in {manifest.get('name') or manifest.get('app')}"]
     if manifest.get("service"):
         room = f", room {manifest['room']}" if manifest.get("room") else ""
@@ -261,4 +272,6 @@ def _context(manifest: dict, vocabulary: list[str], my_notes: str) -> str:
         bits.append("Notes the recording person (Me) took during the call. They show what "
                     "mattered to them: keep their points, add the details from the transcript, "
                     "and correct them where the transcript says otherwise:\n" + my_notes[:4000])
+    if flagged:
+        bits.append("Moments Me flagged as important. Make sure the summary covers them:\n" + flagged)
     return "\n".join(bits)

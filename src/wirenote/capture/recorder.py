@@ -31,6 +31,8 @@ from pathlib import Path
 from . import wav
 
 MANIFEST = "manifest.json"
+FLAGS = "flags.json"
+FLAG_DEDUPE_S = 2.0       # docs/dev/PLAN.md › Defaults › Flagged moments
 STOP_WAIT_S = 3.0
 MAX_RESTARTS = 3
 
@@ -114,6 +116,7 @@ class Recording:
         self.tracks: dict[str, _Track] = {}
         self.ended: str | None = None
         self.end_reason: str | None = None
+        self.flags: list[float] = []
 
     # Lifecycle -------------------------------------------------------------
 
@@ -135,6 +138,18 @@ class Recording:
         self.ended, self.end_reason = now_iso(), reason
         self._write_manifest()
         return self.dir
+
+    def flag(self) -> float | None:
+        """Mark this moment as important. Returns the offset in seconds on the transcript
+        time base (the same zero as Segment.start_offset_s), or None if it is too close to
+        a flag already set."""
+        t = round(self.clock() - self.t0, 1)
+        added = add_flag(self.flags, t)
+        if added is None:
+            return None
+        self.flags = added
+        write_flags(self.dir, self.flags)
+        return t
 
     async def retarget_mic(self, target: str | None) -> bool:
         t = self.tracks.get("mic")
@@ -246,6 +261,32 @@ def write_manifest(rec_dir: Path, data: dict) -> None:
     tmp = rec_dir / (MANIFEST + ".tmp")
     tmp.write_text(json.dumps(data, indent=2))
     tmp.replace(rec_dir / MANIFEST)
+
+
+def read_flags(rec_dir: Path) -> list[float]:
+    """The flagged offsets in seconds, sorted. A missing or damaged file means no flags:
+    recordings from before 0.4 have none."""
+    try:
+        items = json.loads((rec_dir / FLAGS).read_text())
+        out = [float(i["t"]) for i in items
+               if isinstance(i, dict) and isinstance(i.get("t"), (int, float))
+               and not isinstance(i.get("t"), bool) and i["t"] >= 0]
+    except (OSError, ValueError, TypeError):
+        return []
+    return sorted(out)
+
+
+def write_flags(rec_dir: Path, flags: list[float]) -> None:
+    tmp = rec_dir / (FLAGS + ".tmp")
+    tmp.write_text(json.dumps([{"t": t} for t in flags]))
+    tmp.replace(rec_dir / FLAGS)
+
+
+def add_flag(flags: list[float], t: float) -> list[float] | None:
+    """flags plus t, sorted; None if t is within FLAG_DEDUPE_S of a flag already there."""
+    if any(abs(t - f) < FLAG_DEDUPE_S for f in flags):
+        return None
+    return sorted([*flags, t])
 
 
 def recover(root: Path) -> list[Path]:

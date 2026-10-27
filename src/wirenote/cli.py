@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Hrishikesh Jadhav
-"""wirenote command line: run | status | stop | record | jobs | reprocess | templates | setup | calendar |
-doctor | ui | open | update | changelog."""
+"""wirenote command line: run | status | stop | record | flag | toggle | jobs | reprocess | templates | setup |
+calendar | doctor | ui | open | update | changelog."""
 
 from __future__ import annotations
 
@@ -75,7 +75,10 @@ def _control(command: str) -> int:
         print(f"wirenote: cannot reach the daemon at {path} ({e}); is it running?")
         return 1
     if reply.get("ok"):
-        print(f"{command}: {reply.get('app')}")
+        from .process.merge import stamp
+
+        at = f" at {stamp(reply['t'])}" if "t" in reply else ""
+        print(f"{command}: {reply.get('app')}{at}")
         return 0
     print(f"{command}: {reply.get('error')}")
     return 1
@@ -83,6 +86,14 @@ def _control(command: str) -> int:
 
 def cmd_stop(_args) -> int:
     return _control("stop")
+
+
+def cmd_flag(_args) -> int:
+    return _control("flag")
+
+
+def cmd_toggle(_args) -> int:
+    return _control("toggle")
 
 
 def cmd_record(args) -> int:
@@ -346,6 +357,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("run", help="run the daemon").set_defaults(fn=cmd_run)
     sub.add_parser("status", help="show what the daemon sees").set_defaults(fn=cmd_status)
     sub.add_parser("stop", help="stop the current recording").set_defaults(fn=cmd_stop)
+    sub.add_parser("flag", help="flag this moment of the recording as important").set_defaults(fn=cmd_flag)
+    sub.add_parser("toggle", help="stop the recording, or start one (the open prompt, else a "
+                   "meeting without a call app)").set_defaults(fn=cmd_toggle)
     rec = sub.add_parser("record", help="answer the open prompt with Record")
     rec.add_argument("--now", action="store_true",
                      help="record a meeting without a call app (in person, phone on speaker)")

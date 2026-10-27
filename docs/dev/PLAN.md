@@ -129,6 +129,9 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | Parakeet batch | 1 piece | Batches of 8 peaked at 3.0 GB on a 30-min call and were slower; one at a time stays at 1.4 GB |
 | whisper.cpp model | `ggml-large-v3-turbo-q5_0.bin` | Same model as the Whisper default, quantized for the GPU |
 | whisper.cpp time limit | 3 s per second of speech, at least 10 min | A `whisper-cli` stuck on a GPU driver must not hold up later notes; a slow CPU build stays inside |
+| Flagged moments | a flag within 2 s of the last one is dropped | A double press must not store two |
+| Flag window | 30 s before and 10 s after each flag | People flag just after hearing something; the summary prompt gets the lines in the window, at most 3000 characters |
+| Flag in the note | the line closest to each flag, no model | The same list every time; the app shows it with jump links |
 | Live transcript | off | It uses CPU during the call |
 | Live engine | Parakeet where it knows the language, else Whisper `small`; downloaded models only; 2 threads | Fast enough to keep up; never a download during a call |
 | Live pieces | read every 1.5 s; cut after 0.5 s of silence (at least 2 s) or at 15 s | Whole sentences, a few seconds behind |

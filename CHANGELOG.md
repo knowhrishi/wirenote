@@ -7,6 +7,7 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 ### Added
 
 - Summary templates. A standup now gets "Updates by person" and "Blockers", a 1:1 gets "Feedback" and "Topics for next time", an interview gets what the candidate said, their questions and follow-ups (it never rates the candidate), and a lecture gets key concepts, terms and references. Wirenote picks one from the calendar event's title, or you choose: "Summary template…" in the call page's menu, `wirenote reprocess ID --summary --template standup`, or a default in Settings › Setup. You can keep a choice for every meeting in a calendar series. Write your own as a file in `~/.config/wirenote/templates/`; see "Summary templates" in docs/usage.md. `wirenote templates` lists them.
+- Flag a moment while you record: press `F` in the meetings app, click "Flag this moment", or run `wirenote flag`. The summary pays attention to what was said around each flag, and the note lists them under "Flagged moments". After a call, click the flag on a transcript line to add one, also on imported recordings. `wirenote toggle` stops the recording or starts one; bind both commands to a keyboard shortcut in your desktop to use them from any window.
 
 ## [0.3.1] - 2026-10-27
 

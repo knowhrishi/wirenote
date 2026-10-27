@@ -21,6 +21,7 @@ Open **Wirenote** from the app menu, or run `wirenote open`. It is a local web p
 - **Ask:** questions about one call, answered from its transcript.
 - **Record a meeting:** records without a call app (a meeting room, a phone on speaker). A call page opens where you can take notes while you talk.
 - **Who said what:** the other people are told apart and named from the call ("This is Anna…"), the calendar invite, or a voice you taught it. Click a speaker to name them, tick "Recognize this voice" so later calls know them, or merge two speakers that are one person. Someone who speaks less than about 8 seconds in the whole call is counted with the person who spoke just before or after.
+- **Flag this moment:** press `F` or click "Flag this moment" while you record. The summary pays attention to what was said around each flag (30 seconds before and 10 after), and the note lists them under "Flagged moments". After a call, hover a transcript line and click its flag to add one. See "Flag a moment" below.
 - **Your notes:** typed during or after the call. They shape the summary, and "Update summary" rebuilds it with them.
 - **Follow-up email:** a recap from the notes, to copy or open in your mail app.
 - **Action items:** everything agreed across all meetings, yours first.
@@ -29,9 +30,23 @@ Open **Wirenote** from the app menu, or run `wirenote open`. It is a local web p
 - **Settings:** summaries, transcription, the consent line, the Claude key, calendars, a vocabulary of names and terms, remembered voices, the setup check, and updates.
 - **Updates:** click the version number at the bottom of the sidebar for what changed in each release. After an update, the app shows what is new once.
 
-Keys: `Ctrl K` or `/` to search, `Space` to play or pause, `←` / `→` to skip 15 s.
+Keys: `Ctrl K` or `/` to search, `Space` to play or pause, `←` / `→` to skip 15 s, `F` to flag a moment while recording.
 
 **Only you can open it.** The app listens on 127.0.0.1 only. The app menu and `wirenote open` log you in with a one-time link; other users on the same computer are refused, and other web pages cannot use it. If the page says "not logged in", open Wirenote from the app menu again.
+
+## Flag a moment
+
+Something important was just said? While a call records, press `F` in the meetings app, click **Flag this moment**, or run `wirenote flag`. Wirenote remembers the time. Pressing it twice within 2 seconds counts once.
+
+- The summary gets the lines said from 30 seconds before to 10 seconds after each flag, with a request to cover them.
+- The note gets a "Flagged moments" list: the line closest to each flag. The call page shows the same list with links to the transcript.
+- After the call, hover a line in the Transcript tab and click its flag to add one. This works for imported recordings too. "Update summary" then takes it into account.
+
+`wirenote toggle` does one thing for the whole flow: it stops the recording; or, with a call prompt showing, records it; or else records a meeting without a call app. It fails if several prompts are showing: use `wirenote record`.
+
+**Tip:** bind `wirenote flag` and `wirenote toggle` to a keyboard shortcut in your desktop's settings (System Settings › Keyboard › Shortcuts › Custom, in GNOME and KDE) to flag from any window, even while a call app has the focus.
+
+Change the window with `flag_before_s` and `flag_after_s` in `config.toml`.
 
 ## Summaries
 
@@ -202,6 +217,8 @@ wirenote status          # daemon, current recording, queued jobs
 wirenote stop            # stop the recording (also works if the notification was dismissed)
 wirenote record          # answer the open prompt with Record
 wirenote record --now    # record a meeting without a call app
+wirenote flag            # flag this moment of the recording as important
+wirenote toggle          # stop the recording, or start one (the open prompt, else a meeting)
 wirenote jobs            # recent notes and failures
 wirenote reprocess <id>  # transcribe again (--engine, --model, --language); --summary keeps the transcript; --template ID
 wirenote templates       # the summary templates and the words that pick them

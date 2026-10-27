@@ -267,6 +267,57 @@ def test_remembered_voice_names_the_speaker_and_my_notes_reach_the_summary(tmp_p
     assert speakers["S1"]["name"] == "Anna Schmidt" and speakers["S1"]["source"] == "voice"
 
 
+def test_flagged_lines_pick_what_was_said_around_each_flag():
+    from wirenote.process.merge import flagged_lines, nearest_line
+
+    lines = [Line("S1", 0.0, 10.0, "a"), Line("Me", 40.0, 45.0, "b"), Line("S1", 100.0, 110.0, "c")]
+    got = flagged_lines(lines, [50.0, 52.0, 300.0], 30.0, 10.0)
+    assert [(t, l.text) for t, l in got] == [(50.0, "b")]            # one line, once; 300 s has none
+    got = flagged_lines(lines, [11.0, 105.0], 5.0, 10.0)
+    assert [(t, l.text) for t, l in got] == [(11.0, "a"), (105.0, "c")]
+    assert flagged_lines(lines, [], 30.0, 10.0) == []
+    assert nearest_line(lines, 48.0).text == "b" and nearest_line(lines, 70.0).text == "b"
+    assert nearest_line(lines, 99.0).text == "c" and nearest_line([], 5.0) is None
+
+
+def test_flagged_moments_reach_prompt_and_note(tmp_path):
+    from wirenote.capture.recorder import write_flags
+    from wirenote.process.worker import rewrite_note
+
+    rec = make_recording(tmp_path)
+    write_flags(rec, [4.4])
+    s = replace(settings_for(tmp_path), flag_before_s=1.0, flag_after_s=0.5)
+    jobs = Jobs(tmp_path / "jobs.db")
+    backend = FakeBackend()
+    job = run_job(jobs.add(rec), s, jobs, FakeTranscriber(), lambda _s: backend,
+                  voices=no_voices(tmp_path))
+    user = [c for c in backend.calls if c[2] is FINAL_SCHEMA][0][1]
+    block = ("Moments Me flagged as important. Make sure the summary covers them:\n"
+             "[00:00:04] Me: Yes, Friday works.")
+    assert block in user
+    assert user.count("Shall we ship on Friday?") == 1                # not part of the flagged block
+    note = Path(job.note)
+    assert "## Flagged moments\n\n- [00:00:04] **Me** Yes, Friday works.\n" in note.read_text()
+
+    # Renaming a speaker or editing notes re-renders the note; the flags stay.
+    write_flags(rec, [1.5, 4.4])
+    (rec / "my_notes.md").write_text("- more")
+    rewrite_note(rec, s)
+    text = note.read_text()
+    assert "## Flagged moments\n\n- [00:00:01] **Speaker 1** Shall we ship on Friday?\n" in text
+    assert "- [00:00:04] **Me** Yes, Friday works." in text and "## My notes" in text
+
+
+def test_a_call_without_flags_has_no_flagged_section(tmp_path):
+    rec = make_recording(tmp_path)
+    jobs = Jobs(tmp_path / "jobs.db")
+    backend = FakeBackend()
+    job = run_job(jobs.add(rec), settings_for(tmp_path), jobs, FakeTranscriber(), lambda _s: backend,
+                  voices=no_voices(tmp_path))
+    assert "Flagged" not in Path(job.note).read_text()
+    assert "flagged" not in [c for c in backend.calls if c[2] is FINAL_SCHEMA][0][1]
+
+
 def test_names_are_guessed_only_with_evidence_in_the_transcript():
     from wirenote.process.speakers import guess_names
 

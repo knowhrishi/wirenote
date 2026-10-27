@@ -9,7 +9,7 @@ import json
 import re
 from pathlib import Path
 
-from .merge import Line, stamp
+from .merge import Line, nearest_line, stamp
 from .summarize import Summary
 from .templates import Template
 
@@ -89,7 +89,7 @@ def render(manifest: dict, lines: list[Line], summary: Summary | None, *, title:
            duration_min: float, audio: list[str], transcript_model: str,
            summary_backend: str | None, summary_error: str | None = None,
            names: dict[str, str] | None = None, my_notes: str = "",
-           template: Template | None = None) -> str:
+           template: Template | None = None, flags: list[float] | None = None) -> str:
     names = names or {}
     cal = manifest.get("calendar") or {}
     front = {
@@ -129,6 +129,14 @@ def render(manifest: dict, lines: list[Line], summary: Summary | None, *, title:
     elif summary_error:
         out += [f"> Summary not available: {md_safe(summary_error)}",
                 f"> Run `wirenote reprocess {manifest['id']} --summary` to try again.", ""]
+
+    # No model here: the line closest to each flag, so the list is the same every time.
+    flagged = {id(l): l for l in (nearest_line(lines, t) for t in flags or []) if l is not None}
+    if flagged:
+        out += ["## Flagged moments", ""]
+        out += [f"- [{stamp(l.start)}] **{md_safe(names.get(l.speaker, l.speaker))}** {md_safe(l.text)}"
+                for l in sorted(flagged.values(), key=lambda l: (l.start, l.speaker))]
+        out.append("")
 
     if my_notes:
         out += ["## My notes", "", my_notes.strip(), ""]
