@@ -124,6 +124,8 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | Update check | off; when on, once a day | Nothing leaves the computer unless asked; releases are rarer than daily |
 | Update notification | once per version, never while recording | A reminder, not a nag; never during a call |
 | Waiting for a call before updating | at most 4 h, the recording cap | An update must not end a recording |
+| Summary memory | wait until free RAM plus free swap holds the Ollama model's file + 1 GB; check every 15 s, at most 5 min | Loading without room gets Ollama or another program killed |
+| Summary passing failure | ask again once after 30 s; then write the note and queue the summary again after 60 s, up to 3 attempts | Ollama restarts in seconds and memory frees up; the transcript is never held back |
 
 ## Prompt, capture and processing
 

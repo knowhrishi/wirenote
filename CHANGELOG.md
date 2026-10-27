@@ -17,6 +17,11 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 - The job queue (`jobs.db`) records its schema version, so later releases can change it without breaking existing queues. Nothing to do on upgrade.
 
+### Fixed
+
+- A summary no longer fails because memory is short. Wirenote waits for enough free memory before Ollama loads its model, instead of the kernel stopping Ollama or another program. If the summary still fails, or Ollama restarts, the note is written with the transcript and the summary is tried again a few minutes later, up to three times.
+- `contrib/ollama.service` halves the memory Ollama needs to hold the transcript while it reads it. What you need to do: if you use it, copy it to `~/.config/systemd/user/` again and run `systemctl --user daemon-reload && systemctl --user restart ollama`.
+
 ## [0.2.0] - 2026-10-27
 
 ### Added

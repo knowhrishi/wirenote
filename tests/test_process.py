@@ -312,7 +312,8 @@ def test_ollama_sends_to_the_address_it_checked(monkeypatch):
     monkeypatch.setattr(summ.urllib.request, "urlopen", lambda req, timeout: sent.append(req.full_url) or
                         _Resp(json.dumps({"message": {"content": "{}"}}).encode()))
     summ.OllamaBackend("http://localhost:11434/", "qwen3:4b").complete_json("s", "u", {})
-    assert checked == [("127.0.0.1", 11434)] and sent == ["http://127.0.0.1:11434/api/chat"]
+    assert checked == [("127.0.0.1", 11434)] and sent[-1] == "http://127.0.0.1:11434/api/chat"
+    assert all(u.startswith("http://127.0.0.1:11434/api/") for u in sent)   # the memory check too
 
 
 def test_pin_local(monkeypatch):
@@ -385,3 +386,112 @@ def test_worker_log_has_no_names_or_paths(tmp_path, capsys):
     err = capsys.readouterr().err
     assert "Anna" not in err and "Release planning" not in err and str(tmp_path / "Meetings") not in err
     assert "note written" in err
+
+
+# Too little memory, a restarting server ----------------------------------------
+
+GB = 10 ** 9
+
+
+def fake_ollama(monkeypatch, loaded=(), size=2.5 * GB, chat=None):
+    """Ollama's /api/ps, /api/tags and /api/chat; chat() answers or raises."""
+    from wirenote.process import summarize as summ
+
+    sent = []
+
+    def urlopen(req, timeout):
+        path = req.full_url.split("11434", 1)[1]
+        sent.append(path)
+        if path == "/api/ps":
+            body = {"models": [{"name": m} for m in loaded]}
+        elif path == "/api/tags":
+            body = {"models": [{"name": "llama3:latest", "size": 9 * GB},
+                               {"name": "qwen3:4b", "size": int(size)}]}
+        else:
+            body = chat() if chat else {"message": {"content": "{}"}}
+        return _Resp(json.dumps(body).encode())
+    monkeypatch.setattr(summ, "listener_uid", lambda port, host="127.0.0.1": None)
+    monkeypatch.setattr(summ.urllib.request, "urlopen", urlopen)
+    return sent
+
+
+def test_ollama_waits_for_memory_before_loading_the_model(monkeypatch):
+    from wirenote.process import summarize as summ
+
+    sent = fake_ollama(monkeypatch)
+    slept = []
+    monkeypatch.setattr(summ.time, "sleep", slept.append)
+    free = iter([1 * GB, 2 * GB, 4 * GB])            # programs close while it waits
+    monkeypatch.setattr(summ, "free_memory", lambda: next(free))
+    summ.OllamaBackend("http://127.0.0.1:11434", "qwen3:4b").complete_json("s", "u", {})
+    assert slept == [summ.MEMORY_POLL_S] * 2 and sent[-1] == "/api/chat"
+
+    # Never enough: give up after MEMORY_WAIT_S, without loading the model.
+    sent.clear()
+    monkeypatch.setattr(summ, "free_memory", lambda: 1 * GB)
+    with pytest.raises(summ.SummaryUnavailable, match=r"needs about 3.6 GB, 1.0 GB are free"):
+        summ.OllamaBackend("http://127.0.0.1:11434", "qwen3:4b").complete_json("s", "u", {})
+    assert "/api/chat" not in sent
+
+    # Already loaded: nothing more to make room for.
+    fake_ollama(monkeypatch, loaded=["qwen3:4b"])
+    summ.OllamaBackend("http://127.0.0.1:11434", "qwen3:4b").complete_json("s", "u", {})
+
+
+def test_a_killed_or_restarting_ollama_is_a_passing_failure(monkeypatch):
+    import urllib.error
+
+    from wirenote.process import summarize as summ
+
+    monkeypatch.setattr(summ, "free_memory", lambda: 99 * GB)
+    ollama = summ.OllamaBackend("http://127.0.0.1:11434", "qwen3:4b")
+
+    def raises(e):
+        def chat():
+            raise e
+        return chat
+    for e in (ConnectionRefusedError(111, "refused"), ConnectionResetError(104, "reset"),
+              urllib.error.HTTPError("u", 500, "llama runner process has terminated", {}, io.BytesIO())):
+        fake_ollama(monkeypatch, chat=raises(e))
+        with pytest.raises(summ.SummaryUnavailable):
+            ollama.complete_json("s", "u", {})
+    fake_ollama(monkeypatch, chat=raises(urllib.error.HTTPError("u", 404, "model not found", {}, io.BytesIO())))
+    with pytest.raises(SummaryError) as e:
+        ollama.complete_json("s", "u", {})
+    assert not isinstance(e.value, summ.SummaryUnavailable)    # asking again would not help
+
+
+def test_a_chunk_is_asked_again_once_after_a_passing_failure(monkeypatch):
+    from wirenote.process import summarize as summ
+
+    slept = []
+    monkeypatch.setattr(summ.time, "sleep", slept.append)
+    down = summ.SummaryUnavailable("Ollama not reachable")
+    assert summarize([Line("Me", 0, 1, "x")], FakeBackend([down]), 900, "auto").title
+    assert slept == [summ.RETRY_PAUSE_S]
+    with pytest.raises(summ.SummaryUnavailable):
+        summarize([Line("Me", 0, 1, "x")], FakeBackend([down, down]), 900, "auto")
+
+
+def test_the_summary_is_queued_again_until_attempts_are_used_up(tmp_path, monkeypatch):
+    from wirenote.process import summarize as summ
+
+    monkeypatch.setattr(summ.time, "sleep", lambda s: None)
+
+    class Down(FakeBackend):
+        def complete_json(self, system, user, schema):
+            raise summ.SummaryUnavailable("not enough free memory for qwen3:4b")
+
+    rec = make_recording(tmp_path)
+    jobs = Jobs(tmp_path / "jobs.db")
+    tr = FakeTranscriber()
+    job_id = jobs.add(rec)
+    for attempt in range(1, MAX_ATTEMPTS):
+        job = run_job(job_id, settings_for(tmp_path), jobs, tr, lambda s: Down(),
+                      voices=no_voices(tmp_path))
+        assert (job.state, job.summary_only, job.attempts) == ("queued", True, attempt)
+        assert "tries again in a few minutes" in Path(job.note).read_text()   # the transcript is there
+    job = run_job(job_id, settings_for(tmp_path), jobs, tr, lambda s: Down(), voices=no_voices(tmp_path))
+    assert job.state == "done" and tr.calls == 1                 # transcribed once
+    text = Path(job.note).read_text()
+    assert "not enough free memory" in text and "tries again" not in text

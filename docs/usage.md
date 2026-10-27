@@ -42,6 +42,8 @@ ollama pull qwen3:4b
 
 To use another model, `ollama pull <model>` and set it in **Settings**. `contrib/ollama.service` is a systemd user unit for an Ollama installed without root in `~/.local/opt/ollama`.
 
+**Little free memory.** `qwen3:4b` needs about 3.5 GB of free memory. If there is not enough, Wirenote waits up to 5 minutes for it instead of letting the kernel stop Ollama or another program. If the summary still fails, or Ollama stops in the middle, you get the note with the transcript, and Wirenote tries the summary again a few minutes later, up to three times. `contrib/ollama.service` also halves the memory Ollama needs to hold the transcript while it reads it (`OLLAMA_KV_CACHE_TYPE=q8_0`). On a computer with 8 GB of memory or less, `qwen3:1.7b` needs about 2 GB; its summaries are a little weaker.
+
 **Claude (optional).** Summaries are better, but call data is sent to Anthropic; see [PRIVACY.md](../PRIVACY.md) for the exact list. Check your employer's policy before using it for work calls. Choose Claude in **Settings** (it asks you to confirm), and paste your API key there, or:
 
 ```sh

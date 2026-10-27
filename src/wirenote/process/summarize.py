@@ -6,6 +6,10 @@ Backends: Ollama on this machine (the default, nothing leaves the laptop) or
 the Claude API. Both return JSON for one schema: title, summary points,
 decisions, action items with owners, open questions. Transcripts longer than
 summary_chunk_s are summarized per chunk, then the chunk notes are combined.
+
+A summary that fails for a passing reason (too little free memory to load the model,
+the model server restarting, a rate limit) raises SummaryUnavailable; the worker then
+writes the note and queues the summary again.
 """
 
 from __future__ import annotations
@@ -13,8 +17,10 @@ from __future__ import annotations
 import ipaddress
 import json
 import socket
+import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from dataclasses import asdict, dataclass, field
 from typing import Protocol
@@ -65,6 +71,26 @@ action item and open question, and keep the summary to at most 8 points."""
 
 class SummaryError(Exception):
     pass
+
+
+class SummaryUnavailable(SummaryError):
+    """Worth trying again later: not enough memory, the server restarting, a rate limit."""
+
+
+# docs/dev/PLAN.md › Defaults › Summary memory
+MEMORY_MARGIN = 1024 ** 3      # the context cache and Ollama's buffers, on top of the model file
+MEMORY_WAIT_S = 300.0          # how long to wait for that much free memory
+MEMORY_POLL_S = 15.0
+RETRY_PAUSE_S = 30.0           # before asking again after a passing failure
+
+
+def free_memory() -> int | None:
+    """Bytes a new process can take without the kernel killing one: free RAM plus free swap."""
+    try:
+        info = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
+        return sum(int(info[k].split()[0]) * 1024 for k in ("MemAvailable", "SwapFree"))
+    except (OSError, KeyError, ValueError):
+        return None
 
 
 @dataclass
@@ -139,6 +165,7 @@ class OllamaBackend:
             if owner is not None and not trusted_owner(owner):
                 raise SummaryError(f"Ollama on port {port} belongs to another user; "
                                    "not sending the transcript")
+            self._wait_for_memory(url)
         body = {"model": self.model, "stream": False, "format": schema, "think": False,
                 "messages": [{"role": "system", "content": system},
                              {"role": "user", "content": user}],
@@ -152,12 +179,52 @@ class OllamaBackend:
                 data = json.loads(resp.read())
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:300]
-            raise SummaryError(f"Ollama returned {e.code}: {detail}") from e
+            # 5xx: the model failed to load or its runner died, often for lack of memory.
+            error = SummaryUnavailable if e.code >= 500 else SummaryError
+            raise error(f"Ollama returned {e.code}: {detail}") from e
+        except TimeoutError as e:
+            raise SummaryError(f"Ollama did not answer within {self.timeout_s:.0f} s") from e
         except (urllib.error.URLError, OSError) as e:
-            raise SummaryError(f"Ollama not reachable at {self.url} ({e}); is it installed "
-                               f"and running, and is the model pulled "
-                               f"(ollama pull {self.model})?") from e
+            # Refused or cut off: not running, or killed and being restarted.
+            raise SummaryUnavailable(f"Ollama not reachable at {self.url} ({e}); is it installed "
+                                     f"and running, and is the model pulled "
+                                     f"(ollama pull {self.model})?") from e
         return _parse_json(data.get("message", {}).get("content", ""))
+
+    def _get(self, url: str, path: str) -> dict:
+        try:
+            with urllib.request.urlopen(urllib.request.Request(f"{url}{path}"), timeout=10) as resp:
+                return json.loads(resp.read())
+        except (OSError, ValueError):
+            return {}
+
+    def _mine(self, m: dict) -> bool:
+        names = {m.get("name"), m.get("model")}
+        return self.model in names or f"{self.model}:latest" in names
+
+    def _need(self, url: str) -> int | None:
+        """Bytes that loading the model takes: 0 if it is loaded, None if Ollama does not say."""
+        if any(self._mine(m) for m in self._get(url, "/api/ps").get("models") or []):
+            return 0
+        for m in self._get(url, "/api/tags").get("models") or []:
+            if self._mine(m) and isinstance(m.get("size"), int):
+                return m["size"] + MEMORY_MARGIN
+        return None
+
+    def _wait_for_memory(self, url: str) -> None:
+        """Loading a model without room for it gets Ollama, or another program, killed by
+        the kernel. Wait for room instead, at most MEMORY_WAIT_S."""
+        waited = 0.0
+        while True:
+            need, free = self._need(url), free_memory()
+            if not need or free is None or free >= need:
+                return
+            if waited >= MEMORY_WAIT_S:
+                raise SummaryUnavailable(
+                    f"not enough free memory for {self.model}: it needs about {need / 1e9:.1f} GB, "
+                    f"{free / 1e9:.1f} GB are free. Closing some programs helps")
+            time.sleep(MEMORY_POLL_S)
+            waited += MEMORY_POLL_S
 
 
 class AnthropicBackend:
@@ -191,11 +258,12 @@ class AnthropicBackend:
             raise SummaryError("Claude API: no valid API key (run `wirenote setup claude`, "
                                f"or set anthropic_api_key in {secrets_path()})") from e
         except anthropic.RateLimitError as e:
-            raise SummaryError("Claude API: rate limited, retry later") from e
+            raise SummaryUnavailable("Claude API: rate limited") from e
         except anthropic.APIStatusError as e:
-            raise SummaryError(f"Claude API error {e.status_code}: {e.message}") from e
+            error = SummaryUnavailable if e.status_code >= 500 else SummaryError   # 529: overloaded
+            raise error(f"Claude API error {e.status_code}: {e.message}") from e
         except anthropic.APIConnectionError as e:
-            raise SummaryError(f"Claude API not reachable: {e}") from e
+            raise SummaryUnavailable(f"Claude API not reachable: {e}") from e
         if resp.stop_reason == "refusal":
             raise SummaryError("Claude API declined to summarize this transcript")
         if resp.stop_reason == "max_tokens":
@@ -249,15 +317,21 @@ def summarize(lines: list[Line], backend: Backend, chunk_s: float, language: str
 
 
 def _ask(backend: Backend, system: str, user: str, schema: dict) -> dict:
-    """One call, retried once if the JSON does not match the schema."""
-    last = None
-    for _ in range(2):
+    """One call. Asked again once if the JSON does not match the schema, and once after a
+    pause if it failed for a passing reason, so one chunk does not cost the whole summary."""
+    last, bad, paused = None, 0, False
+    while bad < 2:
         try:
             data = backend.complete_json(system, user, schema)
             _check(data, schema)
             return data
+        except SummaryUnavailable:
+            if paused:
+                raise
+            paused = True
+            time.sleep(RETRY_PAUSE_S)
         except (ValueError, KeyError, TypeError) as e:
-            last = e
+            last, bad = e, bad + 1
     raise SummaryError(f"{backend.name} returned unusable JSON twice: {last}")
 
 
