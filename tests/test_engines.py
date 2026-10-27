@@ -35,6 +35,18 @@ def test_tokens_join_into_words_with_punctuation_and_offset():
     assert tokens_to_words(["Hallo"], [0.0], [0.3])[0].text == " Hallo"
 
 
+def test_speech_pieces_are_padded_but_never_overlap(monkeypatch):
+    """The VAD cuts speech longer than 30 s into pieces that touch; padding them must not
+    make two pieces share audio, or the words there are heard twice."""
+    import faster_whisper.vad
+
+    found = [{"start": 16000, "end": 480000}, {"start": 480000, "end": 960000},
+             {"start": 1000000, "end": 1100000}]
+    monkeypatch.setattr(faster_whisper.vad, "get_speech_timestamps", lambda audio, opts: found)
+    spans = engines.speech_spans(np.zeros(1102000, dtype=np.float32))
+    assert spans == [(12800, 480000), (480000, 963200), (996800, 1102000)]
+
+
 def test_whispercpp_json_skips_special_tokens():
     data = {"result": {"language": "de"}, "transcription": [
         {"tokens": [{"text": "[_BEG_]", "offsets": {"from": 0, "to": 0}},
