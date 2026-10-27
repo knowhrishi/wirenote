@@ -129,6 +129,10 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | Parakeet batch | 1 piece | Batches of 8 peaked at 3.0 GB on a 30-min call and were slower; one at a time stays at 1.4 GB |
 | whisper.cpp model | `ggml-large-v3-turbo-q5_0.bin` | Same model as the Whisper default, quantized for the GPU |
 | whisper.cpp time limit | 3 s per second of speech, at least 10 min | A `whisper-cli` stuck on a GPU driver must not hold up later notes; a slow CPU build stays inside |
+| Flagged moments | a flag within 2 s of the last one is dropped | A double press must not store two |
+| Flag window | 30 s before and 10 s after each flag | People flag just after hearing something; the summary prompt gets the lines in the window, at most 3000 characters, an equal share per flag with the words nearest it first, and at least 40 characters of text each; when that many flags do not fit, an even spread of them in time does. Each part of a long call gets only its own flags |
+| Flag a finished call | at most 24 h into it, and no later than its end when its length is known | Nothing is recorded that long (the cap is 4 h); a flag after the end is about the end |
+| Flag in the note | the line closest to each flag, no model; a line longer than the flag window is cut to it, by time in proportion to its characters, at word boundaries; a word longer than the window, as in a script written without spaces, is cut between characters | The same list every time; one speaker can make a paragraph minutes long; the app shows the same excerpt with jump links |
 | Live transcript | off | It uses CPU during the call |
 | Live engine | Parakeet where it knows the language, else Whisper `small`; downloaded models only; 2 threads | Fast enough to keep up; never a download during a call |
 | Live pieces | read every 1.5 s; cut after 0.5 s of silence (at least 2 s) or at 15 s | Whole sentences, a few seconds behind |
@@ -140,6 +144,8 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | API on another computer | https only; a confirmation per destination host | The key and transcript never travel in clear; a new host is a new place your calls go |
 | API on this computer | counts as local: owner check, no key, Ollama's Ask budget | Same as Ollama |
 | Shortest speaker | 8 s of speech in the whole call; less joins the speaker heard nearest in time | A laugh or a word through a bad line was split off as its own speaker; on a 30-min call with three people, five of seven speakers had 9 s together |
+| Summary template | `general`; picked per call: the one you chose, the one kept for its calendar series, a whole-word match of the meeting title, a call-app match, the default | A standup, an interview and a lecture need different sections; the title only selects, it is never part of the instructions |
+| Template files | at most 6 sections, 2000 characters of instructions, a section key of `a-z`, `0-9`, `_` (32 at most), 64 KB per file | A summary request stays small and a bad file is skipped, not guessed at |
 | Summary memory | wait until free RAM plus free swap holds the Ollama model's file + 1 GB; check every 15 s, at most 5 min | Loading without room gets Ollama or another program killed |
 | Summary passing failure | ask again once after 30 s; then write the note and queue the summary again after 60 s, up to 3 attempts | Ollama restarts in seconds and memory frees up; the transcript is never held back |
 

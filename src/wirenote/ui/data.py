@@ -23,7 +23,7 @@ import threading
 import time
 from pathlib import Path
 
-from ..capture.recorder import read_manifest, write_manifest
+from ..capture.recorder import add_flag, read_flags, read_manifest, write_flags, write_manifest
 from ..config.secrets import (calendar_sources, load_secrets, save_secrets, with_config_value,
                               write_config_atomic)
 from ..config.settings import DEFAULT_CONFIG_TOML, Settings, config_dir, parse_settings
@@ -31,10 +31,11 @@ from ..config.vocabulary import load_vocabulary, save_vocabulary
 from ..process.engines import ENGINES, OVERRIDES, check_overrides
 from ..process.jobs import Jobs
 from ..process.live import LIVE
-from ..process.merge import Line, as_text, paragraphs, stamp
+from ..process.merge import Line, as_text, flag_excerpt, paragraphs, stamp
 from ..process.note import action_line, own_note, segment_file, title_for
 from ..process.speakers import Voices, display_name
 from ..process.summarize import Summary, SummaryError, make_backend, pin_local
+from ..process.templates import remember_series, scan, series_templates
 from ..process.worker import MY_NOTES, SUMMARY, TRANSCRIPT, read_my_notes, rewrite_note
 
 REC_ID = re.compile(r"^\d{8}-\d{6}-[A-Za-z0-9_.-]{1,64}$")
@@ -81,7 +82,7 @@ subject: a short subject line."""
 EDITABLE = ("consent_line", "summary_backend", "ollama_model", "anthropic_model",
             "openai_url", "openai_model",
             "whisper_model", "whisper_language", "summary_language", "asr_engine",
-            "live_transcript")
+            "live_transcript", "default_template")
 SWITCHES = ("live_transcript",)    # the EDITABLE settings that are true or false
 LIVE_READ = 256 * 1024             # most of live.jsonl sent per poll
 BACKENDS = ("ollama", "anthropic", "openai", "none")
@@ -103,6 +104,9 @@ UPDATE_DISCLOSURE = ("Once a day, Wirenote asks pypi.org for the newest version 
 FOLLOWUP_SCHEMA = {"type": "object",
                    "properties": {"subject": {"type": "string"}, "body": {"type": "string"}},
                    "required": ["subject", "body"], "additionalProperties": False}
+
+
+MAX_FLAG_S = 24 * 3600      # docs/dev/PLAN.md › Defaults › Flag a finished call
 
 
 class NotFound(Exception):
@@ -277,8 +281,10 @@ class Store:
             if q in name.lower():
                 return {"where": "people", "text": name}
         s = self._summary(d) or {}
-        for key in ("summary", "decisions", "open_questions"):
-            for item in s.get(key, []):
+        for key, items in (("summary", s.get("summary", [])), ("decisions", s.get("decisions", [])),
+                           ("open_questions", s.get("open_questions", [])),
+                           *(s.get("sections") or {}).items()):
+            for item in items or []:
                 if q in item.lower():
                     return {"where": key, "text": item}
         for a in s.get("action_items", []):
@@ -307,6 +313,10 @@ class Store:
         note = self._note(m)
         has_audio = any(d.glob("*.wav"))
         lines = tr.get("lines", [])
+        summary = self._summary(d)
+        used = (summary or {}).get("template") or "general"
+        template = scan()[0].get(used)
+        uid = (m.get("calendar") or {}).get("uid")
         talk: dict[str, float] = {}
         for l in lines:
             talk[l["speaker"]] = talk.get(l["speaker"], 0.0) + max(0.0, l["end"] - l["start"])
@@ -318,7 +328,13 @@ class Store:
                    "can_remember": bool((speakers.get(label) or {}).get("embedding"))}
                   for label in sorted(talk, key=lambda l: (l != "Me", -talk[l]))]
         return {**brief,
-                "summary": self._summary(d),
+                "summary": summary,
+                "template": used,
+                "templates": self.templates(),
+                "section_titles": {s.key: s.title for s in template.sections} if template else {},
+                "chosen_template": m.get("template"),
+                "in_series": bool(uid),
+                "series_template": series_templates(self.state_dir).get(str(uid)) if uid else None,
                 "lines": lines,
                 "people": people,
                 "names": {p["label"]: p["name"] for p in people},
@@ -332,9 +348,51 @@ class Store:
                 "audio_deleted": m.get("audio_deleted"),
                 "end_reason": m.get("end_reason"),
                 "my_notes": read_my_notes(d),
+                "flags": self._flags(d, lines, speakers),
                 "followup": _read_json(d / FOLLOWUP),
                 "asks": _read_json(d / ASKS, []) or [],
                 "known_voices": [v["name"] for v in self.voices.names()]}
+
+    def _flags(self, d: Path, lines: list[dict], speakers: dict) -> list[dict]:
+        """Each flag with what was said at it, as in the note (process/merge.py
+        flag_excerpt; None before there is a transcript)."""
+        found = [Line(**l) for l in lines]
+        out = []
+        for t in read_flags(d):
+            line = flag_excerpt(found, t, self.settings.flag_before_s, self.settings.flag_after_s)
+            out.append({"t": t, "start": line.start if line else t,
+                        "speaker": line.speaker if line else None,
+                        "name": display_name(line.speaker, speakers) if line else None,
+                        "text": line.text if line else ""})
+        return out
+
+    def control(self, command: str) -> dict:
+        """Send the daemon a command (flag); its reply, or an error if it is not running."""
+        from ..tools.setup import control
+
+        return control(command)
+
+    def add_flag(self, rec_id: str, t: float) -> list[float]:
+        """Flag a moment of a finished call (a line of the transcript, an imported call).
+        While the call records the daemon owns flags.json, so the app flags through it."""
+        d = self.rec_dir(rec_id)
+        if isinstance(t, bool) or not isinstance(t, (int, float)) or not 0 <= t <= MAX_FLAG_S:
+            raise Invalid("bad time")
+        if self.status().get("recording_id") == rec_id:
+            raise Invalid("This call is still recording. Flag it with Flag this moment.")
+        m = read_manifest(d)
+        length = max((x.get("end_offset_s") or 0.0 for x in m.get("segments", [])), default=0.0)
+        if length > 0:
+            t = min(t, length)       # a flag after the end is about the end
+        flags = read_flags(d)
+        added = add_flag(flags, round(float(t), 1))
+        if added is None:
+            return flags
+        write_flags(d, added)
+        state, _ = self._job_state(d)
+        if state == "done" and read_manifest(d).get("note"):
+            rewrite_note(d, self.settings)
+        return added
 
     def rename(self, rec_id: str, title: str) -> None:
         d = self.rec_dir(rec_id)
@@ -481,10 +539,23 @@ class Store:
 
     # Processing ------------------------------------------------------------
 
-    def requeue(self, rec_id: str, summary_only: bool, choices: dict | None = None) -> int:
+    def templates(self) -> list[dict]:
+        """The summary templates to choose from, built-in first (a bad file is left out)."""
+        return [{"id": t.id, "name": t.name} for t in scan()[0].values()]
+
+    def requeue(self, rec_id: str, summary_only: bool, choices: dict | None = None,
+                template: str | None = None, series: bool = False) -> int:
         """Queue the call again; choices (engine, model, language) apply to this call's
-        transcriptions from now on, and an empty one goes back to the setting."""
+        transcriptions from now on, and an empty one goes back to the setting. template
+        sets the summary template for this call ("" goes back to automatic); series also
+        remembers it for the calendar event's later occurrences, and with "" forgets it."""
         d = self.rec_dir(rec_id)
+        if template and template not in scan()[0]:
+            raise Invalid("no such summary template")
+        uid = (read_manifest(d).get("calendar") or {}).get("uid")
+        if series and (template is None or not uid):
+            raise Invalid("a template can be kept for a series only for a call from a "
+                          "calendar event, and needs a template or automatic")
         if not summary_only and not any(d.glob("*.wav")):
             raise Invalid("the audio was deleted; only the summary can be redone")
         if summary_only and not (d / TRANSCRIPT).exists():
@@ -500,6 +571,15 @@ class Store:
             defaults = {k: getattr(self.settings, v) for k, v in OVERRIDES.items()}
             m["transcribe"] = {k: v for k, v in kept.items() if v != defaults[k]}
             write_manifest(d, m)
+        if template is not None:
+            m = read_manifest(d)
+            if template:
+                m["template"] = template
+            else:
+                m.pop("template", None)
+            write_manifest(d, m)
+            if series:
+                remember_series(self.state_dir, str(uid), template)
         with self._jobs_lock:
             job = self.jobs.add(d, summary_only=summary_only)
         poke_daemon("kick-jobs")
@@ -559,6 +639,13 @@ class Store:
         if cal.get("attendees"):
             notes.append("Invited: " + ", ".join(cal["attendees"]))
         notes.append("Summary:\n" + "\n".join(f"- {x}" for x in s.get("summary", [])))
+        template = scan()[0].get(s.get("template") or "general")
+        for key, items in (s.get("sections") or {}).items():
+            if items:
+                head = next((x.title for x in template.sections if x.key == key), None) \
+                    if template else None
+                notes.append(f"{head or key.replace('_', ' ').capitalize()}:\n"
+                             + "\n".join(f"- {x}" for x in items))
         if s.get("decisions"):
             notes.append("Decisions:\n" + "\n".join(f"- {x}" for x in s["decisions"]))
         if s.get("action_items"):
@@ -685,6 +772,7 @@ class Store:
                 "vocabulary": load_vocabulary(), "voices": self.voices.names(),
                 "calendars": self.calendars(),
                 "editable": {k: getattr(s, k) for k in EDITABLE},
+                "templates": self.templates(),
                 "anthropic_key_set": bool(secrets.get("anthropic_api_key")
                                           or os.environ.get("ANTHROPIC_API_KEY")),
                 "openai_key_set": bool(secrets.get("openai_api_key")),
@@ -708,6 +796,8 @@ class Store:
                 raise Invalid(f"{k}: one line of plain text")
         if "asr_engine" in changes and changes["asr_engine"] not in ENGINES:
             raise Invalid(f"asr_engine: one of {', '.join(ENGINES)}")
+        if "default_template" in changes and changes["default_template"] not in scan()[0]:
+            raise Invalid("default_template: one of " + ", ".join(scan()[0]))
         backend = changes.get("summary_backend")
         if backend is not None and backend not in BACKENDS:
             raise Invalid(f"summary_backend: one of {', '.join(BACKENDS)}")

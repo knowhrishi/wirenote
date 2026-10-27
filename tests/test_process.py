@@ -41,7 +41,7 @@ class FakeBackend:
             raise reply
         if reply is not None:
             return reply
-        return GOOD if schema is FINAL_SCHEMA else {k: GOOD[k] for k in CHUNK_SCHEMA["required"]}
+        return GOOD if "title" in schema["required"] else {k: GOOD[k] for k in CHUNK_SCHEMA["required"]}
 
 
 # Merge -------------------------------------------------------------------------
@@ -265,6 +265,212 @@ def test_remembered_voice_names_the_speaker_and_my_notes_reach_the_summary(tmp_p
     assert "- changelog: me" in summary_call[1] and "Anna Schmidt: Shall we ship" in summary_call[1]
     speakers = json.loads((rec / TRANSCRIPT).read_text())["speakers"]
     assert speakers["S1"]["name"] == "Anna Schmidt" and speakers["S1"]["source"] == "voice"
+
+
+def test_flagged_lines_pick_what_was_said_around_each_flag():
+    from wirenote.process.merge import flagged_lines, nearest_line
+
+    lines = [Line("S1", 0.0, 10.0, "a"), Line("Me", 40.0, 45.0, "b"), Line("S1", 100.0, 110.0, "c")]
+    got = flagged_lines(lines, [50.0, 52.0, 300.0], 30.0, 10.0)
+    assert [(t, l.text) for t, l in got] == [(50.0, "b")]            # one line, once; 300 s has none
+    got = flagged_lines(lines, [11.0, 105.0], 5.0, 10.0)
+    assert [(t, l.text) for t, l in got] == [(11.0, "a"), (105.0, "c")]
+    assert flagged_lines(lines, [], 30.0, 10.0) == []
+    assert nearest_line(lines, 48.0).text == "b" and nearest_line(lines, 70.0).text == "b"
+    assert nearest_line(lines, 99.0).text == "c" and nearest_line([], 5.0) is None
+
+
+def test_flagged_moments_reach_prompt_and_note(tmp_path):
+    from wirenote.capture.recorder import write_flags
+    from wirenote.process.worker import rewrite_note
+
+    rec = make_recording(tmp_path)
+    write_flags(rec, [4.4])
+    s = replace(settings_for(tmp_path), flag_before_s=1.0, flag_after_s=0.5)
+    jobs = Jobs(tmp_path / "jobs.db")
+    backend = FakeBackend()
+    job = run_job(jobs.add(rec), s, jobs, FakeTranscriber(), lambda _s: backend,
+                  voices=no_voices(tmp_path))
+    user = [c for c in backend.calls if c[2] is FINAL_SCHEMA][0][1]
+    block = ("Moments Me flagged as important. Make sure the summary covers them:\n"
+             "[00:00:04] Me: Yes, Friday works.")
+    assert block in user
+    assert user.count("Shall we ship on Friday?") == 1                # not part of the flagged block
+    note = Path(job.note)
+    assert "## Flagged moments\n\n- [00:00:04] **Me** Yes, Friday works.\n" in note.read_text()
+
+    # Renaming a speaker or editing notes re-renders the note; the flags stay.
+    write_flags(rec, [1.5, 4.4])
+    (rec / "my_notes.md").write_text("- more")
+    rewrite_note(rec, replace(s, flag_before_s=2.0))     # a window the 2 s line fits in whole
+    text = note.read_text()
+    assert "## Flagged moments\n\n- [00:00:01] **Speaker 1** Shall we ship on Friday?\n" in text
+    assert "- [00:00:04] **Me** Yes, Friday works." in text and "## My notes" in text
+
+
+def test_a_call_without_flags_has_no_flagged_section(tmp_path):
+    rec = make_recording(tmp_path)
+    jobs = Jobs(tmp_path / "jobs.db")
+    backend = FakeBackend()
+    job = run_job(jobs.add(rec), settings_for(tmp_path), jobs, FakeTranscriber(), lambda _s: backend,
+                  voices=no_voices(tmp_path))
+    assert "Flagged" not in Path(job.note).read_text()
+    assert "flagged" not in [c for c in backend.calls if c[2] is FINAL_SCHEMA][0][1]
+
+
+class MonologueTranscriber:
+    """Ten minutes of one speaker with short pauses: one paragraph of 9,599 characters."""
+
+    def recording(self, rec_dir, manifest):
+        return ([Line("S1", float(i), i + 0.9, f"Point {i:03d} here.") for i in range(600)],
+                [{"file": "mic-000.wav", "language": "en"}], None)
+
+
+def _seconds_of(stamp: str) -> int:
+    h, m, s = (int(x) for x in stamp.split(":"))
+    return h * 3600 + m * 60 + s
+
+
+def test_flags_in_a_long_paragraph_keep_their_own_moment(tmp_path):
+    from wirenote.capture.recorder import write_flags
+    from wirenote.ui.data import Store
+
+    rec = make_recording(tmp_path)
+    flags = [100.0, 300.0, 500.0, 520.0, 540.0, 560.0, 580.0]
+    write_flags(rec, flags)
+    s = replace(settings_for(tmp_path), recordings_dir=str(tmp_path / "recordings"))
+    jobs = Jobs(tmp_path / "state" / "jobs.db")
+    backend = FakeBackend()
+    job = run_job(jobs.add(rec), s, jobs, MonologueTranscriber(), lambda _s: backend,
+                  voices=no_voices(tmp_path))
+    assert len(json.loads((rec / TRANSCRIPT).read_text())["lines"]) == 1     # one paragraph
+
+    # The prompt: every flag brings the words around it, within one shared cap.
+    user = [c for c in backend.calls if c[2] is FINAL_SCHEMA][0][1]
+    block = user.split("Make sure the summary covers them:\n")[1].split("\n\nTranscript:")[0]
+    assert len(block) <= 3000 and "Point 000" not in block
+    for t in flags:
+        assert f"Point {int(t):03d}" in block
+    assert all(not l.startswith("[00:00:00]") for l in block.splitlines())
+
+    # The note: one bullet per flag, each the part of the paragraph around it.
+    text = Path(job.note).read_text()
+    bullets = text.split("## Flagged moments\n\n")[1].split("\n\n## ")[0].splitlines()
+    assert len(bullets) == len(flags)
+    for t, b in zip(flags, bullets):
+        assert f"Point {int(t):03d}" in b and len(b) < 1000
+        assert abs(_seconds_of(b[3:11]) - (t - 30)) <= 2
+
+    # The app: the same excerpt, and its own start to jump to.
+    got = Store(s, tmp_path / "state", voices=no_voices(tmp_path)).call(rec.name)["flags"]
+    assert [round(f["start"]) for f in got] == [round(t - 30) for t in flags]
+    for f, b in zip(got, bullets):
+        assert f"Point {int(f['t']):03d}" in f["text"] and b.endswith(f["text"])
+
+
+_CJK_DIGITS = "〇一二三四五六七八九"
+
+
+def _cjk_point(i: int) -> str:
+    """Point i in a script written without spaces: 第一〇〇点 for 100."""
+    return "第" + "".join(_CJK_DIGITS[int(d)] for d in f"{i:03d}") + "点"
+
+
+class UnspacedTranscriber:
+    """Ten minutes of one speaker in a script without spaces: one line of 3,600 characters
+    and no word boundary in it."""
+
+    def recording(self, rec_dir, manifest):
+        text = "".join(_cjk_point(i) + "。" for i in range(600))
+        return ([Line("S1", 0.0, 600.0, text)], [{"file": "mic-000.wav", "language": "zh"}], None)
+
+
+def test_text_without_spaces_is_cut_by_characters():
+    from wirenote.process.merge import around
+
+    text = "".join(_cjk_point(i) + "。" for i in range(600))
+    line = Line("S1", 0.0, 600.0, text)
+    part = around(line, 300.0, 30.0, 10.0)
+    assert _cjk_point(300) in part.text and len(part.text) <= 40 * 6 + 2
+    assert part.text.startswith("…") and part.text.endswith("…")
+    assert abs(part.start - 270.0) < 1 and abs(part.end - 310.0) < 1
+    small = around(line, 300.0, 30.0, 10.0, max_chars=20)
+    assert 10 <= len(small.text) <= 20 and abs(small.start - 297.0) < 2
+    # Spaced text still cuts between words.
+    spaced = Line("S1", 0.0, 100.0, " ".join(f"word{i:03d}" for i in range(100)))
+    assert around(spaced, 50.0, 3.0, 1.0).text == "…word047 word048 word049 word050…"
+
+
+def test_flags_in_text_without_spaces_keep_their_own_moment(tmp_path):
+    from wirenote.capture.recorder import write_flags
+    from wirenote.ui.data import Store
+
+    rec = make_recording(tmp_path)
+    flags = [100.0, 300.0, 500.0, 540.0]
+    write_flags(rec, flags)
+    s = replace(settings_for(tmp_path), recordings_dir=str(tmp_path / "recordings"))
+    jobs = Jobs(tmp_path / "state" / "jobs.db")
+    backend = FakeBackend()
+    job = run_job(jobs.add(rec), s, jobs, UnspacedTranscriber(), lambda _s: backend,
+                  voices=no_voices(tmp_path))
+
+    user = [c for c in backend.calls if c[2] is FINAL_SCHEMA][0][1]
+    assert "Make sure the summary covers them:\n" in user
+    block = user.split("Make sure the summary covers them:\n")[1].split("\n\nTranscript:")[0]
+    assert len(block) <= 3000 and _cjk_point(0) not in block
+    for t in flags:
+        assert _cjk_point(int(t)) in block
+    assert all(not l.startswith("[00:00:00]") for l in block.splitlines())
+
+    text = Path(job.note).read_text()
+    bullets = text.split("## Flagged moments\n\n")[1].split("\n\n## ")[0].splitlines()
+    assert len(bullets) == len(flags)
+    for t, b in zip(flags, bullets):
+        assert _cjk_point(int(t)) in b and len(b) < 400
+        assert abs(_seconds_of(b[3:11]) - (t - 30)) <= 2
+
+    got = Store(s, tmp_path / "state", voices=no_voices(tmp_path)).call(rec.name)["flags"]
+    assert [round(f["start"]) for f in got] == [round(t - 30) for t in flags]
+    for f, b in zip(got, bullets):
+        assert _cjk_point(int(f["t"])) in f["text"] and len(f["text"]) < 400 and b.endswith(f["text"])
+
+
+def test_many_flags_still_reach_the_summary():
+    import re
+
+    from wirenote.process.worker import FLAGGED_CAP, _flagged
+
+    lines = paragraphs(MonologueTranscriber().recording(None, None)[0], 1.5)
+    flags = [2.0 + 4 * k for k in range(150)]
+    names = {"S1": "Priya"}
+    got = _flagged(lines, flags, Settings(), names)
+    assert got.startswith("Moments Me flagged as important.")
+    block = got.split("Make sure the summary covers them:\n")[1]
+    assert 0 < len(block) <= FLAGGED_CAP
+    rows = block.splitlines()
+    assert len(rows) >= 20
+    for row in rows:
+        text = row.split("] Priya: ", 1)[1]
+        assert len(text) >= 30 and "Point" in text
+    # The flags kept are spread over the whole call, not only its start.
+    said = [int(p) for p in re.findall(r"Point (\d{3})", block)]
+    assert min(said) < 60 and max(said) > 540
+
+
+def test_each_summary_part_gets_only_its_own_flags(tmp_path):
+    from wirenote.capture.recorder import write_flags
+
+    rec = make_recording(tmp_path)
+    write_flags(rec, [4.4])
+    s = replace(settings_for(tmp_path), flag_before_s=1.0, flag_after_s=0.5, summary_chunk_s=2.0)
+    jobs = Jobs(tmp_path / "jobs.db")
+    backend = FakeBackend()
+    run_job(jobs.add(rec), s, jobs, FakeTranscriber(), lambda _s: backend, voices=no_voices(tmp_path))
+    first, second = [c[1] for c in backend.calls if c[2] is CHUNK_SCHEMA]
+    combine = [c[1] for c in backend.calls if c[2] is FINAL_SCHEMA][0]
+    assert "flagged" not in first and "Yes, Friday works." not in first
+    assert "Moments Me flagged" in second and second.count("Yes, Friday works.") == 2
+    assert "Moments Me flagged as important" in combine and "Yes, Friday works." in combine
 
 
 def test_names_are_guessed_only_with_evidence_in_the_transcript():
@@ -596,3 +802,135 @@ def test_an_unreachable_api_is_a_passing_failure(monkeypatch):
     monkeypatch.setattr(summ, "listener_uid", lambda port, host="127.0.0.1": None)
     with pytest.raises(summ.SummaryUnavailable):                   # LM Studio not started yet
         OpenAIBackend("http://127.0.0.1:1234/v1", "m").complete_json("s", "u", {})
+
+
+# Templates ---------------------------------------------------------------------
+
+STANDUP_REPLY = {**GOOD, "sections": {"updates": ["Ana: finished the release notes"],
+                                      "blockers": ["Ben is blocked on a review"]}}
+
+
+class SectionsBackend(FakeBackend):
+    """Answers a template's summary request with STANDUP_REPLY; the speaker-name request
+    that comes first in a worker run gets the plain fake answer."""
+
+    def complete_json(self, system, user, schema):
+        if "sections" in schema["properties"] and "title" in schema["required"]:
+            self.calls.append((system, user, schema))
+            return STANDUP_REPLY
+        return super().complete_json(system, user, schema)
+
+    def summary_call(self):
+        return next(c for c in self.calls if "sections" in c[2]["properties"])
+
+
+def test_template_sections_reach_schema_note_and_summary_json(tmp_path):
+    rec = make_recording(tmp_path, template="standup")
+    jobs = Jobs(tmp_path / "jobs.db")
+    backend = SectionsBackend()
+    job = run_job(jobs.add(rec), settings_for(tmp_path), jobs, FakeTranscriber(),
+                  lambda s: backend, voices=no_voices(tmp_path))
+    props = backend.summary_call()[2]["properties"]["sections"]
+    assert props["required"] == ["updates", "blockers"] and props["additionalProperties"] is False
+    text = Path(job.note).read_text()
+    assert "## Summary\n\n- Planned the 2.0 release.\n\n## Updates by person\n\n" \
+           "- Ana: finished the release notes\n\n## Blockers\n\n- Ben is blocked on a review" in text
+    assert 'template: "standup"' in text
+    # docs/dev/changes.md › Note files: new front matter keys go at the end.
+    keys = [l.split(":")[0] for l in text.split("---\n")[1].splitlines()]
+    assert keys[-2:] == ["recording_id", "template"]
+    saved = json.loads((rec / "summary.json").read_text())
+    assert saved["template"] == "standup" and saved["sections"]["blockers"] == [
+        "Ben is blocked on a review"]
+
+
+def test_general_notes_have_no_template_key_and_no_extra_sections(tmp_path):
+    rec = make_recording(tmp_path)
+    jobs = Jobs(tmp_path / "jobs.db")
+    backend = FakeBackend()
+    job = run_job(jobs.add(rec), settings_for(tmp_path), jobs, FakeTranscriber(),
+                  lambda s: backend, voices=no_voices(tmp_path))
+    call = [c for c in backend.calls if c[2] is FINAL_SCHEMA][0]
+    assert "Meeting type" not in call[0]
+    assert "template:" not in Path(job.note).read_text()
+    assert json.loads((rec / "summary.json").read_text())["sections"] == {}
+
+
+def test_chunked_summary_keeps_sections():
+    from wirenote.process.templates import BUILTIN
+
+    lines = [Line("Me", t, t + 5, f"point {t}") for t in range(0, 2700, 300)]
+    standup = BUILTIN["standup"]
+    chunk = {k: GOOD[k] for k in CHUNK_SCHEMA["required"]}
+    backend = FakeBackend([{**chunk, "sections": {"updates": [f"u{i}"], "blockers": []}}
+                           for i in range(3)] + [STANDUP_REPLY])
+    s = summarize(lines, backend, 900, "auto", template=standup)
+    assert all("sections" in c[2]["required"] for c in backend.calls)
+    assert "sections" not in CHUNK_SCHEMA["required"]
+    assert "sections.updates" in backend.calls[0][0]
+    assert '"updates": ["u0"]' in backend.calls[-1][1]          # the chunk notes reach the combine step
+    assert s.template == "standup" and s.sections == {
+        "updates": ["Ana: finished the release notes"], "blockers": ["Ben is blocked on a review"]}
+
+
+def test_sections_the_model_adds_or_misses_are_handled():
+    from wirenote.process.templates import BUILTIN
+
+    odd = {**GOOD, "sections": {"updates": [" a ", ""], "blockers": [], "extra": ["x"]}}
+    s = summarize([Line("Me", 0, 1, "x")], FakeBackend([odd]), 900, "auto", template=BUILTIN["standup"])
+    assert s.sections == {"updates": ["a"], "blockers": []}
+    with pytest.raises(SummaryError, match="unusable JSON twice"):
+        summarize([Line("Me", 0, 1, "x")], FakeBackend([{**GOOD, "sections": {"updates": []}},
+                                                         {**GOOD, "sections": "no"}]),
+                  900, "auto", template=BUILTIN["standup"])
+
+
+def test_rewrite_note_keeps_template_sections(tmp_path):
+    from wirenote.process.worker import rewrite_note
+
+    rec = make_recording(tmp_path, template="standup")
+    jobs = Jobs(tmp_path / "jobs.db")
+    job = run_job(jobs.add(rec), settings_for(tmp_path), jobs, FakeTranscriber(),
+                  lambda s: SectionsBackend(), voices=no_voices(tmp_path))
+    rewrite_note(rec, settings_for(tmp_path))
+    text = Path(job.note).read_text()
+    assert "## Blockers\n\n- Ben is blocked on a review" in text and 'template: "standup"' in text
+    # A template file that is gone still leaves the section, under its key.
+    data = json.loads((rec / "summary.json").read_text())
+    data["sections"] = {"old_part": ["kept"]}
+    data["template"] = "deleted-template"
+    (rec / "summary.json").write_text(json.dumps(data))
+    rewrite_note(rec, settings_for(tmp_path))
+    assert "## Old part\n\n- kept" in Path(job.note).read_text()
+    # A summary.json from 0.3 has neither key.
+    for k in ("sections", "template"):
+        data.pop(k)
+    (rec / "summary.json").write_text(json.dumps(data))
+    text = rewrite_note(rec, settings_for(tmp_path)).read_text()
+    assert "## Summary" in text and "template:" not in text and "Old part" not in text
+
+
+def test_template_sections_and_flagged_moments_share_one_note(tmp_path):
+    from wirenote.capture.recorder import write_flags
+    from wirenote.process.worker import rewrite_note
+
+    rec = make_recording(tmp_path, template="standup")
+    write_flags(rec, [4.4])
+    s = replace(settings_for(tmp_path), flag_before_s=1.0, flag_after_s=0.5)
+    jobs = Jobs(tmp_path / "jobs.db")
+    backend = SectionsBackend()
+    job = run_job(jobs.add(rec), s, jobs, FakeTranscriber(), lambda _s: backend,
+                  voices=no_voices(tmp_path))
+    user = backend.summary_call()[1]
+    assert "Moments Me flagged as important" in user and "[00:00:04] Me: Yes, Friday works." in user
+    note = Path(job.note)
+
+    def check(text):
+        assert "## Blockers\n\n- Ben is blocked on a review" in text
+        assert "## Flagged moments\n\n- [00:00:04] **Me** Yes, Friday works." in text
+        assert text.index("## Summary") < text.index("## Blockers") < text.index("## Flagged moments") \
+            < text.index("## Transcript")
+
+    check(note.read_text())
+    rewrite_note(rec, s)
+    check(note.read_text())

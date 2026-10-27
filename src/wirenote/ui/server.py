@@ -353,6 +353,8 @@ def make_handler(app: App):
                 return self._json(_control("stop-in-app"))
             if path == "/api/record":
                 return self._json(_control("record-now"))
+            if path == "/api/flag":
+                return self._json(store.control("flag"))
             if path == "/api/ask":
                 return self._json(store.ask_all(str(self._body().get("question", ""))))
             if path == "/api/vocabulary":
@@ -380,7 +382,10 @@ def make_handler(app: App):
             rec_id, action, index = m.group(1), m.group(2), m.group(3)
             body = self._body()
             if action == "/resummarize":
-                return self._json({"job": store.requeue(rec_id, summary_only=True)})
+                template = body.get("template")
+                return self._json({"job": store.requeue(
+                    rec_id, summary_only=True, series=bool(body.get("series")),
+                    template=None if template is None else str(template))})
             if action == "/retranscribe":
                 return self._json({"job": store.requeue(rec_id, summary_only=False,
                                                         choices=body.get("choices"))})
@@ -397,6 +402,8 @@ def make_handler(app: App):
                 return self._json({"ok": True})
             if action == "/followup":
                 return self._json(store.followup(rec_id))
+            if action == "/flags":
+                return self._json({"flags": store.add_flag(rec_id, body.get("t"))})
             if action == "/rename":
                 store.rename(rec_id, str(body.get("title", "")))
                 return self._json({"ok": True})

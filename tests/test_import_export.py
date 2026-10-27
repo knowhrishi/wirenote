@@ -204,3 +204,20 @@ def test_daemon_starts_a_queued_job_when_told(tmp_path):
     d = make(tmp_path)
     assert not d._worker_kick.is_set()
     assert d._control("kick-jobs")["ok"] and d._worker_kick.is_set()
+
+
+def test_word_export_holds_template_sections():
+    s = {**call_data()["summary"], "sections": {"blockers": ["Ben waits for a review"], "empty": []}}
+    text = docx_text(docx_bytes(call_data(summary=s, section_titles={"blockers": "Blockers"})))
+    assert "Blockers" in text and "Ben waits for a review" in text and "Empty" not in text
+    assert text.index("Planned the release") < text.index("Blockers") < text.index("Ship on Friday.")
+
+
+def test_word_export_holds_flagged_moments():
+    flags = [{"t": 62.0, "start": 61.0, "speaker": "S1", "name": "Anna", "text": "Shall we ship?"},
+             {"t": 900.0, "start": 900.0, "speaker": None, "name": None, "text": ""}]   # no line yet
+    text = docx_text(docx_bytes(call_data(flags=flags)))
+    assert "Flagged moments" in text and "00:01:01Anna Shall we ship?" in text.replace("  ", "")
+    assert text.index("Ship on Friday.") < text.index("Flagged moments") < text.index("My notes")
+    assert "00:15:00" not in text
+    assert "Flagged moments" not in docx_text(docx_bytes(call_data(flags=flags[1:])))

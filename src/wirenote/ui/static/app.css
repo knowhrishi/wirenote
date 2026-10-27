@@ -556,6 +556,33 @@ li:hover > .jump, .jump:focus-visible { opacity: 1; }
 .t-speaker.me { color: var(--accent-ink); }
 .t-speaker.others { color: var(--text-2); }
 .t-text { color: var(--text); }
+.t-line { position: relative; }
+.t-line.flagged { box-shadow: inset 3px 0 0 var(--accent); }
+.t-flag {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--faint);
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s;
+}
+.t-line:hover .t-flag, .t-flag:focus-visible, .t-flag.on { opacity: 1; }
+.t-flag:hover { background: var(--hover); color: var(--text); }
+.t-flag.on { color: var(--accent-ink); }
+.t-flag .icon { width: 15px; height: 15px; }
+.flag-count { font-size: 13px; font-weight: 500; color: var(--muted); }
+.flag-list { margin: 0; padding: 0; list-style: none; }
+.flag-list li { display: flex; align-items: baseline; gap: 12px; padding: 6px 0; }
+.flag-list .t-time { flex: none; }
+.flag-list .flag-text { flex: 1; min-width: 0; }
+.flag-list .jump { position: static; opacity: 1; flex: none; }
 
 /* Home -------------------------------------------------------------------- */
 

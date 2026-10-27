@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from wirenote.capture.recorder import read_manifest
+from wirenote.capture.recorder import read_manifest, write_flags, write_manifest
 from wirenote.process.merge import Line
 from wirenote.ui import data as data_mod
 from wirenote.ui.data import Invalid, NotFound, Store, _relevant
@@ -74,6 +74,72 @@ def test_rename_and_requeue_rules(store):
         st.requeue(rec_id, summary_only=False)
     st.requeue(rec_id, summary_only=True)
     assert st.calls()[0]["state"] == "queued"
+
+
+def test_requeue_with_template_and_series(store):
+    from wirenote.capture.recorder import write_manifest
+    from wirenote.process.templates import series_templates
+
+    st, rec_id = store
+    d = st.rec_dir(rec_id)
+    with pytest.raises(Invalid, match="template"):
+        st.requeue(rec_id, summary_only=True, template="no-such-template")
+    with pytest.raises(Invalid, match="calendar"):
+        st.requeue(rec_id, summary_only=True, template="standup", series=True)
+    assert read_manifest(d).get("template") is None and series_templates(st.state_dir) == {}
+    m = read_manifest(d)
+    write_manifest(d, {**m, "calendar": {"title": "Sync", "uid": "weekly@test"}})
+    st.requeue(rec_id, summary_only=True, template="standup", series=True)
+    assert read_manifest(d)["template"] == "standup"
+    assert series_templates(st.state_dir) == {"weekly@test": "standup"}
+    assert st.calls()[0]["state"] == "queued"
+    st.requeue(rec_id, summary_only=True, template="")            # back to automatic
+    assert "template" not in read_manifest(d)
+    st.requeue(rec_id, summary_only=True)                        # no template given: unchanged
+    info = st.call(rec_id)
+    assert [t["id"] for t in info["templates"]][:2] == ["general", "one-on-one"]
+    assert info["template"] == "general" and info["section_titles"] == {}
+    assert info["in_series"] is True
+    assert "default_template" in st.settings_info()["editable"] and st.settings_info()["templates"]
+
+
+def test_a_series_template_can_be_forgotten(store):
+    from wirenote.process.templates import series_templates
+
+    st, rec_id = store
+    d = st.rec_dir(rec_id)
+    write_manifest(d, {**read_manifest(d), "calendar": {"title": "Sync", "uid": "weekly@test"}})
+    assert st.call(rec_id)["series_template"] is None
+    st.requeue(rec_id, summary_only=True, template="standup", series=True)
+    assert st.call(rec_id)["series_template"] == "standup"
+    st.requeue(rec_id, summary_only=True, template="", series=True)     # Automatic, for the series
+    assert series_templates(st.state_dir) == {} and "template" not in read_manifest(d)
+    assert st.call(rec_id)["series_template"] is None
+
+
+def test_resummarize_body_sets_template_and_series(server):
+    from wirenote.process.templates import series_templates
+
+    app, port, rec_id = server
+    st, d = app.store, app.store.rec_dir(rec_id)
+    write_manifest(d, {**read_manifest(d), "calendar": {"title": "Sync", "uid": "weekly@test"}})
+    path, hdrs = f"/api/calls/{rec_id}/resummarize", {"X-Wirenote-Token": app.token}
+    assert request(port, "POST", path, headers=hdrs, body={"template": "standup", "series": True})[0] == 200
+    assert read_manifest(d)["template"] == "standup"
+    assert series_templates(st.state_dir) == {"weekly@test": "standup"}
+    assert request(port, "POST", path, headers=hdrs, body={})[0] == 200          # unchanged
+    assert read_manifest(d)["template"] == "standup"
+    assert request(port, "POST", path, headers=hdrs, body={"template": "", "series": True})[0] == 200
+    assert "template" not in read_manifest(d) and series_templates(st.state_dir) == {}
+    assert request(port, "POST", path, headers=hdrs, body={"series": True})[0] == 400
+
+
+def test_default_template_is_a_setting_with_a_known_value(store, monkeypatch):
+    st, _ = store
+    monkeypatch.setattr(data_mod, "poke_daemon", lambda *_a: None)
+    assert st.update_settings({"default_template": "lecture"}, False)["editable"]["default_template"] == "lecture"
+    with pytest.raises(Invalid, match="default_template"):
+        st.update_settings({"default_template": "nope"}, False)
 
 
 def test_ask_cites_timestamps_and_keeps_history(store, monkeypatch):
@@ -185,6 +251,59 @@ def test_audio_is_served_with_ranges(server, tmp_path):
     status, body = request(port, "GET", f"/api/calls/{rec_id}/audio", headers={"Range": "bytes=-4"})
     assert status == 206 and body == bytes(range(252, 256))
     assert read_manifest(app.store.rec_dir(rec_id))["id"] == rec_id
+
+
+def test_add_flag_after_the_call_and_refused_while_recording(store, tmp_path):
+    st, rec_id = store
+    assert st.add_flag(rec_id, 4.2) == [4.2]
+    assert st.add_flag(rec_id, 5.0) == [4.2]                       # within 2 s: dropped
+    assert st.add_flag(rec_id, 1.5) == [1.5, 4.2]
+    for bad in (-1, float("nan"), float("inf"), 10 ** 9, "3", True):
+        with pytest.raises(Invalid):
+            st.add_flag(rec_id, bad)
+    assert st.add_flag(rec_id, 2000.0) == [1.5, 4.2, 1800.0]          # the call is 30 min long
+    write_flags(st.rec_dir(rec_id), [1.5, 4.2])
+    call = st.call(rec_id)
+    assert [(f["t"], f["start"], f["name"]) for f in call["flags"]] == [
+        (1.5, 1.0, "Speaker 1"), (4.2, 4.0, "Me")]
+    assert call["flags"][1]["text"] == "Yes, Friday works."
+    assert "## Flagged moments\n\n- [00:00:01] **Speaker 1** Shall we ship" in Path(call["note"]).read_text()
+
+    (tmp_path / "state" / "status.json").write_text(json.dumps({"recording_id": rec_id}))
+    with pytest.raises(Invalid, match="still recording"):
+        st.add_flag(rec_id, 9.0)
+    assert st.call(rec_id)["state"] == "recording"                 # the file is the daemon's now
+    with pytest.raises(NotFound):
+        st.add_flag("../x", 1.0)
+
+    # An imported call still waiting for its transcript can be flagged; the flag waits too.
+    imp = make_recording(tmp_path / "import")
+    imp = imp.rename(st.rec_dir(rec_id).parent / "20261027-120000-import")
+    write_manifest(imp, {**read_manifest(imp), "id": imp.name, "app": "import"})
+    assert st.add_flag(imp.name, 7.0) == [7.0] and st.call(imp.name)["flags"] == [
+        {"t": 7.0, "start": 7.0, "speaker": None, "name": None, "text": ""}]
+
+
+def test_flag_control_reaches_the_daemon_or_says_it_is_not_running(store, monkeypatch, tmp_path):
+    st, _ = store
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "run"))
+    assert st.control("flag") == {"ok": False, "error": "daemon not running"}
+    sent = []
+    monkeypatch.setattr("wirenote.tools.setup.control", lambda c: sent.append(c) or {"ok": True, "t": 3.0})
+    assert st.control("flag") == {"ok": True, "t": 3.0} and sent == ["flag"]
+
+
+def test_flag_routes(server, monkeypatch):
+    app, port, rec_id = server
+    monkeypatch.setattr("wirenote.tools.setup.control", lambda c: {"ok": True, "app": "x", "t": 1.0})
+    status, body = request(port, "POST", "/api/flag", headers={"X-Wirenote-Token": app.token}, body={})
+    assert status == 200 and json.loads(body)["t"] == 1.0
+    status, body = request(port, "POST", f"/api/calls/{rec_id}/flags",
+                           headers={"X-Wirenote-Token": app.token}, body={"t": 4.2})
+    assert status == 200 and json.loads(body) == {"flags": [4.2]}
+    status, _ = request(port, "POST", f"/api/calls/{rec_id}/flags",
+                        headers={"X-Wirenote-Token": app.token}, body={"t": "soon"})
+    assert status == 400
 
 
 # Features 2: notes, speakers, action items, ask across calls, follow-up -------
@@ -664,3 +783,36 @@ def test_an_online_api_needs_confirmation_but_one_on_this_computer_does_not(stor
         st.update_settings({"openai_url": "http://api.example.com/v1"}, confirm_cloud=True)
     info = st.settings_info()
     assert info["model"] == "qwen/qwen3.8-flash" and "OpenRouter" in info["cloud_disclosure"]
+
+
+def _with_sections(st, rec_id):
+    path = st.rec_dir(rec_id) / "summary.json"
+    data = json.loads(path.read_text())
+    data.update(template="standup", sections={"updates": [], "blockers": ["Ben waits for a review"]})
+    path.write_text(json.dumps(data))
+
+
+def test_followup_includes_template_sections(store, monkeypatch):
+    st, rec_id = store
+    _with_sections(st, rec_id)
+    backend = FakeBackend([{"subject": "s", "body": "b"}])
+    monkeypatch.setattr(data_mod, "make_backend", lambda s: backend)
+    st.followup(rec_id)
+    assert "Blockers:\n- Ben waits for a review" in backend.calls[0][1]
+    assert "Updates by person" not in backend.calls[0][1]          # empty sections stay out
+
+
+def test_search_finds_section_items_by_section_key(store):
+    st, rec_id = store
+    _with_sections(st, rec_id)
+    hit = st.calls("waits for a review")[0]["match"]
+    assert hit == {"where": "blockers", "text": "Ben waits for a review"}
+
+
+def test_chosen_template_is_exposed_and_automatic_clears_it(store):
+    st, rec_id = store
+    assert st.call(rec_id)["chosen_template"] is None
+    st.requeue(rec_id, summary_only=True, template="lecture")
+    assert st.call(rec_id)["chosen_template"] == "lecture"
+    st.requeue(rec_id, summary_only=True, template="")
+    assert st.call(rec_id)["chosen_template"] is None and "template" not in read_manifest(st.rec_dir(rec_id))

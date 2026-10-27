@@ -282,6 +282,7 @@ function renderBanner() {
     h("span", { class: "elapsed" }, clock(recordingElapsed())),
     h("span", { class: "grow" }),
     st.recording_id ? h("a", { class: "btn", href: `#/call/${st.recording_id}` }, icon("pen"), "Take notes") : null,
+    h("button", { class: "btn", title: "Flag this moment (F)", onclick: flagMoment }, icon("flag"), "Flag"),
     h("button", { class: "btn btn-stop", onclick: stopRecording }, icon("stop"), "Stop"));
   b.hidden = false;
 }
@@ -291,6 +292,34 @@ async function stopRecording() {
     const r = await api("/api/stop", { method: "POST" });
     toast(r.ok ? "Recording stopped. Writing the note…" : r.error);
     refreshStatus();
+  } catch (e) { toast(e.message); }
+}
+
+// Flag a moment: while recording through the daemon (it knows the clock), after the call on a
+// transcript line. Either way the note lists it under "Flagged moments".
+async function flagMoment() {
+  if (!state.status.recording) return toast("Not recording");
+  try {
+    const r = await api("/api/flag", { method: "POST" });
+    if (!r.ok) return toast(r.error);
+    toast(`Flagged at ${clock(r.t)}`);
+    await refreshStatus();
+    renderBanner();
+    const n = $("#flag-count");
+    if (n) n.textContent = flagCount();
+  } catch (e) { toast(e.message); }
+}
+
+function flagCount() {
+  const n = state.status.flags || 0;
+  return n ? `${n} flagged` : "";
+}
+
+async function flagLine(c, line) {
+  try {
+    const r = await api(`/api/calls/${c.id}/flags`, { method: "POST", body: { t: line.start } });
+    toast(r.flags.length > (c.flags || []).length ? "Flagged. The note now lists it." : "Already flagged");
+    openCall(c.id, state.tab);
   } catch (e) { toast(e.message); }
 }
 
@@ -456,7 +485,10 @@ function recordingView(c) {
     h("div", { class: "head-row" }, h("div", { class: "grow" }, titleEditor(c), metaLine(c),
       c.attendees.length ? h("div", { class: "people" }, c.attendees.map((p) => h("span", { class: "person" }, avatar(p), p))) : null)),
     h("div", { class: "live-head" }, h("span", { class: "dot rec" }), "Recording", clockEl,
-      h("span", { class: "grow" }), h("button", { class: "btn btn-stop", onclick: stopRecording }, icon("stop"), "Stop")),
+      h("span", { class: "flag-count", id: "flag-count" }, flagCount()),
+      h("span", { class: "grow" }),
+      h("button", { class: "btn", title: "Flag this moment (F)", onclick: flagMoment }, icon("flag"), "Flag this moment"),
+      h("button", { class: "btn btn-stop", onclick: stopRecording }, icon("stop"), "Stop")),
     myNotesEditor(c, true),
     h("div", { class: "live-tip" }, "Jot what matters: decisions, who does what, names. A word or two is enough; the summary fills in the rest from the transcript."),
     liveTranscript(c));
@@ -588,6 +620,7 @@ function moreMenu(c) {
       item("folder", "Show recording folder", () => post(`/api/calls/${c.id}/folder`)),
       h("hr"),
       c.has_transcript ? item("sparkle", "Redo summary", () => requeue(true)) : null,
+      c.has_transcript ? item("sparkle", "Summary template…", () => templateDialog(c)) : null,
       c.has_audio ? item("refresh", "Transcribe again…", () => transcribeAgainDialog(c)) : null,
       h("hr"),
       c.has_audio ? item("audio-off", "Delete audio, keep notes", deleteAudio, "danger") : null,
@@ -611,10 +644,11 @@ function printCall(c) {
     h("h1", {}, c.title),
     h("p", { class: "print-meta" }, [`${fmtDate(started)}, ${fmtTime(started)}`, c.duration_s ? fmtDuration(c.duration_s) : null, sourceLabel(c)].filter(Boolean).join(" · ")),
     people.length ? h("p", {}, h("b", {}, "With: "), people.join(", ")) : null,
-    ...list("Summary", s.summary), ...list("Decisions", s.decisions),
+    ...list("Summary", s.summary), ...sectionEntries(c).flatMap(([head, xs]) => list(head, xs)), ...list("Decisions", s.decisions),
     ...(s.action_items && s.action_items.length ? [h("h2", {}, "Action items"), h("ul", { class: "print-actions" },
       s.action_items.map((a) => h("li", {}, a.done ? "☑ " : "☐ ", h("b", {}, `${a.owner}: `), a.task + (a.due ? ` (due: ${a.due})` : ""))))] : []),
     ...list("Open questions", s.open_questions),
+    ...(flagWithText(c).length ? [h("h2", {}, "Flagged moments"), h("ul", {}, flagWithText(c).map((f) => h("li", {}, h("span", { class: "print-time" }, clock(f.start)), h("b", {}, `${f.name} `), f.text)))] : []),
     ...(c.my_notes && c.my_notes.trim() ? [h("h2", {}, "My notes"), h("pre", { class: "print-notes" }, c.my_notes.trim())] : []),
     h("h2", {}, "Transcript"),
     ...(c.lines || []).map((l) => h("p", { class: "print-line" }, h("b", {}, names[l.speaker] || l.speaker), h("span", { class: "print-time" }, clock(l.start)), l.text)));
@@ -672,14 +706,48 @@ async function post(path) {
   try { await api(path, { method: "POST" }); } catch (e) { toast(e.message); }
 }
 
-async function requeue(summaryOnly, choices) {
+async function requeue(summaryOnly, choices, extra) {
   const c = state.call;
   try {
-    await api(`/api/calls/${c.id}/${summaryOnly ? "resummarize" : "retranscribe"}`, { method: "POST", body: choices ? { choices } : {} });
+    await api(`/api/calls/${c.id}/${summaryOnly ? "resummarize" : "retranscribe"}`, { method: "POST", body: { ...(choices ? { choices } : {}), ...(extra || {}) } });
     toast(summaryOnly ? "Updating the summary…" : "Transcribing again…");
     await refreshList();
     openCall(c.id);
   } catch (e) { toast(e.message); }
+}
+
+// The sections a summary template adds, as [title, points] for the ones that have points.
+function sectionEntries(c) {
+  const titles = c.section_titles || {};
+  const spelled = (k) => k.replace(/_/g, " ").replace(/^./, (ch) => ch.toUpperCase());
+  return Object.entries((c.summary && c.summary.sections) || {})
+    .filter(([, xs]) => xs && xs.length)
+    .map(([k, xs]) => [titles[k] || spelled(k), xs]);
+}
+
+// Choose the summary template for one call and redo its summary (docs/usage.md › Summary templates).
+function templateDialog(c) {
+  const select = h("select", {}, [h("option", { value: "", selected: !c.chosen_template }, "Automatic (by title, then your default)"),
+    ...(c.templates || []).map((t) => h("option", { value: t.id, selected: t.id === c.chosen_template }, t.name))]);
+  const series = h("input", { type: "checkbox", id: "template-series" });
+  const seriesText = h("span", {});
+  const seriesRow = h("label", { class: "check-row tight", for: "template-series" }, series, seriesText);
+  // Automatic with a template kept for the series: the box lets it go.
+  const show = () => {
+    seriesRow.hidden = !c.in_series || !(select.value || c.series_template);
+    seriesText.textContent = select.value ? "Use it for every meeting in this calendar series" : "Stop using a template for this series";
+  };
+  select.onchange = show;
+  show();
+  const ok = h("button", { class: "btn btn-primary" }, "Redo summary");
+  const cancel = h("button", { class: "btn" }, "Cancel");
+  const close = openModal(h("div", { class: "dialog wide", role: "dialog", "aria-modal": "true" },
+    h("h3", {}, "Summary template"),
+    h("p", {}, "A template adds the sections a kind of meeting needs, such as Blockers for a standup. Your transcript stays as it is; only the summary is made again."),
+    field("Template", select), seriesRow,
+    h("div", { class: "row" }, cancel, ok)));
+  cancel.onclick = close;
+  ok.onclick = () => { close(); requeue(true, null, { template: select.value, series: series.checked && !seriesRow.hidden }); };
 }
 
 const ENGINES = [["auto", "Automatic (the fastest that fits)"], ["whisper", "Whisper"], ["parakeet", "Parakeet (faster on a CPU)"], ["whisper.cpp", "whisper.cpp (GPU, if installed)"]];
@@ -727,12 +795,19 @@ function notesMarkdown(c) {
   if (people.length) out.push(`With: ${people.join(", ")}`, "");
   const list = (head, xs) => { if (xs && xs.length) out.push(`## ${head}`, "", ...xs.map((x) => `- ${x}`), ""); };
   list("Summary", s.summary);
+  for (const [head, xs] of sectionEntries(c)) list(head, xs);
   list("Decisions", s.decisions);
   if (s.action_items.length) {
     out.push("## Action items", "", ...s.action_items.map((a) => `- [${a.done ? "x" : " "}] **${a.owner}**: ${a.task}${a.due ? ` (due: ${a.due})` : ""}`), "");
   }
   list("Open questions", s.open_questions);
+  list("Flagged moments", flagWithText(c).map((f) => `[${clock(f.start)}] **${f.name}** ${f.text}`));
   return out.join("\n");
+}
+
+// The flags the note lists: those with a transcript line (an import may not have one yet).
+function flagWithText(c) {
+  return (c.flags || []).filter((f) => f.text);
 }
 
 async function copyNotes() {
@@ -859,6 +934,7 @@ function notesView(c) {
   const s = c.summary;
   const wrap = h("div", {});
   wrap.append(myNotesEditor(c, false));
+  if ((c.flags || []).length) wrap.append(flaggedView(c));
   if (!s) {
     if (c.has_transcript) {
       wrap.append(h("p", { class: "empty-line" }, "No summary for this call. The full transcript is in the Transcript tab."));
@@ -871,6 +947,7 @@ function notesView(c) {
 
   wrap.append(h("section", { class: "section" }, h("h2", {}, "Summary", cloudBadge(c.summary_backend)),
     s.summary.length ? bulletList(s.summary) : h("div", { class: "empty-line" }, "—")));
+  for (const [head, items] of sectionEntries(c)) wrap.append(h("section", { class: "section" }, h("h2", {}, head), bulletList(items)));
 
   wrap.append(h("section", { class: "section" },
     h("h2", {}, "Action items", s.action_items.length ? h("span", { class: "n" }, String(s.action_items.length)) : null),
@@ -881,6 +958,16 @@ function notesView(c) {
   if (s.open_questions.length) wrap.append(h("section", { class: "section" }, h("h2", {}, "Open questions"), bulletList(s.open_questions, "questions")));
   if (c.has_transcript) wrap.append(askView(c));
   return wrap;
+}
+
+// The moments you flagged, each with the line closest to it and a link to the transcript.
+function flaggedView(c) {
+  return h("section", { class: "section flagged" },
+    h("h2", {}, "Flagged moments", h("span", { class: "n" }, String(c.flags.length))),
+    h("ul", { class: "flag-list" }, c.flags.map((f) => h("li", {},
+      h("button", { class: "t-time", title: "Show in the transcript", onclick: () => jumpTo(f.start, false) }, clock(f.start)),
+      h("span", { class: "flag-text" }, f.name ? h("b", {}, `${f.name} `) : null, f.text || "No transcript line here"),
+      h("button", { class: "jump", title: "Jump to this moment in the transcript", onclick: () => jumpTo(f.start, false) }, icon("jump"))))));
 }
 
 function actionItem(callId, a, i, withCall) {
@@ -1013,9 +1100,13 @@ function transcriptView(c) {
       const who = me ? h("div", { class: "t-speaker me" }, "Me")
         : h("button", { class: "t-speaker others", title: "Name this speaker", onclick: () => speakerDialog(c, l.speaker) }, name);
       if (!me) who.style.setProperty("color", colorFor(l.speaker));
-      return h("div", { class: "t-line", "data-start": String(l.start) },
+      // A flag's start is where its part of the line begins (a long paragraph is cut around it).
+      const flagged = (c.flags || []).some((f) => f.speaker === l.speaker && f.start >= l.start && f.start <= l.end);
+      return h("div", { class: "t-line" + (flagged ? " flagged" : ""), "data-start": String(l.start) },
         h("button", { class: "t-time", title: "Play from here", onclick: () => { seekAudio(l.start); playAudio(); } }, clock(l.start)),
-        h("div", {}, who, h("div", { class: "t-text" }, highlighted(l.text, q))));
+        h("div", {}, who, h("div", { class: "t-text" }, highlighted(l.text, q))),
+        flagged ? h("span", { class: "t-flag on", title: "Flagged" }, icon("flag"))
+          : h("button", { class: "t-flag", title: "Flag this moment", onclick: () => flagLine(c, l) }, icon("flag")));
     }));
     count.textContent = q ? `${hits} match${hits === 1 ? "" : "es"}` : "";
     const first = body.querySelector("mark");
@@ -1173,6 +1264,8 @@ function setupCard(s) {
     ollama_model: text("ollama_model"), anthropic_model: text("anthropic_model"),
     openai_url: text("openai_url", "https://openrouter.ai/api/v1"), openai_model: text("openai_model"),
     summary_language: text("summary_language", "auto"),
+    default_template: h("select", {}, [...(s.templates || []).map((t) => h("option", { value: t.id, selected: t.id === e.default_template }, t.name)),
+      ...((s.templates || []).some((t) => t.id === e.default_template) ? [] : [h("option", { value: e.default_template, selected: true }, `${e.default_template} (missing)`)])]),
     whisper_model: text("whisper_model"), whisper_language: text("whisper_language", "auto"),
     asr_engine: h("select", {}, ENGINES.map(([v, label]) => h("option", { value: v, selected: v === e.asr_engine }, label))),
     consent_line: h("textarea", { class: "short", maxlength: "500", placeholder: "e.g. Is it OK if I record this call for my notes?" }),
@@ -1241,6 +1334,7 @@ function setupCard(s) {
     field("Summaries and Ask", backend, "Ollama, Off, and an API server on this laptop keep everything here."),
     ollamaRow, claudeRow, keyBox, openaiRows, openaiKeyBox,
     field("Summary language", inputs.summary_language, "auto: the language of the call, or e.g. English, German."),
+    field("Default summary template", inputs.default_template, "For calls whose title and app match no template. Your own templates are files in ~/.config/wirenote/templates; see docs/usage.md."),
     field("Whisper model", inputs.whisper_model, "e.g. large-v3-turbo, medium, small."),
     field("Call language", inputs.whisper_language, "auto, or a code like en, de."),
     field("Speech engine", inputs.asr_engine, "Automatic uses Parakeet, several times faster on a CPU, when it knows your language and no vocabulary is set; otherwise Whisper. whisper.cpp uses a GPU if you installed a whisper-cli built for it."),
@@ -1604,6 +1698,7 @@ function wireKeys() {
     if (e.key === "Escape" && $("#modal").hidden === false) { $("#modal").click(); return; }
     if (typing) return;
     if (e.key === "/") { e.preventDefault(); search.focus(); }
+    else if ((e.key === "f" || e.key === "F") && !e.ctrlKey && !e.metaKey && !e.altKey && state.status.recording) { e.preventDefault(); flagMoment(); }
     else if (e.key === " " && state.call && state.call.has_audio) { e.preventDefault(); audio().paused ? playAudio() : audio().pause(); }
     else if (e.key === "ArrowLeft" && state.call && audio().getAttribute("src")) seekAudio(Math.max(0, audio().currentTime - 15));
     else if (e.key === "ArrowRight" && state.call && audio().getAttribute("src")) seekAudio(audio().currentTime + 15);

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Hrishikesh Jadhav
-"""wirenote command line: run | status | stop | record | jobs | reprocess | setup | calendar | doctor | ui | open |
-update | changelog."""
+"""wirenote command line: run | status | stop | record | flag | toggle | jobs | reprocess | templates | setup |
+calendar | doctor | ui | open | update | changelog."""
 
 from __future__ import annotations
 
@@ -75,7 +75,10 @@ def _control(command: str) -> int:
         print(f"wirenote: cannot reach the daemon at {path} ({e}); is it running?")
         return 1
     if reply.get("ok"):
-        print(f"{command}: {reply.get('app')}")
+        from .process.merge import stamp
+
+        at = f" at {stamp(reply['t'])}" if "t" in reply else ""
+        print(f"{command}: {reply.get('app')}{at}")
         return 0
     print(f"{command}: {reply.get('error')}")
     return 1
@@ -83,6 +86,14 @@ def _control(command: str) -> int:
 
 def cmd_stop(_args) -> int:
     return _control("stop")
+
+
+def cmd_flag(_args) -> int:
+    return _control("flag")
+
+
+def cmd_toggle(_args) -> int:
+    return _control("toggle")
 
 
 def cmd_record(args) -> int:
@@ -158,9 +169,16 @@ def cmd_reprocess(args) -> int:
     if not args.summary and not any(rec.glob("*.wav")):
         print("wirenote: the audio was deleted; only --summary can be redone")
         return 1
+    from .capture.recorder import read_manifest, write_manifest
+
+    if args.template and args.template != "auto":
+        from .process.templates import scan
+
+        if args.template not in scan()[0]:
+            print(f"wirenote: no template {args.template!r}; `wirenote templates` lists them")
+            return 2
     choices = {k: getattr(args, k) for k in ("engine", "model", "language") if getattr(args, k)}
     if choices:
-        from .capture.recorder import read_manifest, write_manifest
         from .process.engines import check_overrides
 
         if args.summary:
@@ -171,11 +189,33 @@ def cmd_reprocess(args) -> int:
         except ValueError as e:
             print(f"wirenote: {e}")
             return 2
+    # Everything is valid: only now change the recording.
+    if args.template or choices:
         m = read_manifest(rec)
-        m["transcribe"] = {**(m.get("transcribe") or {}), **choices}
+        if args.template == "auto":
+            m.pop("template", None)          # back to the automatic choice
+        elif args.template:
+            m["template"] = args.template
+        if choices:
+            m["transcribe"] = {**(m.get("transcribe") or {}), **choices}
         write_manifest(rec, m)
     job_id = Jobs(state_dir() / "jobs.db").add(rec, summary_only=args.summary)
     print(f"queued job {job_id}; the daemon picks it up within 30 s (`wirenote jobs`)")
+    return 0
+
+
+def cmd_templates(_args) -> int:
+    from .process.templates import BUILTIN, scan, templates_dir
+
+    found, skipped = scan()
+    print(f"{'id':<14} {'name':<16} {'source':<9} match words")
+    for t in found.values():
+        source = "built-in" if t is BUILTIN.get(t.id) else "file"
+        match = ", ".join([*t.titles, *(f"app:{a}" for a in t.apps)]) or "-"
+        print(f"{t.id:<14} {t.name:<16} {source:<9} {match}")
+    for name, why in skipped:
+        print(f"skipped {name}: {why}")
+    print(f"\nYour own: put a .toml file in {templates_dir()} (docs/usage.md › Summary templates).")
     return 0
 
 
@@ -319,6 +359,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("run", help="run the daemon").set_defaults(fn=cmd_run)
     sub.add_parser("status", help="show what the daemon sees").set_defaults(fn=cmd_status)
     sub.add_parser("stop", help="stop the current recording").set_defaults(fn=cmd_stop)
+    sub.add_parser("flag", help="flag this moment of the recording as important").set_defaults(fn=cmd_flag)
+    sub.add_parser("toggle", help="stop the recording, or start one (the open prompt, else a "
+                   "meeting without a call app)").set_defaults(fn=cmd_toggle)
     rec = sub.add_parser("record", help="answer the open prompt with Record")
     rec.add_argument("--now", action="store_true",
                      help="record a meeting without a call app (in person, phone on speaker)")
@@ -339,11 +382,15 @@ def main(argv: list[str] | None = None) -> int:
     rep.add_argument("recording", help="recording id, e.g. 20261027-100000-chrome")
     rep.add_argument("--summary", action="store_true",
                      help="keep the transcript, redo only the summary and the note")
+    rep.add_argument("--template", metavar="ID",
+                     help="summary template for this call (`wirenote templates` lists them); "
+                          "auto goes back to the automatic choice")
     rep.add_argument("--engine", choices=["auto", "whisper", "parakeet", "whisper.cpp"],
                      help="speech engine for this call from now on")
     rep.add_argument("--model", help="Whisper model for this call, e.g. large-v3, medium")
     rep.add_argument("--language", help="language of this call, e.g. de, en, or auto")
     rep.set_defaults(fn=cmd_reprocess)
+    sub.add_parser("templates", help="list the summary templates").set_defaults(fn=cmd_templates)
     st = sub.add_parser("setup", help="install the services, choose the summary backend, "
                                       "or set the consent line")
     st.add_argument("what", choices=["install", "uninstall", "ollama", "claude", "openai", "consent"])

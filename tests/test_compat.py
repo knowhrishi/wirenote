@@ -72,12 +72,16 @@ def test_recording_still_renders_and_opens_in_the_app(version, tmp_path):
     assert summary["title"] in note
     for line in transcript["lines"]:
         assert line["text"] in note
+    # Made before templates and flags: neither shows up in the note.
+    assert "## Flagged moments" not in note and "\ntemplate:" not in note
 
     store = Store(settings, tmp_path / "state", voices=no_voices(tmp_path))
     (call,) = store.calls()
     assert call["title"] == summary["title"]
     detail = store.call(call["id"])
     assert [l["text"] for l in detail["lines"]] == [l["text"] for l in transcript["lines"]]
+    assert detail["flags"] == [] and detail["template"] == "general"
+    assert detail["chosen_template"] is None and detail["series_template"] is None
     if summary["action_items"]:
         store.set_action_done(call["id"], 0, True)
         assert store.call(call["id"])["summary"]["action_items"][0]["done"] is True

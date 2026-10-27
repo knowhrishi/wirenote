@@ -17,18 +17,22 @@ import gc
 import json
 import sys
 import traceback
+from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
-from ..capture.recorder import read_manifest, write_manifest
-from ..config.settings import Settings
+from ..capture.recorder import read_flags, read_manifest, write_manifest
+from ..config.settings import Settings, state_dir
 from ..config.vocabulary import load_vocabulary
 from .engines import engine_label, with_overrides
 from .jobs import MAX_ATTEMPTS, Job, Jobs
 from .live import LIVE, prefetch
-from .merge import Line, as_text, dedupe_echo, paragraphs
+from .merge import Line, around, as_text, dedupe_echo, distance, flagged_lines, paragraphs
 from .note import action_line, note_path, own_note, render, segment_file, title_for
 from .speakers import Voices, display_name, guess_names
-from .summarize import Summary, SummaryError, SummaryUnavailable, make_backend, summarize
+from .summarize import (ActionItem, Summary, SummaryError, SummaryUnavailable, make_backend,
+                        summarize)
+from .templates import Template, load_templates, pick, series_templates
 
 TRANSCRIPT = "transcript.json"
 SUMMARY = "summary.json"
@@ -112,12 +116,16 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
     names = speaker_names(speakers)
     my_notes = read_my_notes(rec)
     summary, error, backend_name, retry = None, backend_error, None, False
+    template = pick(manifest, load_templates(), series_templates(state_dir()),
+                    settings.default_template)
     if backend is not None and lines:
         backend_name = backend.name
-        log(f"job {job.id}: summarizing with {backend_name}")
+        log(f"job {job.id}: summarizing with {backend_name}, template {template.id}")
         try:
             summary = summarize(lines, backend, settings.summary_chunk_s, settings.summary_language,
-                                context=_context(manifest, vocabulary, my_notes), names=names)
+                                context=_context(manifest, vocabulary, my_notes), names=names,
+                                template=template,
+                                flagged=partial(_flagged, lines, read_flags(rec), settings, names))
         except SummaryError as e:
             error = str(e)
             log(f"job {job.id}: no summary: {error}")
@@ -128,7 +136,7 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
         (rec / SUMMARY).write_text(json.dumps(summary.as_dict(), indent=2, ensure_ascii=False))
 
     path = _write_note(rec, manifest, lines, summary, settings, backend_name, error, names, my_notes,
-                       model)
+                       model, template, read_flags(rec))
     manifest.update(note=str(path), summary_error=error, summary_backend=backend_name,
                     note_written=dt.datetime.now().astimezone().isoformat(timespec="seconds"))
     write_manifest(rec, manifest)
@@ -182,7 +190,8 @@ def _name_speakers(book, lines: list[Line], manifest: dict, settings: Settings, 
 
 def _write_note(rec: Path, manifest: dict, lines: list[Line], summary: Summary | None,
                 settings: Settings, backend_name: str | None, error: str | None,
-                names: dict[str, str], my_notes: str, transcript_model: str) -> Path:
+                names: dict[str, str], my_notes: str, transcript_model: str,
+                template: Template | None = None, flags: list[float] | None = None) -> Path:
     title = title_for(manifest, summary)
     started = dt.datetime.fromisoformat(manifest["started"])
     path = note_path(settings.notes_path(), started, title)
@@ -197,7 +206,8 @@ def _write_note(rec: Path, manifest: dict, lines: list[Line], summary: Summary |
     tmp.write_text(render(manifest, lines, summary, title=title, duration_min=duration,
                           audio=audio, transcript_model=transcript_model,
                           summary_backend=backend_name, summary_error=error, names=names,
-                          my_notes=my_notes))
+                          my_notes=my_notes, template=template, flags=flags,
+                          flag_window=(settings.flag_before_s, settings.flag_after_s)))
     tmp.replace(path)
     return path
 
@@ -214,8 +224,8 @@ def rewrite_note(rec: Path, settings: Settings) -> Path | None:
     try:
         s = json.loads((rec / SUMMARY).read_text())
         summary = Summary(s.get("title", ""), s.get("summary", []), s.get("decisions", []), [],
-                          s.get("open_questions", []))
-        from .summarize import ActionItem
+                          s.get("open_questions", []), s.get("sections") or {},
+                          s.get("template") or "general")
         summary.action_items = [ActionItem(a["owner"], a["task"], a.get("due", ""))
                                 for a in s.get("action_items", [])]
         done = [bool(a.get("done")) for a in s.get("action_items", [])]
@@ -224,7 +234,8 @@ def rewrite_note(rec: Path, settings: Settings) -> Path | None:
     names = speaker_names(data.get("speakers", {}))
     path = _write_note(rec, manifest, lines, summary, settings, manifest.get("summary_backend"),
                        manifest.get("summary_error"), names, read_my_notes(rec),
-                       data.get("model") or settings.whisper_model)
+                       data.get("model") or settings.whisper_model,
+                       load_templates().get(summary.template) if summary else None, read_flags(rec))
     if done and any(done):
         text = path.read_text()
         for a, d in zip(summary.action_items, done):
@@ -235,6 +246,44 @@ def rewrite_note(rec: Path, settings: Settings) -> Path | None:
     manifest["note"] = str(path)
     write_manifest(rec, manifest)
     return path
+
+
+FLAGGED_CAP = 3000   # docs/dev/PLAN.md › Defaults › Flag window
+FLAG_MIN_CHARS = 40  # docs/dev/PLAN.md › Defaults › Flag window
+
+
+def _flagged(lines: list[Line], flags: list[float], settings: Settings, names: dict[str, str],
+             lo: float = float("-inf"), hi: float = float("inf")) -> str:
+    """What was said around the moments Me flagged from lo up to hi, for the summary
+    prompt. Each flag gets an equal share of FLAGGED_CAP, the words nearest it first, so
+    every flag is heard however many there are and however long a paragraph runs. A share
+    holds at least FLAG_MIN_CHARS of text; when that many flags do not fit, an even spread
+    of them in time does."""
+    flags = sorted(t for t in flags if lo <= t < hi)
+    if not flags:
+        return ""
+    before, after = settings.flag_before_s, settings.flag_after_s
+    widest = max((len(as_text([Line(sp, 0.0, 0.0, "")], names)) + 1 for sp in {l.speaker for l in lines}),
+                 default=0)
+    fit = max(FLAGGED_CAP // (widest + FLAG_MIN_CHARS), 1)
+    if len(flags) > fit:
+        flags = [flags[k * len(flags) // fit] for k in range(fit)]
+    share = FLAGGED_CAP // len(flags)
+    picked: list[Line] = []
+    for t in flags:
+        room = share
+        near = sorted((l for _, l in flagged_lines(lines, [t], before, after)),
+                      key=lambda l: (distance(l, t), l.start))
+        for line in near:
+            prefix = len(as_text([replace(line, text="")], names)) + 1      # and the newline
+            line = around(line, t, before, after, room - prefix)
+            if prefix + len(line.text) > room:
+                break
+            if line not in picked:
+                picked.append(line)
+                room -= prefix + len(line.text)
+    text = as_text(sorted(picked, key=lambda l: (l.start, l.speaker)), names)
+    return "Moments Me flagged as important. Make sure the summary covers them:\n" + text if text else ""
 
 
 def _context(manifest: dict, vocabulary: list[str], my_notes: str) -> str:

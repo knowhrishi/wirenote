@@ -9,8 +9,10 @@ import json
 import re
 from pathlib import Path
 
-from .merge import Line, stamp
+from ..config.settings import Settings
+from .merge import Line, flag_excerpt, stamp
 from .summarize import Summary
+from .templates import Template
 
 
 # Calendar titles (anyone can send an invite) and LLM output (a transcript can carry
@@ -70,6 +72,15 @@ def note_path(notes_root: Path, started: dt.datetime, title: str) -> Path:
     return notes_root / f"{started:%Y}" / f"{started:%m}" / f"{started:%Y-%m-%d %H%M} {safe}.md"
 
 
+def section_title(key: str, template: Template | None) -> str:
+    """A section's heading: the template's title, or the key spelled out when the template
+    is gone (its file was deleted after the summary was made)."""
+    for s in template.sections if template else ():
+        if s.key == key:
+            return s.title
+    return key.replace("_", " ").capitalize()
+
+
 def _yaml(value) -> str:
     # JSON scalars and flow lists are valid YAML.
     return json.dumps(value, ensure_ascii=False)
@@ -78,7 +89,9 @@ def _yaml(value) -> str:
 def render(manifest: dict, lines: list[Line], summary: Summary | None, *, title: str,
            duration_min: float, audio: list[str], transcript_model: str,
            summary_backend: str | None, summary_error: str | None = None,
-           names: dict[str, str] | None = None, my_notes: str = "") -> str:
+           names: dict[str, str] | None = None, my_notes: str = "",
+           template: Template | None = None, flags: list[float] | None = None,
+           flag_window: tuple[float, float] = (Settings.flag_before_s, Settings.flag_after_s)) -> str:
     names = names or {}
     cal = manifest.get("calendar") or {}
     front = {
@@ -95,6 +108,8 @@ def render(manifest: dict, lines: list[Line], summary: Summary | None, *, title:
         "transcript_model": transcript_model,
         "summary_backend": summary_backend if summary else None,
         "recording_id": manifest["id"],
+        # docs/dev/changes.md › Note files: new keys go at the end.
+        "template": summary.template if summary and summary.template != "general" else None,
     }
     out = ["---"]
     out += [f"{k}: {_yaml(v)}" for k, v in front.items() if v is not None]
@@ -102,6 +117,10 @@ def render(manifest: dict, lines: list[Line], summary: Summary | None, *, title:
 
     if summary:
         out += ["## Summary", ""] + [f"- {md_safe(p)}" for p in summary.summary] + [""]
+        for key, points in summary.sections.items():
+            if points:
+                out += [f"## {md_safe(section_title(key, template))}", ""]
+                out += [f"- {md_safe(p)}" for p in points] + [""]
         if summary.decisions:
             out += ["## Decisions", ""] + [f"- {md_safe(d)}" for d in summary.decisions] + [""]
         if summary.action_items:
@@ -113,6 +132,16 @@ def render(manifest: dict, lines: list[Line], summary: Summary | None, *, title:
     elif summary_error:
         out += [f"> Summary not available: {md_safe(summary_error)}",
                 f"> Run `wirenote reprocess {manifest['id']} --summary` to try again.", ""]
+
+    # No model here: the line closest to each flag (the part of it around the flag, when it
+    # is longer than the flag window), so the list is the same every time.
+    flagged = dict.fromkeys(x for x in (flag_excerpt(lines, t, *flag_window) for t in flags or [])
+                            if x is not None)
+    if flagged:
+        out += ["## Flagged moments", ""]
+        out += [f"- [{stamp(l.start)}] **{md_safe(names.get(l.speaker, l.speaker))}** {md_safe(l.text)}"
+                for l in sorted(flagged, key=lambda l: (l.start, l.speaker))]
+        out.append("")
 
     if my_notes:
         out += ["## My notes", "", my_notes.strip(), ""]

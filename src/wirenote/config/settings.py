@@ -68,6 +68,9 @@ class Settings:
     whispercpp_model: str = "ggml-large-v3-turbo-q5_0.bin"   # a file, or one from ggerganov/whisper.cpp
     # docs/dev/live-design.md: a live transcript during the call, on two CPU threads
     live_transcript: bool = False
+    # › Flag window: a flag selects what was said this long before and after it
+    flag_before_s: float = 30.0
+    flag_after_s: float = 10.0
     # Consecutive lines of one speaker closer than this join into a paragraph
     merge_gap_s: float = 2.0
     # Echo dedupe (docs/dev/m2-m4-design.md › M3): overlap share and text similarity
@@ -96,6 +99,8 @@ class Settings:
     # docs/dev/PLAN.md › Processing: long calls are summarized in chunks of about 15 min
     summary_chunk_s: float = 900.0
     summary_language: str = "auto"     # "auto": the transcript's language
+    # docs/dev/PLAN.md › Defaults › Summary template: a template id, see `wirenote templates`
+    default_template: str = "general"
 
     # Calendar (M4) ----------------------------------------------------------
     calendar_urls: tuple = ()          # ICS URLs or file paths
@@ -150,6 +155,8 @@ DEFAULT_CONFIG_TOML = """# wirenote settings. Defaults come from docs/dev/PLAN.m
 # diarize = true                     # tell the other speakers apart
 # diarize_threshold = 0.9            # higher: fewer speakers; lower: more
 # voice_match = 0.55                 # how close a voice must be to a remembered one
+# flag_before_s = 30.0               # a flagged moment covers this much speech before it...
+# flag_after_s = 10.0                # ...and this much after
 # merge_gap_s = 2.0
 # echo_overlap = 0.5
 # echo_similarity = 0.8
@@ -165,6 +172,7 @@ DEFAULT_CONFIG_TOML = """# wirenote settings. Defaults come from docs/dev/PLAN.m
 # openai_model = "anthropic/claude-sonnet-5.5"  # API key: ~/.config/wirenote/secrets.toml
 # summary_chunk_s = 900.0
 # summary_language = "auto"          # or "German", "English"
+# default_template = "general"       # for calls no title or app rule matches; see `wirenote templates`
 
 # Calendar
 # calendar_urls = []                 # ICS URLs or files; none means no calendar matching
