@@ -360,8 +360,9 @@ def make_handler(app: App):
                 if not isinstance(terms, list):
                     raise Invalid("terms must be a list")
                 return self._json({"terms": store.set_vocabulary(terms)})
-            if path == "/api/settings/anthropic-key":
-                return self._json(store.set_api_key(str(self._body().get("key", ""))))
+            if path in ("/api/settings/anthropic-key", "/api/settings/openai-key"):
+                backend = path.rsplit("/", 1)[1].removesuffix("-key")
+                return self._json(store.set_api_key(str(self._body().get("key", "")), backend))
             if path == "/api/calendars":
                 return self._json({"calendars": store.add_calendar(str(self._body().get("url", "")))})
             if path == "/api/updates/seen":

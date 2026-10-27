@@ -50,7 +50,24 @@ wirenote setup claude     # asks for the key (hidden), checks it, switches the b
 wirenote setup ollama     # back to local
 ```
 
-The key is kept in `~/.config/wirenote/secrets.toml` (mode 600) and is never shown again. Every call shows a badge, "Local" or "Sent to Claude", so you can see where its summary was made.
+Instead of a key, you can log in to your Claude Console account with Anthropic's `ant` tool (`ant auth login`), or set `ANTHROPIC_API_KEY`; leave the key empty and Wirenote uses that. Usage is billed to your API account. A Claude Pro or Max subscription cannot be used: Anthropic does not allow other apps to use claude.ai logins.
+
+**OpenRouter, OpenAI or another compatible API (optional).** [OpenRouter](https://openrouter.ai) gives you Claude, GPT, Gemini, Qwen and many more models with one key. Call data is sent to OpenRouter and the model's provider, as with Claude. Choose "OpenRouter, OpenAI or another compatible API" in **Settings**, set the address and model, and paste your key, or:
+
+```sh
+wirenote setup openai     # asks for the address, model and key (hidden); checks them with a one-word request
+```
+
+| Service | API address | Model, for example |
+| --- | --- | --- |
+| OpenRouter (the default) | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-5.5`, `qwen/qwen3.8-flash` |
+| OpenAI | `https://api.openai.com/v1` | `gpt-5.4-mini` |
+| LM Studio on this computer | `http://127.0.0.1:1234/v1` | the model you loaded |
+| llama.cpp `llama-server` on this computer | `http://127.0.0.1:8080/v1` | any name |
+
+A server on your own computer counts as local, like Ollama: nothing leaves the computer, it needs no key, and Wirenote checks that it runs as your user. Any other address must start with `https://`.
+
+Keys are kept in `~/.config/wirenote/secrets.toml` (mode 600) and are never shown again. Every call shows a badge, "Local", "Sent to Claude" or "Sent to openrouter.ai", so you can see where its summary was made.
 
 A backend change applies to the next note. To redo an older note's summary:
 
@@ -141,6 +158,8 @@ wirenote reprocess <id>  # transcribe again (--engine, --model, --language); --s
 wirenote import <file>   # make a note from an audio or video file (--title, --date)
 wirenote export <id>     # save a call as a Word file (-o file or folder)
 wirenote doctor          # check every part of the setup; --fix makes your files private again
+wirenote setup claude    # summaries with Claude (your key or `ant auth login`)
+wirenote setup openai    # summaries with OpenRouter, OpenAI or a compatible server
 wirenote setup install   # install or update the services and the app-menu entry
 wirenote setup uninstall # remove them; --purge also deletes recordings and settings
 wirenote update          # install the newest version and restart; --check only checks

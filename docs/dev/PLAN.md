@@ -135,6 +135,9 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | Import size | up to 4 GB | Several hours of video; the upload is streamed to disk, never held in memory |
 | Import length | the first 4 h | The same cap as a recording |
 | Import conversion | ffmpeg, at most 30 min | A 4 h video converts in a few minutes; a stuck ffmpeg must not block the app |
+| OpenAI-compatible API | `https://openrouter.ai/api/v1`, model `anthropic/claude-sonnet-5.5` | One key reaches most models; Sonnet summarizes well at half the price of Opus |
+| API on another computer | https only; a confirmation per destination host | The key and transcript never travel in clear; a new host is a new place your calls go |
+| API on this computer | counts as local: owner check, no key, Ollama's Ask budget | Same as Ollama |
 
 ## Prompt, capture and processing
 

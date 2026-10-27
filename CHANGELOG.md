@@ -16,6 +16,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - The note's footer names the speech engine that made the transcript.
 - Import a recording made elsewhere, such as a phone recording, a meeting app's own recording or a video: click Import in the meetings app, drop the file on its window, or run `wirenote import FILE`. It becomes a note like a call. Needs ffmpeg (`sudo apt install ffmpeg`).
 - Export a call: "Download as Word (.docx)" and "Print or save as PDF" in the call page's menu, or `wirenote export ID`.
+- Summaries with OpenRouter, OpenAI or any OpenAI-compatible API: choose it in Settings, or run `wirenote setup openai`. With one OpenRouter key you can use Claude, GPT, Gemini, Qwen and many more. A server on your own computer, such as LM Studio or llama.cpp, counts as local: nothing leaves the computer. For any other address, the app asks you to confirm first, as for Claude.
+- Claude without a saved key: Wirenote uses your `ant auth login` or `ANTHROPIC_API_KEY`. A Claude Pro or Max subscription cannot be used: Anthropic does not allow other apps to use claude.ai logins.
 - End-to-end tests: a recorded Jitsi call runs through the real daemon, worker and web app, with PipeWire and Ollama faked; a nightly run uses the real speech models.
 - Releases test the built wheel on Python 3.11 to 3.14 before publishing, and data written by every earlier release is checked to still read.
 

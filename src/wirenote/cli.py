@@ -207,6 +207,8 @@ def cmd_setup(args) -> int:
         return install.uninstall(purge=args.purge, dry_run=args.dry_run)
     if args.what == "claude":
         return setup.setup_claude()
+    if args.what == "openai":
+        return setup.setup_openai()
     if args.what == "ollama":
         return setup.setup_ollama()
     return setup.setup_consent(args.text)
@@ -344,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
     rep.set_defaults(fn=cmd_reprocess)
     st = sub.add_parser("setup", help="install the services, choose the summary backend, "
                                       "or set the consent line")
-    st.add_argument("what", choices=["install", "uninstall", "ollama", "claude", "consent"])
+    st.add_argument("what", choices=["install", "uninstall", "ollama", "claude", "openai", "consent"])
     st.add_argument("text", nargs="?", help="consent line (for `setup consent`)")
     st.add_argument("--dry-run", action="store_true",
                     help="install/uninstall: show the files and commands, change nothing")

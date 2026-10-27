@@ -2,8 +2,9 @@
 # Copyright (c) 2026 Hrishikesh Jadhav
 """Meeting summary through a pluggable backend (docs/dev/PLAN.md › Processing, step 3).
 
-Backends: Ollama on this machine (the default, nothing leaves the laptop) or
-the Claude API. Both return JSON for one schema: title, summary points,
+Backends: Ollama on this machine (the default, nothing leaves the laptop), the
+Claude API, or an OpenAI-compatible API: OpenRouter, OpenAI, or a server on this
+machine such as LM Studio or llama.cpp. All return JSON for one schema: title, summary points,
 decisions, action items with owners, open questions. Transcripts longer than
 summary_chunk_s are summarized per chunk, then the chunk notes are combined.
 """
@@ -204,6 +205,81 @@ class AnthropicBackend:
         return _parse_json(text)
 
 
+class _Rejected(Exception):
+    """400 Bad Request: often a server or model that takes no JSON schema."""
+
+
+class OpenAIBackend:
+    """An OpenAI-compatible /chat/completions API (OpenRouter, OpenAI, LM Studio, llama.cpp,
+    vLLM). A server on this machine gets Ollama's owner check and counts as local; any
+    other gets the transcript, like Claude, and only over https."""
+
+    def __init__(self, url: str, model: str, api_key: str | None = None,
+                 timeout_s: float = 900.0) -> None:
+        self.url = url.rstrip("/")
+        self.local = pin_local(self.url)
+        self.host = urlsplit(self.url).hostname or self.url
+        self.model = model
+        self.api_key = api_key
+        self.timeout_s = timeout_s
+        # "local:" or the host: the app marks the summary "Local" or "Sent to <host>".
+        self.name = f"{'local' if self.local else self.host}:{model}"
+
+    def complete_json(self, system: str, user: str, schema: dict) -> dict:
+        url = self.url
+        if self.local:
+            url, ip, port = self.local
+            owner = listener_uid(port, ip)
+            if owner is not None and not trusted_owner(owner):
+                raise SummaryError(f"the server on port {port} belongs to another user; "
+                                   "not sending the transcript")
+        elif urlsplit(self.url).scheme != "https":
+            raise SummaryError(f"{self.host}: an API on another computer needs https://")
+        body = {"model": self.model, "temperature": 0.2,
+                "messages": [{"role": "system", "content": system},
+                             {"role": "user", "content": user}],
+                "response_format": {"type": "json_schema",
+                                    "json_schema": {"name": "answer", "schema": schema}}}
+        try:
+            data = self._post(url, body)
+        except _Rejected:
+            # Ask again with the schema in the prompt; _ask checks what comes back.
+            del body["response_format"]
+            body["messages"][0]["content"] = (f"{system}\n\nAnswer with only a JSON object "
+                                              f"that matches this JSON schema:\n{json.dumps(schema)}")
+            try:
+                data = self._post(url, body)
+            except _Rejected as e:
+                raise SummaryError(f"{self.host} returned 400: {e}") from e
+        try:
+            text = data["choices"][0]["message"]["content"] or ""
+        except (KeyError, IndexError, TypeError) as e:
+            raise ValueError("no answer in the response") from e
+        return _parse_json(text)
+
+    def _post(self, url: str, body: dict) -> dict:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        req = urllib.request.Request(f"{url}/chat/completions", data=json.dumps(body).encode(),
+                                     headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "replace")[:300]
+            if e.code == 400:
+                raise _Rejected(detail) from e
+            if e.code in (401, 403):
+                raise SummaryError(f"{self.host} rejected the API key ({e.code}); run "
+                                   "`wirenote setup openai` or paste a key in Settings") from e
+            raise SummaryError(f"{self.host} returned {e.code}: {detail}") from e
+        except (urllib.error.URLError, OSError) as e:
+            raise SummaryError(f"{self.url} not reachable ({e})") from e
+        except ValueError as e:
+            raise SummaryError(f"{self.host} did not answer with JSON") from e
+
+
 def make_backend(settings: Settings) -> Backend | None:
     if settings.summary_backend == "none":
         return None
@@ -211,8 +287,15 @@ def make_backend(settings: Settings) -> Backend | None:
         return OllamaBackend(settings.ollama_url, settings.ollama_model)
     if settings.summary_backend == "anthropic":
         return AnthropicBackend(settings.anthropic_model, load_secrets().get("anthropic_api_key"))
+    if settings.summary_backend == "openai":
+        key = load_secrets().get("openai_api_key")
+        backend = OpenAIBackend(settings.openai_url, settings.openai_model, key)
+        if not key and not backend.local:
+            raise SummaryError(f"no API key for {backend.host}: run `wirenote setup openai` "
+                               "or paste one in Settings")
+        return backend
     raise SummaryError(f"unknown summary_backend {settings.summary_backend!r} "
-                       "(ollama, anthropic or none)")
+                       "(ollama, anthropic, openai or none)")
 
 
 # Summarizing -----------------------------------------------------------------
@@ -262,6 +345,9 @@ def _ask(backend: Backend, system: str, user: str, schema: dict) -> dict:
 
 
 def _parse_json(text: str) -> dict:
+    text = text.strip()
+    if text.startswith("```"):          # a model that wraps its JSON in a code block
+        text = text.split("\n", 1)[-1].rsplit("```", 1)[0]
     data = json.loads(text)
     if not isinstance(data, dict):
         raise ValueError("expected a JSON object")

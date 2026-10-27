@@ -170,12 +170,19 @@ function sourceLabel(c) {
   return c.service ? `${c.service} · ${c.name}` : c.name || c.app;
 }
 
-// Where a summary or answer was made: on this laptop, or by Claude.
+// Where a summary or answer was made: on this laptop, by Claude, or by another API
+// (Backend.name is "<host>:<model>" for those).
 function cloudBadge(backend) {
   if (!backend) return null;
   if (backend.startsWith("anthropic:")) return h("span", { class: "pill cloud", title: "Sent to Anthropic's Claude API" }, "Sent to Claude");
-  if (backend.startsWith("ollama:")) return h("span", { class: "pill local", title: "Made on this laptop" }, "Local");
-  return null;
+  if (backend.startsWith("ollama:") || backend.startsWith("local:")) return h("span", { class: "pill local", title: "Made on this laptop" }, "Local");
+  const host = backend.split(":")[0];
+  return host.includes(".") ? h("span", { class: "pill cloud", title: `Sent to ${host}` }, `Sent to ${host}`) : null;
+}
+
+// Mirrors data.py's _destination: an API on this computer keeps call data here.
+function isLocalUrl(url) {
+  try { return ["127.0.0.1", "localhost", "[::1]"].includes(new URL(url).hostname); } catch { return false; }
 }
 
 function stateBadge(c) {
@@ -1149,7 +1156,8 @@ async function renderSettings() {
   try { state.updates = await api("/api/updates"); page.append(updatesCard(state.updates)); } catch { /* shown on the Updates page */ }
 }
 
-const BACKENDS = [["ollama", "On this laptop (Ollama)"], ["anthropic", "Claude (sent to Anthropic)"], ["none", "Off"]];
+const BACKENDS = [["ollama", "On this laptop (Ollama)"], ["anthropic", "Claude (sent to Anthropic)"],
+  ["openai", "OpenRouter, OpenAI or another compatible API"], ["none", "Off"]];
 
 function field(label, control, hint) {
   return h("div", { class: "field" }, h("label", {}, label), control, hint ? h("div", { class: "hint" }, hint) : null);
@@ -1163,6 +1171,7 @@ function setupCard(s) {
   const inputs = {
     summary_backend: backend,
     ollama_model: text("ollama_model"), anthropic_model: text("anthropic_model"),
+    openai_url: text("openai_url", "https://openrouter.ai/api/v1"), openai_model: text("openai_model"),
     summary_language: text("summary_language", "auto"),
     whisper_model: text("whisper_model"), whisper_language: text("whisper_language", "auto"),
     asr_engine: h("select", {}, ENGINES.map(([v, label]) => h("option", { value: v, selected: v === e.asr_engine }, label))),
@@ -1174,25 +1183,34 @@ function setupCard(s) {
   const value = (el) => (el.type === "checkbox" ? el.checked : el.value);
   const ollamaRow = field("Ollama model", inputs.ollama_model);
   const claudeRow = field("Claude model", inputs.anthropic_model);
-  const keyBox = h("div", {});
+  const openaiRows = h("div", {},
+    field("API address", inputs.openai_url,
+      "OpenRouter: https://openrouter.ai/api/v1 · OpenAI: https://api.openai.com/v1 · LM Studio on this laptop: http://127.0.0.1:1234/v1"),
+    field("Model", inputs.openai_model, "As the API names it, e.g. anthropic/claude-sonnet-5.5 or qwen/qwen3.8-flash on OpenRouter."));
+  const saved = "A key is saved; paste a new one to replace it";
+  const keyField = (which, label, placeholder, isSet, hint) => {
+    const input = h("input", { type: "password", autocomplete: "off", placeholder: isSet ? saved : placeholder });
+    const btn = h("button", { class: "btn" }, "Save key");
+    btn.onclick = async () => {
+      try {
+        await api(`/api/settings/${which}-key`, { method: "POST", body: { key: input.value } });
+        input.value = "";
+        input.placeholder = saved;
+        toast("Key saved. It stays on this laptop, in secrets.toml.");
+      } catch (err) { toast(err.message); }
+    };
+    return field(label, h("div", { class: "inline" }, input, btn), hint);
+  };
+  const keyBox = keyField("anthropic", "Claude API key", "sk-ant-…", s.anthropic_key_set,
+    "Kept in secrets.toml on this laptop; never shown here again. No key? Run "ant auth login" in a terminal instead. A Claude Pro or Max subscription cannot be used here: Anthropic does not allow other apps to use claude.ai logins.");
+  const openaiKeyBox = keyField("openai", "API key", "sk-or-…", s.openai_key_set,
+    "Kept in secrets.toml on this laptop; never shown here again. Not needed for a server on this laptop.");
   const showFor = () => {
     ollamaRow.hidden = backend.value !== "ollama";
     claudeRow.hidden = keyBox.hidden = backend.value !== "anthropic";
+    openaiRows.hidden = openaiKeyBox.hidden = backend.value !== "openai";
   };
   backend.onchange = showFor;
-
-  const keyInput = h("input", { type: "password", autocomplete: "off", placeholder: s.anthropic_key_set ? "A key is saved; paste a new one to replace it" : "sk-ant-…" });
-  const saveKey = h("button", { class: "btn" }, "Save key");
-  saveKey.onclick = async () => {
-    try {
-      await api("/api/settings/anthropic-key", { method: "POST", body: { key: keyInput.value } });
-      keyInput.value = "";
-      keyInput.placeholder = "A key is saved; paste a new one to replace it";
-      toast("Key saved. It stays on this laptop, in secrets.toml.");
-    } catch (err) { toast(err.message); }
-  };
-  keyBox.append(field("Claude API key", h("div", { class: "inline" }, keyInput, saveKey),
-    "Kept in secrets.toml on this laptop; never shown here again."));
   showFor();
 
   const save = h("button", { class: "btn btn-primary" }, "Save");
@@ -1201,8 +1219,10 @@ function setupCard(s) {
     for (const [k, el] of Object.entries(inputs)) if (value(el) !== e[k]) changes[k] = value(el);
     if (!Object.keys(changes).length) { toast("Nothing changed."); return; }
     let confirm_cloud = false;
-    if (changes.summary_backend === "anthropic") {
-      if (!await confirmDialog("Send call data to Claude?", s.cloud_disclosure, "Use Claude")) return;
+    const where = (b, url) => (b === "anthropic" ? "Claude" : b === "openai" && !isLocalUrl(url) ? (() => { try { return new URL(url).hostname; } catch { return url; } })() : null);
+    const before = where(e.summary_backend, e.openai_url), after = where(value(backend), value(inputs.openai_url));
+    if (after && after !== before) {
+      if (!await confirmDialog(`Send call data to ${after}?`, s.cloud_disclosure, `Use ${after}`)) return;
       confirm_cloud = true;
     }
     try {
@@ -1218,8 +1238,8 @@ function setupCard(s) {
   return h("div", { class: "settings-card" },
     h("h2", {}, "Setup"),
     h("p", {}, "Summaries, transcription and the consent line. Everything else is in config.toml."),
-    field("Summaries and Ask", backend, "Ollama and Off keep everything on this laptop."),
-    ollamaRow, claudeRow, keyBox,
+    field("Summaries and Ask", backend, "Ollama, Off, and an API server on this laptop keep everything here."),
+    ollamaRow, claudeRow, keyBox, openaiRows, openaiKeyBox,
     field("Summary language", inputs.summary_language, "auto: the language of the call, or e.g. English, German."),
     field("Whisper model", inputs.whisper_model, "e.g. large-v3-turbo, medium, small."),
     field("Call language", inputs.whisper_language, "auto, or a code like en, de."),
