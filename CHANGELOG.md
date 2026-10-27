@@ -6,11 +6,15 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ### Added
 
-- When a recording stops, the call opens in the meetings app in your default browser, where the note fills in once it is written. Turn it off with `open_call_after_recording = false` in `config.toml`.
+- When a recording stops, the call opens in the meetings app in your default browser, where the note fills in once it is written. Turn it off with `open_call_after_recording = false` in `config.toml` and `systemctl --user restart wirenote`.
 
 ### Changed
 
 - Stop in the meetings app opens no second tab, and "Recording saved" then says "stopped in the app".
+
+### Fixed
+
+- Your notes for a call open in two tabs: a save from the older tab no longer overwrites what the newer one saved; it asks you to reload instead.
 
 ## [0.1.0] - 2026-10-26
 

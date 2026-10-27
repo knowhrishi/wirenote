@@ -197,6 +197,17 @@ def test_my_notes_are_saved_and_rewritten_into_the_note(store):
     assert st.calls("ask legal")[0]["match"]["where"] == "my_notes"
 
 
+def test_notes_from_a_stale_tab_do_not_overwrite_newer_ones(store):
+    from wirenote.ui.data import Invalid
+
+    st, rec_id = store
+    st.save_my_notes(rec_id, "- ship Friday", base="")
+    st.save_my_notes(rec_id, "- ship Friday\n- ask legal", base="- ship Friday")   # tab B
+    with pytest.raises(Invalid, match="another tab"):
+        st.save_my_notes(rec_id, "- ship Friday\n- typo", base="- ship Friday")    # tab A
+    assert st.call(rec_id)["my_notes"] == "- ship Friday\n- ask legal"
+
+
 def test_naming_a_speaker_updates_transcript_note_and_remembers_the_voice(store):
     st, rec_id = store
     call = st.call(rec_id)

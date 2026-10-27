@@ -345,7 +345,9 @@ def make_handler(app: App):
             if action == "/ask":
                 return self._json(store.ask(rec_id, str(body.get("question", ""))))
             if action == "/notes":
-                store.save_my_notes(rec_id, str(body.get("text", "")))
+                base = body.get("base")
+                store.save_my_notes(rec_id, str(body.get("text", "")),
+                                    None if base is None else str(base))
                 return self._json({"ok": True})
             if action == "/speaker":
                 store.rename_speaker(rec_id, str(body.get("label", "")), str(body.get("name", "")),

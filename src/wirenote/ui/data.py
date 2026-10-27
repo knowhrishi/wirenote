@@ -331,8 +331,12 @@ class Store:
         if note and note.exists():
             _tick_in_note(note, item, done)
 
-    def save_my_notes(self, rec_id: str, text: str) -> None:
+    def save_my_notes(self, rec_id: str, text: str, base: str | None = None) -> None:
+        """base: the notes the editor started from. If they changed since (another tab,
+        e.g. the one opened when the recording stopped), nothing is overwritten."""
         d = self.rec_dir(rec_id)
+        if base is not None and base.strip() != read_my_notes(d):
+            raise Invalid("These notes changed in another tab. Reload this page to see them.")
         text = text[:20000]
         (d / MY_NOTES).write_text(text)
         state, _ = self._job_state(d)
