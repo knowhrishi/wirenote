@@ -91,3 +91,53 @@ def test_event_key_is_twelve_hex_and_ignores_the_title_when_there_is_a_uid():
     assert k != event_key(event(title="Renamed"))
     later = Event(title="x", start=START + dt.timedelta(days=7), end=START, uid="abc")
     assert event_key(later) != k
+
+
+ME = ("Me Myself", "me@x.test")
+
+
+def _team(root):
+    """The user is on every invitation: another team's standup, a 1:1 with Anna, filler."""
+    other = make(root, 1, title="Standup", people=(ME, ("Zed", "zed@x.test")))
+    one_one = make(root, 2, title="1:1", people=(ME, ("Anna", "anna@x.test")))
+    make(root, 3, title="Filler", people=(ME, ("Quinn", "quinn@x.test")))
+    return other, one_one
+
+
+def test_you_on_every_invitation_do_not_make_other_meetings_match(tmp_path):
+    from dataclasses import replace
+
+    from wirenote.config.settings import Settings
+    from wirenote.meetings.me import my_addresses
+
+    _team(tmp_path)
+    calls = load_calls(tmp_path)
+    e = event(title="Standup", people=(ME, ("Anna", "anna@x.test"), ("Ben", "ben@x.test")))
+    assert len(related_calls(e, calls)) == 2                 # counting you, both false matches
+    mine = my_addresses(calls, Settings())
+    assert mine == {"me@x.test"}
+    assert related_calls(e, calls, mine=mine) == []
+    assert prep_brief(e, calls, mine)["people"] and "Me Myself" not in [
+        p["name"] for p in prep_brief(e, calls, mine)["people"]]
+    assert my_addresses(calls, replace(Settings(), my_emails=("Other@x.test",))) == {"other@x.test"}
+
+
+def test_your_address_is_inferred_only_from_three_calls(tmp_path):
+    from wirenote.config.settings import Settings
+    from wirenote.meetings.me import infer_addresses, my_addresses
+
+    make(tmp_path, 1, people=(ME, ("Zed", "zed@x.test")))
+    make(tmp_path, 2, people=(ME, ("Anna", "anna@x.test")))
+    calls = load_calls(tmp_path)
+    assert infer_addresses(calls) == set() and my_addresses(calls, Settings()) == set()
+    make(tmp_path, 3, people=(ME, ("Quinn", "quinn@x.test")))
+    assert infer_addresses(load_calls(tmp_path)) == {"me@x.test"}
+    make(tmp_path, 4, people=(("Someone", "s@x.test"),))      # not on this one: not you
+    assert infer_addresses(load_calls(tmp_path)) == set()
+
+
+def test_my_emails_is_a_list_setting():
+    from wirenote.config.settings import parse_settings
+
+    assert parse_settings('my_emails = ["a@x.test", "b@x.test"]').my_emails == ("a@x.test", "b@x.test")
+    assert parse_settings("").my_emails == ()

@@ -113,6 +113,8 @@ class Settings:
     meeting_prep: bool = True
     # › Meeting prep
     prep_lead_s: float = 300.0
+    # › Own address: yours, left out of prep and people; empty means guess from your calls
+    my_emails: tuple = ()
 
     # UI (docs/dev/ui-design.md): local web app on 127.0.0.1
     ui_port: int = 8765
@@ -185,6 +187,7 @@ DEFAULT_CONFIG_TOML = """# wirenote settings. Defaults come from docs/dev/PLAN.m
 # calendar_after_start_s = 300.0
 # meeting_prep = true                # a banner before a meeting you have had calls about
 # prep_lead_s = 300.0
+# my_emails = []                     # your own addresses; empty: guessed from your calls
 
 # UI
 # ui_port = 8765                     # wirenote ui serves http://127.0.0.1:<port>/

@@ -15,6 +15,7 @@ import re
 
 from ..calendar.ics import Event
 from .catalog import CallRecord
+from .me import my_names, without_me
 from .people import is_person, person_key
 
 MAX_RELATED = 5
@@ -44,6 +45,10 @@ def _invitees(e: Event) -> tuple[tuple[str, str], ...]:
     return tuple(("", m) for m in e.emails)
 
 
+def _others(pairs, mine: set[str], names: set[str]) -> tuple[tuple[str, str], ...]:
+    return tuple(without_me(pairs, mine, names)) if mine else tuple(pairs)
+
+
 def _same(a: tuple[str, str], b: tuple[str, str]) -> bool:
     """By email when both have one, else by case-folded name."""
     (an, ae), (bn, be) = a, b
@@ -52,8 +57,10 @@ def _same(a: tuple[str, str], b: tuple[str, str]) -> bool:
     return bool(an.strip()) and an.strip().casefold() == bn.strip().casefold()
 
 
-def _shared(invitees: tuple[tuple[str, str], ...], call: CallRecord) -> int:
-    return sum(1 for i in invitees if any(_same(i, a) for a in call.attendees))
+def _shared(invitees: tuple[tuple[str, str], ...], call: CallRecord, mine: set[str] = frozenset(),
+            names: set[str] = frozenset()) -> int:
+    theirs = _others(call.attendees, mine, names)
+    return sum(1 for i in invitees if any(_same(i, a) for a in theirs))
 
 
 def _before(call: CallRecord, e: Event) -> bool:
@@ -67,9 +74,12 @@ def _before(call: CallRecord, e: Event) -> bool:
     return started < e.start
 
 
-def related_calls(e: Event, calls: list[CallRecord], limit: int = MAX_RELATED) -> list[CallRecord]:
-    """calls newest first. Series matches come first, then title and people, then people alone."""
-    invitees = _invitees(e)
+def related_calls(e: Event, calls: list[CallRecord], limit: int = MAX_RELATED,
+                  mine: set[str] = frozenset()) -> list[CallRecord]:
+    """calls newest first. Series matches come first, then title and people, then people alone.
+    mine are your addresses (meetings/me.py): you are left out on both sides."""
+    names = my_names([_invitees(e), *(c.attendees for c in calls)], mine) if mine else set()
+    invitees = _others(_invitees(e), mine, names)
     title = normalize_title(e.title)
     need = min(2, len(invitees))
     tiers: list[list[CallRecord]] = [[], [], []]
@@ -79,7 +89,7 @@ def related_calls(e: Event, calls: list[CallRecord], limit: int = MAX_RELATED) -
         if e.uid and c.calendar_uid == e.uid:
             tiers[0].append(c)
             continue
-        shared = _shared(invitees, c)
+        shared = _shared(invitees, c, mine, names)
         if title and shared and normalize_title(c.calendar_title or c.title) == title:
             tiers[1].append(c)
         elif need and shared >= need:
@@ -87,10 +97,11 @@ def related_calls(e: Event, calls: list[CallRecord], limit: int = MAX_RELATED) -
     return [c for tier in tiers for c in tier][:limit]
 
 
-def prep_brief(e: Event, calls: list[CallRecord]) -> dict:
+def prep_brief(e: Event, calls: list[CallRecord], mine: set[str] = frozenset()) -> dict:
     """What to read before the event: the last related call, open action items across all
     related calls, and who is invited. last is None when nothing is related."""
-    related = related_calls(e, calls, SERIES_ACTIONS)
+    related = related_calls(e, calls, SERIES_ACTIONS, mine)
+    names = my_names([_invitees(e), *(c.attendees for c in related)], mine) if mine else set()
     last = related[0] if related else None
     actions = []
     for c in related:
@@ -100,10 +111,10 @@ def prep_brief(e: Event, calls: list[CallRecord]) -> dict:
                                 "task": str(a.get("task") or ""), "owner": str(a.get("owner") or ""),
                                 "due": str(a.get("due") or "")})
     people = []
-    for name, _email in _invitees(e):
+    for name, email in _others(_invitees(e), mine, names):
         if is_person(name):
             people.append({"name": name, "key": person_key(name),
-                           "met": sum(1 for c in related if _shared(((name, _email),), c))})
+                           "met": sum(1 for c in related if _shared(((name, email),), c, mine, names))})
     return {"event": {"key": event_key(e), "title": e.title, "start": e.start.isoformat(),
                       "end": e.end.isoformat()},
             "last": None if last is None else {

@@ -33,6 +33,7 @@ from ..config.apps import AppRules
 from ..config.secrets import calendar_sources
 from ..config.settings import Settings, config_dir, load_settings
 from ..meetings.catalog import load_calls
+from ..meetings.me import my_addresses
 from ..meetings.related import event_key, prep_brief, related_calls
 from ..notify import clipboard
 from ..notify.dbus import CLOSED_BY_CALL, Notifier, watch_sleep
@@ -177,6 +178,7 @@ class Daemon:
         self._update_kick = asyncio.Event()
         self._last_status = 0.0
         self._last_prep = 0.0
+        self._prep_task: asyncio.Task | None = None
         self._prep_empty: set[str] = set()          # events looked at that have no history
         self._stopping = asyncio.Event()
 
@@ -299,7 +301,7 @@ class Daemon:
                 self._capture_tick_queued = True
                 self._rec_ops.put_nowait((self._capture_tick, None))
             if time.monotonic() - self._last_prep >= PREP_CHECK_S:
-                await self._prep_round()
+                self._start_prep()
 
     def _on_sleep(self, going_to_sleep: bool) -> None:
         now = time.monotonic()
@@ -755,12 +757,19 @@ class Daemon:
                                errors=len(errors))
             else:
                 self.calendar_events = []
-            await self._prep_round()
+            self._start_prep()
             self._calendar_kick.clear()
             try:
                 await asyncio.wait_for(self._calendar_kick.wait(), self.settings.calendar_refresh_s)
             except asyncio.TimeoutError:
                 pass
+
+    def _start_prep(self) -> None:
+        """Run a prep round beside the loops, one at a time: reading the library must not
+        hold up a detector tick."""
+        self._last_prep = time.monotonic()
+        if self._prep_task is None or self._prep_task.done():
+            self._prep_task = asyncio.create_task(self._prep_round())
 
     async def _prep_round(self, now: dt.datetime | None = None) -> None:
         """Queue a prep banner for an event starting within prep_lead_s, once, when there is
@@ -768,6 +777,7 @@ class Daemon:
         self._last_prep = time.monotonic()
         now = now or dt.datetime.now().astimezone()
         try:
+            self._prep_empty &= {event_key(e) for e in self.calendar_events}
             soon = [e for e in self.calendar_events
                     if now < e.start <= now + dt.timedelta(seconds=self.settings.prep_lead_s)
                     and event_key(e) not in self.state.prepped and event_key(e) not in self._prep_empty]
@@ -775,17 +785,19 @@ class Daemon:
                     or self.detector.tracker.recording_key is not None):
                 return
             calls = await asyncio.to_thread(load_calls, self.settings.recordings_path())
+            mine = my_addresses(calls, self.settings)
             for e in soon:
-                if not related_calls(e, calls):
-                    self._prep_empty.add(event_key(e))      # nothing to show: stay silent
+                if not related_calls(e, calls, mine=mine):
+                    if calls:       # an empty library may just not be readable yet: look again
+                        self._prep_empty.add(event_key(e))      # nothing to show: stay silent
                     continue
-                brief = prep_brief(e, calls)
+                brief = prep_brief(e, calls, mine)
                 self.state.mark_prepped(brief["event"]["key"], time.time())
                 self.log.write("prep", related=brief["related"])      # no title: docs/dev/PLAN.md
                 minutes = max(1, math.ceil((e.start - now).total_seconds() / 60))
                 self._ops.put_nowait((self._show_prep, (brief, minutes)))
         except Exception as err:  # noqa: BLE001 - prep is a courtesy; detection carries on
-            self.log.write("error", message=f"meeting prep failed: {err!r}")
+            self.log.write("error", message=f"meeting prep failed: {type(err).__name__}")
 
     def _calendar_window(self) -> list[ics.Event]:
         return ics.in_window(self.calendar_events, dt.datetime.now().astimezone(),

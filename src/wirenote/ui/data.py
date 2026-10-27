@@ -30,6 +30,7 @@ from ..config.settings import DEFAULT_CONFIG_TOML, Settings, config_dir, parse_s
 from ..meetings.catalog import load_calls
 from ..meetings.people import (MAX_NAME, build_people, is_person, load_aliases, person_key, resolve,
                                save_aliases)
+from ..meetings.me import infer_addresses, my_addresses
 from ..meetings.related import event_key, prep_brief, related_calls
 from ..config.vocabulary import load_vocabulary, save_vocabulary
 from ..process.engines import ENGINES, OVERRIDES, check_overrides
@@ -43,6 +44,7 @@ from ..process.templates import remember_series, scan, series_templates
 from ..process.worker import MY_NOTES, SUMMARY, TRANSCRIPT, read_my_notes, rewrite_note
 
 REC_ID = re.compile(r"^\d{8}-\d{6}-[A-Za-z0-9_.-]{1,64}$")
+CALLS_TTL_S = 30.0
 PREP_KEY = re.compile(r"^[0-9a-f]{12}$")
 LABEL = re.compile(r"^(S\d{1,3}|Others)$")
 MIX = "mix.ogg"
@@ -87,13 +89,15 @@ subject: a short subject line."""
 EDITABLE = ("consent_line", "summary_backend", "ollama_model", "anthropic_model",
             "openai_url", "openai_model",
             "whisper_model", "whisper_language", "summary_language", "asr_engine",
-            "live_transcript", "default_template")
+            "live_transcript", "default_template", "my_emails")
+LISTS = ("my_emails",)             # the EDITABLE settings that are lists of text
 SWITCHES = ("live_transcript",)    # the EDITABLE settings that are true or false
 LIVE_READ = 256 * 1024             # most of live.jsonl sent per poll
 BACKENDS = ("ollama", "anthropic", "openai", "none")
 API_KEYS = {"anthropic": "anthropic_api_key", "openai": "openai_api_key"}   # secrets.toml
 UPDATE_UNIT = "wirenote-update"
 MAX_SETTING = 500
+MAX_LIST = 10
 CALENDAR_LINK = re.compile(r"^(https|webcal)://\S{1,2000}$", re.IGNORECASE)
 
 CLOUD_DISCLOSURE = ("With Claude or an online API on, these go to Anthropic, or to the API you "
@@ -187,6 +191,7 @@ class Store:
         self._jobs_lock = threading.Lock()
         self._mix_locks: dict[str, threading.Lock] = {}
         self._upcoming: tuple[float, list] = (0.0, [])
+        self._calls_cache: tuple[float, int, list | None] = (0.0, 0, None)
 
     # Paths -----------------------------------------------------------------
 
@@ -415,6 +420,7 @@ class Store:
 
     def set_action_done(self, rec_id: str, index: int, done: bool) -> None:
         d = self.rec_dir(rec_id)
+        self._calls_cache = (0.0, 0, None)
         s = self._summary(d)
         if not s or not 0 <= index < len(s.get("action_items", [])):
             raise Invalid("no such action item")
@@ -699,7 +705,8 @@ class Store:
 
     def _people(self):
         calls = load_calls(self.root)
-        return build_people(calls, load_aliases(self.state_dir)), {c.id: c for c in calls}
+        mine = my_addresses(calls, self.settings)
+        return build_people(calls, load_aliases(self.state_dir), mine), {c.id: c for c in calls}
 
     def people(self) -> list[dict]:
         out = [{"key": person_key(p.name), "name": p.name, "emails": sorted(p.emails),
@@ -824,7 +831,9 @@ class Store:
                 "notes_dir": str(s.notes_path()),
                 "vocabulary": load_vocabulary(), "voices": self.voices.names(),
                 "calendars": self.calendars(),
-                "editable": {k: getattr(s, k) for k in EDITABLE},
+                "editable": {k: list(v) if isinstance(v, tuple) else v
+                             for k, v in ((k, getattr(s, k)) for k in EDITABLE)},
+                "my_emails_inferred": sorted(infer_addresses(self._recent_calls())) if not s.my_emails else [],
                 "templates": self.templates(),
                 "anthropic_key_set": bool(secrets.get("anthropic_api_key")
                                           or os.environ.get("ANTHROPIC_API_KEY")),
@@ -842,6 +851,12 @@ class Store:
             if k in SWITCHES:
                 if not isinstance(v, bool):
                     raise Invalid(f"{k}: true or false")
+                continue
+            if k in LISTS:
+                if not isinstance(v, list) or len(v) > MAX_LIST or not all(
+                        isinstance(x, str) and "@" in x and x.isprintable() and not any(c.isspace() for c in x)
+                        and len(x) <= MAX_SETTING for x in v):
+                    raise Invalid(f"{k}: a list of email addresses")
                 continue
             if not isinstance(v, str) or len(v) > MAX_SETTING:
                 raise Invalid(f"{k}: expected text of at most {MAX_SETTING} characters")
@@ -1085,10 +1100,11 @@ class Store:
         now = dt.datetime.now().astimezone()
         soon = sorted((e for e in events if e.end > now and e.start < now + dt.timedelta(hours=18)),
                       key=lambda e: e.start)[:8]
-        calls = load_calls(self.root) if soon else []
+        calls = self._recent_calls() if soon else []
+        mine = my_addresses(calls, self.settings)
         return [{"title": e.title, "start": e.start.isoformat(), "end": e.end.isoformat(),
                  "attendees": list(e.attendees), "call": bool(e.service_links(None)),
-                 "key": event_key(e), "related": len(related_calls(e, calls))}
+                 "key": event_key(e), "related": len(related_calls(e, calls, mine=mine))}
                 for e in soon]
 
     def prep(self, key: str) -> dict:
@@ -1098,8 +1114,23 @@ class Store:
         self.upcoming()                         # refreshes the cached events when they are stale
         for e in self._upcoming[1]:
             if event_key(e) == key:
-                return prep_brief(e, load_calls(self.root))
+                calls = self._recent_calls()
+                return prep_brief(e, calls, my_addresses(calls, self.settings))
         raise NotFound("event")
+
+    def _recent_calls(self) -> list:
+        """load_calls for the home page and prep, reused for CALLS_TTL_S while the recordings
+        folder is unchanged; ticking an action drops it."""
+        try:
+            stamp = self.root.stat().st_mtime_ns
+        except OSError:
+            stamp = 0
+        at, seen, calls = self._calls_cache
+        if calls is not None and seen == stamp and time.monotonic() - at < CALLS_TTL_S:
+            return calls
+        calls = load_calls(self.root)
+        self._calls_cache = (time.monotonic(), stamp, calls)
+        return calls
 
 
 def _seconds(hhmmss: str) -> float:

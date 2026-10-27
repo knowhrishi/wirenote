@@ -194,3 +194,13 @@ def test_people_scale_500_calls(tmp_path):
     elapsed = time.perf_counter() - t0
     assert len(people) == 60 and sum(len(p.calls) for p in people.values()) >= 500
     assert elapsed < 2.0, f"{elapsed:.2f}s"
+
+
+def test_a_person_with_your_address_is_not_listed(tmp_path):
+    rec(tmp_path, 1, attendees=["Me Myself", "Anna"], people=[["Me Myself", "me@x.test"], ["Anna", "a@x.test"]])
+    rec(tmp_path, 2, attendees=["Me Myself", "Bo"], people=[["Me Myself", "me@x.test"], ["Bo", ""]])
+    rec(tmp_path, 3, attendees=["Me Myself", "Cy"], people=[["Me Myself", "me@x.test"], ["Cy", ""]],
+        speakers={"S1": {"name": "Me Myself"}}, lines=[talk("S1", 0, 5)])
+    calls = load_calls(tmp_path)
+    assert "me myself" in build_people(calls, {})
+    assert sorted(build_people(calls, {}, {"me@x.test"})) == ["anna", "bo", "cy"]

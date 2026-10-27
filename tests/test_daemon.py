@@ -518,3 +518,54 @@ def test_prep_state_is_pruned_after_48_hours_and_old_files_still_read(tmp_path):
     assert set(again.prepped) == {"new"} and again.ignored == {"b"}
     again.save({"a": 2}, {"b"})
     assert set(PersistentState(path).prepped) == {"new"}
+
+
+def test_prep_failure_is_logged_without_paths_or_titles(tmp_path, monkeypatch):
+    import wirenote.detector.daemon as daemon_mod
+
+    d, now = _prep_setup(tmp_path, title="Secret board meeting")
+
+    def boom(root):
+        raise OSError(f"cannot read {root}/secret-folder")
+
+    monkeypatch.setattr(daemon_mod, "load_calls", boom)
+    asyncio.run(d._prep_round(now))
+    log = (tmp_path / "detector.jsonl").read_text()
+    assert "meeting prep failed: OSError" in log
+    assert "secret" not in log.lower() and str(tmp_path / "recordings") not in log
+    assert d._prep_empty == set()
+
+
+def test_prep_empty_cache_follows_the_calendar_and_ignores_empty_libraries(tmp_path):
+    d, now = _prep_setup(tmp_path, past=False)
+    asyncio.run(d._prep_round(now))                      # no recordings at all: not remembered
+    assert d._prep_empty == set()
+    from test_people import rec
+    root = d.settings.recordings_path()
+    root.mkdir(parents=True, exist_ok=True)
+    rec(root, 1, attendees=["Zed"], people=[["Zed", "z@x.test"]], title="Other")
+    asyncio.run(d._prep_round(now))                      # a library, but nothing matches
+    assert len(d._prep_empty) == 1
+    d.calendar_events = []
+    asyncio.run(d._prep_round(now))
+    assert d._prep_empty == set()
+
+
+def test_prep_rounds_run_as_one_task_at_a_time(tmp_path):
+    d, now = _prep_setup(tmp_path)
+    started = []
+
+    async def slow(*a):
+        started.append(1)
+        await asyncio.sleep(0.05)
+
+    async def go():
+        d._prep_round = slow
+        d._start_prep()
+        d._start_prep()                                  # the first is still running
+        await asyncio.sleep(0.1)
+        d._start_prep()
+        await asyncio.sleep(0.1)
+
+    asyncio.run(go())
+    assert len(started) == 2

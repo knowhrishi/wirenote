@@ -861,3 +861,32 @@ def test_prep_route(server, monkeypatch):
     assert request(port, "GET", "/api/prep/zzzzzzzzzzzz")[0] == 404
     status, body = request(port, "GET", f"/api/prep/{key}")
     assert status == 200 and json.loads(body)["event"]["title"] == "Sync" and json.loads(body)["last"] is None
+
+
+def test_my_emails_setting_and_inferred_address(store, cfg_env):
+    st, rec_id = store
+    assert st.settings_info()["my_emails_inferred"] == []         # one call is too few to guess
+    assert st.update_settings({"my_emails": ["Me@x.test"]}, False)["editable"]["my_emails"] == ["Me@x.test"]
+    with pytest.raises(Invalid, match="my_emails"):
+        st.update_settings({"my_emails": "me@x.test"}, False)
+    with pytest.raises(Invalid, match="my_emails"):
+        st.update_settings({"my_emails": ["not an address"]}, False)
+    assert st.update_settings({"my_emails": []}, False)["editable"]["my_emails"] == []
+
+
+def test_upcoming_and_prep_read_the_library_once_in_a_while(store, monkeypatch):
+    import datetime as dt
+
+    from wirenote.calendar.ics import Event
+
+    st, rec_id = store
+    now = dt.datetime.now().astimezone()
+    ev = Event(title="Sync", start=now + dt.timedelta(minutes=20), end=now + dt.timedelta(hours=1))
+    monkeypatch.setattr(data_mod, "calendar_sources", lambda urls: ("x",))
+    monkeypatch.setattr("wirenote.calendar.ics.load", lambda sources, n: ([ev], []))
+    loads = []
+    real = data_mod.load_calls
+    monkeypatch.setattr(data_mod, "load_calls", lambda root: loads.append(1) or real(root))
+    st.upcoming()
+    st.prep(st.upcoming()[0]["key"])
+    assert len(loads) == 1

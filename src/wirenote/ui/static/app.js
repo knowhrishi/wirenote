@@ -1509,10 +1509,25 @@ function calendarsCard(s) {
     } catch (e) { toast(e.message); }
     add.disabled = false;
   };
+  const mine = h("input", { type: "text", value: (s.editable.my_emails || []).join(", "), placeholder: "you@example.com", maxlength: "500", spellcheck: "false" });
+  const saveMine = h("button", { class: "btn" }, "Save");
+  saveMine.onclick = async () => {
+    const my_emails = mine.value.split(/[,\s]+/).filter(Boolean);
+    try {
+      const r = await api("/api/settings", { method: "PUT", body: { changes: { my_emails }, confirm_cloud: false } });
+      Object.assign(s, r);
+      mine.value = r.editable.my_emails.join(", ");
+      toast("Saved.");
+    } catch (e) { toast(e.message); }
+  };
+  const inferred = (s.my_emails_inferred || []).join(", ");
   return h("div", { class: "settings-card" },
     h("h2", {}, "Calendars"),
     h("p", {}, "Paste a calendar's secret ICS link (Outlook: Publish a calendar › ICS; Google: Secret address in iCal format). It stays in secrets.toml and is not shown again."),
-    list, h("div", { class: "field inline-add" }, h("div", { class: "inline" }, link, add)));
+    list, h("div", { class: "field inline-add" }, h("div", { class: "inline" }, link, add)),
+    field("Your email addresses", h("div", { class: "inline" }, mine, saveMine),
+      inferred ? `Wirenote thinks this is you: ${inferred}. Type your own to replace it.`
+        : "Left out of meeting prep and People. Separate several with commas."));
 }
 
 // Updates (docs/dev/updates-design.md) -----------------------------------------

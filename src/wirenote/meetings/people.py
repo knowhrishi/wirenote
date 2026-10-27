@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .catalog import CallRecord
+from .me import my_names
 
 PEOPLE_FILE = "people.json"
 NOT_PEOPLE = re.compile(r"^(me|others|s\d+|speaker \d+)$")
@@ -53,9 +54,13 @@ def resolve(name: str, aliases: dict[str, str]) -> str:
     return key
 
 
-def build_people(calls: list[CallRecord], aliases: dict[str, str]) -> dict[str, Person]:
-    """calls newest first. Keyed by the case-folded canonical name."""
+def build_people(calls: list[CallRecord], aliases: dict[str, str],
+                 mine: set[str] = frozenset()) -> dict[str, Person]:
+    """calls newest first. Keyed by the case-folded canonical name. mine are your addresses
+    (meetings/me.py): an invitee with one is you, not a person, and neither is a speaker
+    named like one of your address's names."""
     people: dict[str, Person] = {}
+    mine_names = my_names([c.attendees for c in calls], mine) if mine else set()
 
     def person(name: str) -> Person:
         key = resolve(name, aliases)
@@ -66,13 +71,13 @@ def build_people(calls: list[CallRecord], aliases: dict[str, str]) -> dict[str, 
     for call in calls:
         here: dict[str, dict] = {}      # one entry per person per call
         for name, email in call.attendees:
-            if is_person(name):
+            if is_person(name) and not (email.casefold() in mine if email else name.strip().casefold() in mine_names):
                 p = person(name)
                 if email:
                     p.emails.add(email)
                 here.setdefault(resolve(name, aliases), {"p": p, "role": "invited", "seconds": 0.0})
         for name, secs in call.speakers:
-            if is_person(name):
+            if is_person(name) and name.strip().casefold() not in mine_names:
                 e = here.setdefault(resolve(name, aliases), {"p": person(name), "role": "", "seconds": 0.0})
                 e["role"], e["seconds"] = "spoke", e["seconds"] + secs
         for e in here.values():
