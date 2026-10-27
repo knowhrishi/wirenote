@@ -60,7 +60,14 @@ def speech_spans(audio: np.ndarray) -> list[tuple[int, int]]:
 
     spans = get_speech_timestamps(audio, VadOptions(max_speech_duration_s=MAX_CHUNK_S))
     pad = int(PAD_S * SR)
-    return [(max(0, s["start"] - pad), min(len(audio), s["end"] + pad)) for s in spans]
+    out = []
+    for i, s in enumerate(spans):
+        # Speech split at 30 s comes in pieces that touch: padding stops at the next
+        # piece, or the audio between them would be heard twice.
+        lo = spans[i - 1]["end"] if i else 0
+        hi = spans[i + 1]["start"] if i + 1 < len(spans) else len(audio)
+        out.append((max(lo, s["start"] - pad), min(hi, s["end"] + pad)))
+    return out
 
 
 def tokens_to_words(tokens: list[str], starts: list[float], ends: list[float],
