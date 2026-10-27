@@ -435,6 +435,28 @@ def test_flags_in_text_without_spaces_keep_their_own_moment(tmp_path):
         assert _cjk_point(int(f["t"])) in f["text"] and len(f["text"]) < 400 and b.endswith(f["text"])
 
 
+def test_many_flags_still_reach_the_summary():
+    import re
+
+    from wirenote.process.worker import FLAGGED_CAP, _flagged
+
+    lines = paragraphs(MonologueTranscriber().recording(None, None)[0], 1.5)
+    flags = [2.0 + 4 * k for k in range(150)]
+    names = {"S1": "Priya"}
+    got = _flagged(lines, flags, Settings(), names)
+    assert got.startswith("Moments Me flagged as important.")
+    block = got.split("Make sure the summary covers them:\n")[1]
+    assert 0 < len(block) <= FLAGGED_CAP
+    rows = block.splitlines()
+    assert len(rows) >= 20
+    for row in rows:
+        text = row.split("] Priya: ", 1)[1]
+        assert len(text) >= 30 and "Point" in text
+    # The flags kept are spread over the whole call, not only its start.
+    said = [int(p) for p in re.findall(r"Point (\d{3})", block)]
+    assert min(said) < 60 and max(said) > 540
+
+
 def test_each_summary_part_gets_only_its_own_flags(tmp_path):
     from wirenote.capture.recorder import write_flags
 

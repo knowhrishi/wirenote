@@ -249,17 +249,25 @@ def rewrite_note(rec: Path, settings: Settings) -> Path | None:
 
 
 FLAGGED_CAP = 3000   # docs/dev/PLAN.md › Defaults › Flag window
+FLAG_MIN_CHARS = 40  # docs/dev/PLAN.md › Defaults › Flag window
 
 
 def _flagged(lines: list[Line], flags: list[float], settings: Settings, names: dict[str, str],
              lo: float = float("-inf"), hi: float = float("inf")) -> str:
     """What was said around the moments Me flagged from lo up to hi, for the summary
     prompt. Each flag gets an equal share of FLAGGED_CAP, the words nearest it first, so
-    every flag is heard however many there are and however long a paragraph runs."""
+    every flag is heard however many there are and however long a paragraph runs. A share
+    holds at least FLAG_MIN_CHARS of text; when that many flags do not fit, an even spread
+    of them in time does."""
     flags = sorted(t for t in flags if lo <= t < hi)
     if not flags:
         return ""
     before, after = settings.flag_before_s, settings.flag_after_s
+    widest = max((len(as_text([Line(sp, 0.0, 0.0, "")], names)) + 1 for sp in {l.speaker for l in lines}),
+                 default=0)
+    fit = max(FLAGGED_CAP // (widest + FLAG_MIN_CHARS), 1)
+    if len(flags) > fit:
+        flags = [flags[k * len(flags) // fit] for k in range(fit)]
     share = FLAGGED_CAP // len(flags)
     picked: list[Line] = []
     for t in flags:
