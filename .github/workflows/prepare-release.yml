@@ -43,22 +43,37 @@ jobs:
           uv version --bump "$BUMP" --no-sync
           version=$(uv version --short)
           echo "VERSION=$version" >> "$GITHUB_ENV"
-          for ref in "tags/v$version" "heads/release/v$version"; do
-            if gh api "repos/$GITHUB_REPOSITORY/git/ref/$ref" --silent 2>/dev/null; then
-              echo "::error::$ref already exists"; exit 1
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$version" --silent 2>/dev/null; then
+            echo "::error::v$version is already released"; exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/release/v$version" --silent 2>/dev/null; then
+            if [ -n "$(gh pr list --head "release/v$version" --state all --json number --jq '.[].number')" ]; then
+              echo "::error::release/v$version already has a pull request"; exit 1
             fi
-          done
+            # An earlier run pushed the branch but could not open the pull request:
+            # this run only opens it.
+            echo "RESUME=1" >> "$GITHUB_ENV"
+          fi
+      - name: Use the release branch an earlier run pushed
+        if: env.RESUME == '1'
+        run: |
+          gh auth setup-git
+          git fetch origin "release/v$VERSION"
+          git checkout -f FETCH_HEAD
       - name: Date the changelog section and set __version__
+        if: env.RESUME != '1'
         run: uv run --no-project python scripts/prepare_release.py "$VERSION" "$(date -u +%F)"
       - name: Release notes
         run: uv run --no-project python scripts/release_notes.py "$VERSION" > "$RUNNER_TEMP/notes.md"
       # tests/test_compat.py needs a snapshot for every dated release, so the release
       # commit carries what this version stores (docs/dev/changes.md › Contracts).
       - name: Save this version's stored data
+        if: env.RESUME != '1'
         run: |
           uv sync --locked
           WIRENOTE_E2E_KEEP="tests/compat/$VERSION" uv run pytest -q -p no:cacheprovider tests/e2e/test_call_to_note.py
       - name: Push the release branch
+        if: env.RESUME != '1'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -79,6 +94,9 @@ jobs:
             echo
             cat "$RUNNER_TEMP/notes.md"
           } > "$RUNNER_TEMP/body.md"
-          gh pr create --base main --head "release/v$VERSION" \
-            --title "Release $VERSION" --body-file "$RUNNER_TEMP/body.md"
+          if ! gh pr create --base main --head "release/v$VERSION" \
+              --title "Release $VERSION" --body-file "$RUNNER_TEMP/body.md"; then
+            echo "::error::GitHub did not let this workflow open the pull request. Turn on Settings › Actions › General › Workflow permissions › \"Allow GitHub Actions to create and approve pull requests\", then run Prepare release again with the same choice: it opens the pull request for the branch already pushed."
+            exit 1
+          fi
           gh workflow run ci.yml --ref "release/v$VERSION"
