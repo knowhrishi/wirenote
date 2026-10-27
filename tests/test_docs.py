@@ -51,10 +51,10 @@ def test_no_private_text_in_tree():
 
 @needs_git
 def test_no_ai_working_files_in_tree():
-    """Plans, specs and agent instructions stay local (.gitignore)."""
+    """Plans, specs and session data stay local (.gitignore); AGENTS.md and CLAUDE.md
+    are public."""
     tracked = _tracked_text()
-    assert not [n for n in tracked if n.startswith(("docs/superpowers/", ".claude/", ".superpowers/"))
-                or Path(n).name in ("CLAUDE.md", "AGENTS.md")]
+    assert not [n for n in tracked if n.startswith(("docs/superpowers/", ".claude/", ".superpowers/"))]
 
 
 def test_public_docs_exist():
