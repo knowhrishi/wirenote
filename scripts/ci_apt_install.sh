@@ -9,7 +9,16 @@
 # inside, and the whole install is tried 3 times. Neither step is quieted, so the log
 # shows which source or package stalled, and an attempt that times out prints who
 # holds the apt and dpkg locks.
+#
+# A mirror that trickles bytes never trips apt's network timeout: Azure's mirror once
+# served ffmpeg's packages at about 40 kB/s, too slow for three attempts to finish.
+# apt only moves to the next mirror in the runner's list on an error, so after a
+# timeout the later attempts drop the first one. Packages already downloaded are kept.
+# Only one is dropped: if the next mirror is slow too, the runner's network is.
 set -eu
+
+mirrors=${CI_APT_MIRRORS:-/etc/apt/apt-mirrors.txt}
+mirror_skipped=
 
 # Rebuilding the man page index after an install can take minutes on the runners, and
 # CI never reads a man page.
@@ -27,12 +36,22 @@ show_lock_holders() {
   ps -eo pid,etime,args | grep -wE '[a]pt|[d]pkg|[u]nattended-upgrades?' >&2 || true
 }
 
+skip_first_mirror() {
+  if [ -z "$mirror_skipped" ] && [ -f "$mirrors" ] && [ "$(grep -c . "$mirrors")" -gt 1 ]; then
+    echo "next attempts skip the mirror $(head -n 1 "$mirrors" | cut -f 1)" >&2
+    rest=$(tail -n +2 "$mirrors")
+    printf '%s\n' "$rest" | sudo tee "$mirrors" > /dev/null
+    mirror_skipped=1
+  fi
+}
+
 apt_get() {
   # shellcheck disable=SC2086  # $opts is a list of options
   sudo timeout 300 apt-get $opts "$@" && return 0
   rc=$?
   if [ "$rc" -eq 124 ]; then
     show_lock_holders "$1"
+    skip_first_mirror
   fi
   return "$rc"
 }
