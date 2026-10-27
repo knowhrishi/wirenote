@@ -10,7 +10,10 @@ from pathlib import Path
 import pytest
 import quickjs
 
-STATIC = Path(__file__).resolve().parents[1] / "src" / "wirenote" / "ui" / "static"
+from wirenote import ui
+
+# The installed package's copy, so a run against the wheel checks the scripts that ship.
+STATIC = Path(ui.__file__).parent / "static"
 
 
 def parse(source: str) -> None:
