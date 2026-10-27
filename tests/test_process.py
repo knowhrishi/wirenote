@@ -112,6 +112,33 @@ def test_jobs_retry_then_fail_and_requeue_interrupted(tmp_path):
     assert jobs.get(a).attempts == 1
 
 
+
+def test_jobs_schema_is_versioned_and_reads_by_column_name(tmp_path):
+    """docs/dev/changes.md › Contracts: jobs.db."""
+    import sqlite3
+
+    from wirenote.process.jobs import MIGRATIONS
+
+    jobs = Jobs(tmp_path / "jobs.db")
+    assert jobs.db.execute("PRAGMA user_version").fetchone() == (len(MIGRATIONS),)
+    jobs.close()
+    # A later version added a column at the front and rebuilt the table: still reads,
+    # and opening it neither lowers its version nor touches the table.
+    db = sqlite3.connect(tmp_path / "newer.db")
+    db.executescript("""
+        CREATE TABLE jobs (extra TEXT, updated TEXT NOT NULL, created TEXT NOT NULL,
+            note TEXT, error TEXT, summary_only INTEGER NOT NULL DEFAULT 0,
+            attempts INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL,
+            recording TEXT NOT NULL UNIQUE, id INTEGER PRIMARY KEY);
+        INSERT INTO jobs VALUES ('x', 'u', 'c', '/n.md', NULL, 0, 1, 'done', '/rec', 7);
+        PRAGMA user_version = 99;""")
+    db.close()
+    jobs = Jobs(tmp_path / "newer.db")
+    (job,) = jobs.recent()
+    assert (job.id, job.recording, job.state, job.attempts, job.note) == (7, Path("/rec"), "done", 1, "/n.md")
+    assert jobs.db.execute("PRAGMA user_version").fetchone() == (99,)
+
+
 # Worker ------------------------------------------------------------------------
 
 ANNA_VOICE = [1.0, 0.0, 0.0, 0.0]

@@ -20,7 +20,7 @@ import pytest
 
 from wirenote.config.apps import parse_apps
 from wirenote.config.settings import Settings, parse_settings
-from wirenote.process.jobs import Jobs
+from wirenote.process.jobs import MIGRATIONS, Jobs
 from wirenote.process.worker import rewrite_note
 from wirenote.ui.data import Store
 
@@ -51,6 +51,7 @@ def test_job_queue_still_reads(version, tmp_path):
     db = tmp_path / "jobs.db"
     shutil.copy(COMPAT / version / "jobs.db", db)
     jobs = Jobs(db)
+    assert jobs.db.execute("PRAGMA user_version").fetchone() == (len(MIGRATIONS),)
     (job,) = jobs.recent()
     assert job.state == "done" and job.note
     assert jobs.get(jobs.add(Path("/elsewhere/rec"))).state == "queued"
