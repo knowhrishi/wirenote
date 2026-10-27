@@ -39,8 +39,8 @@ ollama pull qwen3:4b
 
 1. Join a call. After a few seconds a notification asks **Record** or **Ignore**.
 2. Click **Record** and tell the others. If you set a consent line in Settings, it is now on your clipboard, ready to paste into the call chat.
-3. Leave the call. A few minutes later "Meeting note ready" appears.
-4. Click **Open note**, or open **Wirenote** from the app menu.
+3. Leave the call. The call opens in the meetings app in your browser, and the note fills in a few minutes later, when "Meeting note ready" appears.
+4. To come back to it later, click **Open note**, or open **Wirenote** from the app menu.
 
 Everything else, from calendars to commands to files, is in [docs/usage.md](https://github.com/knowhrishi/wirenote/blob/main/docs/usage.md).
 
