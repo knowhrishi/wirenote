@@ -20,12 +20,12 @@ A release starts from a button and goes through a pull request:
 
 ## Each release
 
-1. Make sure `## [Unreleased]` in `CHANGELOG.md` lists what changed. Pull requests add their lines there; the workflow refuses to release without any.
+1. Make sure `## [Unreleased]` in `CHANGELOG.md` lists what changed. Pull requests add their lines there (the `changelog.yml` check makes sure), and the workflow refuses to release without any. Read them as a user would: the wheel ships this file, and the app shows the new sections after an update.
 2. Actions › **Prepare release** › Run workflow on `main`, and pick the part to raise: **patch** for fixes (0.2.0 → 0.2.1), **minor** for new features (0.2.1 → 0.3.0), **major** for breaking changes.
 3. Review the "Release X.Y.Z" pull request it opens: the version, the notes, the new `tests/compat/X.Y.Z/` folder, and CI. For a risky release, run the dry run on its branch too. To change the notes, edit `CHANGELOG.md` on its branch.
 4. Merge it. The merge is tagged and the release starts.
 5. In the Actions tab, approve the "Publish to PyPI" job.
-6. Check the result: `uv tool install wirenote==X.Y.Z` in a clean account, and the release page.
+6. Check the result: `uv tool install wirenote==X.Y.Z` in a clean account, and the release page. On an older install, `wirenote update --check` should now offer X.Y.Z with its notes.
 
 If CI does not show up on the release pull request, close and reopen it. If a release fails after the tag exists, fix the cause and run **Release** again from Actions on the tag (Run workflow › Use workflow from › Tags › vX.Y.Z).
 

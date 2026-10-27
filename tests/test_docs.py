@@ -67,3 +67,9 @@ def test_privacy_lists_the_cloud_disclosure():
     from wirenote.ui.data import CLOUD_DISCLOSURE
 
     assert CLOUD_DISCLOSURE in " ".join((REPO / "PRIVACY.md").read_text().split())
+
+
+def test_privacy_lists_the_update_check_disclosure():
+    from wirenote.ui.data import UPDATE_DISCLOSURE
+
+    assert UPDATE_DISCLOSURE in " ".join((REPO / "PRIVACY.md").read_text().split())

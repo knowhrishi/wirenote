@@ -251,6 +251,10 @@ def make_handler(app: App):
                 return self._json(app.store.settings_info())
             if path == "/api/doctor":
                 return self._json(app.store.doctor())
+            if path == "/api/updates":
+                return self._json(app.store.updates_info())
+            if path == "/api/changelog":
+                return self._json(app.store.changelog())
             m = ROUTE_CALL.match(path)
             if m and not m.group(2):
                 return self._json(app.store.call(m.group(1)))
@@ -333,6 +337,15 @@ def make_handler(app: App):
                 return self._json(store.set_api_key(str(self._body().get("key", ""))))
             if path == "/api/calendars":
                 return self._json({"calendars": store.add_calendar(str(self._body().get("url", "")))})
+            if path == "/api/updates/seen":
+                store.mark_seen()
+                return self._json({"ok": True})
+            if path == "/api/updates/check":
+                return self._json(store.check_updates())
+            if path == "/api/updates/setting":
+                return self._json(store.set_update_check(self._body().get("check") is True))
+            if path == "/api/updates/install":
+                return self._json(store.start_update())
             m = ROUTE_CALL.match(path)
             if not m:
                 raise NotFound(path)

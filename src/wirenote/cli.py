@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Hrishikesh Jadhav
-"""wirenote command line: run | status | stop | record | jobs | reprocess | setup | calendar | doctor | ui | open."""
+"""wirenote command line: run | status | stop | record | jobs | reprocess | setup | calendar | doctor | ui | open |
+update | changelog."""
 
 from __future__ import annotations
 
@@ -188,6 +189,39 @@ def cmd_doctor(args) -> int:
     return setup.doctor(fix=args.fix)
 
 
+def cmd_update(args) -> int:
+    from . import updates
+
+    if args.check:
+        found = updates.check(state_dir())
+        if found["error"]:
+            print(f"wirenote: cannot reach PyPI ({found['error']})")
+            return 1
+        avail = updates.available(state_dir())
+        if not avail:
+            print(f"Wirenote {found['current']} is the newest version.")
+            return 0
+        print(f"Wirenote {avail['version']} is available (you have {found['current']}). "
+              "Install it with: wirenote update\n")
+        rels = [updates.Release.from_dict(r) for r in avail["notes"]]
+        print(updates.render_text(rels) if rels else f"Release notes: {avail['url']}")
+        return 0
+    return updates.update(state_dir(), to=args.to, wait=args.wait, yes=args.yes)
+
+
+def cmd_changelog(args) -> int:
+    from . import __version__, updates
+
+    rels = updates.releases()
+    if not args.all:
+        rels = updates.between(rels, args.since, __version__)
+    if not rels:
+        print(f"no release notes for {__version__}" + (f" since {args.since}" if args.since else ""))
+        return 1
+    print(updates.render_text(rels))
+    return 0
+
+
 def cmd_dump_streams(args) -> int:
     from .tools.dump_streams import main as dump_main
     return dump_main(args.rest)
@@ -207,7 +241,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if moved:
         print(moved, file=sys.stderr)
+    from . import __version__
+
     ap = argparse.ArgumentParser(prog="wirenote", description=__doc__)
+    ap.add_argument("--version", action="version", version=f"wirenote {__version__}")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("run", help="run the daemon").set_defaults(fn=cmd_run)
     sub.add_parser("status", help="show what the daemon sees").set_defaults(fn=cmd_status)
@@ -247,6 +284,17 @@ def main(argv: list[str] | None = None) -> int:
     op = sub.add_parser("open", help="open the meetings web app in the browser")
     op.add_argument("call", nargs="?", help="recording id to open")
     op.set_defaults(fn=cmd_open)
+    upd = sub.add_parser("update", help="install the newest version and restart the services")
+    upd.add_argument("--check", action="store_true", help="only say whether a newer version exists")
+    upd.add_argument("--to", metavar="VERSION", help="install this version instead, e.g. to go back")
+    upd.add_argument("--wait", action="store_true",
+                     help="if a call is recording, update when it ends instead of stopping")
+    upd.add_argument("--yes", action="store_true", help="do not ask before going back to an older version")
+    upd.set_defaults(fn=cmd_update)
+    chg = sub.add_parser("changelog", help="what changed in this version")
+    chg.add_argument("--since", metavar="VERSION", help="every release after this one")
+    chg.add_argument("--all", action="store_true", help="every release")
+    chg.set_defaults(fn=cmd_changelog)
     proc = sub.add_parser("process", help=argparse.SUPPRESS)
     proc.add_argument("job", type=int)
     proc.set_defaults(fn=cmd_process)

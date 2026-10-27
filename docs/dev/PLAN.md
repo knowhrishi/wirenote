@@ -121,6 +121,9 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | Calendar refresh | every 5 min | ICS polling is enough |
 | Opt-out nudge | 5 dismisses of one app → offer to set it to `ignore` | Per app, not global |
 | Sleep and wake | pause, close prompt, reseed on resume with no prompt | Waking with Zoom open must not prompt |
+| Update check | off; when on, once a day | Nothing leaves the computer unless asked; releases are rarer than daily |
+| Update notification | once per version, never while recording | A reminder, not a nag; never during a call |
+| Waiting for a call before updating | at most 4 h, the recording cap | An update must not end a recording |
 
 ## Prompt, capture and processing
 

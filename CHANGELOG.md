@@ -6,6 +6,10 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ### Added
 
+- "What's new": after an update, the meetings app shows what changed since the version you last used, once. Click the version number at the bottom of the sidebar to read every release's notes again, or run `wirenote changelog`.
+- `wirenote update` installs the newest version and restarts Wirenote. It never ends a recording: it refuses during a call, or with `--wait` updates once the call ends. `wirenote update --check` only checks, and `wirenote update --to 0.2.0` goes back to an earlier version. It works for installs made with uv or pipx.
+- Update checks, off unless you turn them on. Once a day, Wirenote asks pypi.org whether a new version is out. If one is, you get one notification, never during a call, and a banner in the app with its notes and an Update button. `wirenote setup install` asks whether you want them, and Settings › Updates has the switch. See PRIVACY.md for what this sends.
+- `wirenote --version`.
 - End-to-end tests: a recorded Jitsi call runs through the real daemon, worker and web app, with PipeWire and Ollama faked; a nightly run uses the real speech models.
 - Releases test the built wheel on Python 3.11 to 3.14 before publishing, and data written by every earlier release is checked to still read.
 

@@ -24,6 +24,8 @@ Code can change freely. What has been written to disk, or what someone else call
 | systemd unit names, `.desktop` file | `data/`, `tools/install.py` | `setup install` must clean up old names (see `OLD_UNITS`). |
 | `detector.jsonl` events | `detector/daemon.py` | The tests, `doctor` and bug reports read them. Add events and fields freely. Rename one only together with every reader. |
 | Web API | `ui/server.py` | Only the bundled page uses it, so it may change, but together with `app.js` in the same pull request. |
+| `CHANGELOG.md` headings | `updates.py` | The app parses its own and the newest release's (`## [X.Y.Z] - date`, `### Added` …) for "What's new". Keep the Keep a Changelog layout. |
+| `wirenote update`, `wirenote changelog` | `updates.py` | A newer `update` runs the installed version's `setup install`, `doctor` and `changelog --since`; keep those working. |
 
 **`tests/test_compat.py` enforces the stored-data rows.** `tests/compat/<version>/` keeps what each release wrote: a recording without audio, `jobs.db`, a config that sets every key, and the default `apps.toml`. Every release adds its own (docs/dev/releasing.md). A failure there means users who upgrade would lose something. Fix the code, not the snapshot. Snapshots are never edited after their release.
 

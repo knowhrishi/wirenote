@@ -319,9 +319,29 @@ def _file_checks(s: Settings) -> list[Check]:
     return out
 
 
+def _update_checks(s: Settings) -> list[Check]:
+    """From the last check's cache: doctor itself never goes online."""
+    from .. import __version__, updates
+
+    if not s.update_check:
+        return [Check("ok", f"Wirenote {__version__}; update check off (check now: "
+                            "wirenote update --check)")]
+    avail = updates.available(state_dir())
+    if avail:
+        return [Check("warn", f"Wirenote {avail['version']} is available (you have {__version__})",
+                      "wirenote update")]
+    last = updates.last_check(state_dir())
+    if last.get("error"):
+        return [Check("warn", f"the last update check failed: {last['error']}")]
+    if not last.get("checked"):
+        return [Check("ok", f"Wirenote {__version__}; the first update check runs soon")]
+    when = dt.datetime.fromtimestamp(last["checked"]).astimezone()
+    return [Check("ok", f"Wirenote {__version__} is the newest version (checked {when:%d %b %H:%M})")]
+
+
 def checks(s: Settings) -> list[Check]:
     return [*_daemon_checks(), *_pipewire_checks(), *_model_checks(s), *_summary_checks(s),
-            *_calendar_checks(s), *_desktop_checks(s), *_file_checks(s)]
+            *_calendar_checks(s), *_desktop_checks(s), *_file_checks(s), *_update_checks(s)]
 
 
 def doctor(fix: bool = False) -> int:

@@ -28,14 +28,16 @@ The design notes in [docs/dev/](docs/dev/) explain why the detector, the capture
 
 - Keep each pull request to one change, with a test that fails without it. The tests run without PipeWire, a GPU or network access; keep it that way (see the fakes in `tests/`).
 - Read [docs/dev/changes.md](docs/dev/changes.md) before changing anything stored on disk, a setting, a command, or what Wirenote does on its own. Old configs, recordings and notes must keep working after an upgrade; `tests/test_compat.py` checks that.
-- Add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) for anything a user would notice.
+- Add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) for anything a user would notice. These lines are the release notes, and the app shows them after an update ("What's new"), so write them for the people using Wirenote:
+  - Say what they notice, not how it was done: "The call opens when its recording stops", not "Call `open_ui` from `_finish_recording`".
+  - When someone must act, say so: "What you need to do: run `wirenote setup install` once."
+  - CI fails a pull request that changes `src/` without touching CHANGELOG.md. If users notice nothing (a refactor, a test), ask for the `no-changelog` label.
 - Every Python file starts with the license header:
   ```python
   # SPDX-License-Identifier: AGPL-3.0-or-later
   # Copyright (c) 2026 Hrishikesh Jadhav
   ```
   If you add a file, use the same header; you keep the copyright in your changes (see the CLA below).
-- If people using Wirenote would notice the change, add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md). It becomes the release notes.
 - Anything that sends data off the computer must be opt-in and listed in [PRIVACY.md](PRIVACY.md) and in the app's disclosure text.
 - To add a call app, add a rule to the defaults in `src/wirenote/config/apps.py` and say how you verified it (`wirenote dump-streams` during a call shows what the detector sees).
 

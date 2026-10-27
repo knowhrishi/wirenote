@@ -24,8 +24,18 @@ The meetings app is a web page served on 127.0.0.1, so other computers cannot re
 - **Ollama, on your computer.** Local summaries go to Ollama on 127.0.0.1. Wirenote checks that the Ollama there runs as your own user before sending anything.
 - **Your calendars, if you add any.** The ICS links you add are fetched over https every 5 minutes.
 - **Anthropic, only if you choose Claude.** See below.
+- **PyPI and GitHub, only if you turn on update checks.** See below.
+- **PyPI, when you update.** `wirenote update`, and Check now or Update in the app, ask pypi.org for the newest version and download it, even with update checks off.
 
-There is no telemetry, no crash reporting and no update check.
+There is no telemetry and no crash reporting.
+
+## Update checks
+
+They are off unless you turn them on: `wirenote setup install` asks once, and Settings › Updates has the switch. With them on:
+
+Once a day, Wirenote asks pypi.org for the newest version and, when there is one, fetches its release notes from github.com. Nothing about you or your calls is sent, but those sites see your IP address.
+
+The request carries no version number and no identifier. The answer is kept in `~/.local/state/wirenote/update-check.json`.
 
 ## If you choose Claude
 

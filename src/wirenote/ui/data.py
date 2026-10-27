@@ -78,6 +78,7 @@ subject: a short subject line."""
 EDITABLE = ("consent_line", "summary_backend", "ollama_model", "anthropic_model",
             "whisper_model", "whisper_language", "summary_language")
 BACKENDS = ("ollama", "anthropic", "none")
+UPDATE_UNIT = "wirenote-update"
 MAX_SETTING = 500
 CALENDAR_LINK = re.compile(r"^(https|webcal)://\S{1,2000}$", re.IGNORECASE)
 
@@ -85,6 +86,10 @@ CLOUD_DISCLOSURE = ("With Claude on, these go to Anthropic: the transcript of ea
                     "parts), the calendar title and invitees, your notes, your vocabulary, "
                     "questions you ask with the transcript, and for Ask across meetings up to "
                     "120,000 characters from all your calls.")
+
+UPDATE_DISCLOSURE = ("Once a day, Wirenote asks pypi.org for the newest version and, when there "
+                     "is one, fetches its release notes from github.com. Nothing about you or "
+                     "your calls is sent, but those sites see your IP address.")
 
 FOLLOWUP_SCHEMA = {"type": "object",
                    "properties": {"subject": {"type": "string"}, "body": {"type": "string"}},
@@ -665,6 +670,73 @@ class Store:
 
         return {"checks": [dataclasses.asdict(c) for c in setup.checks(self.settings)],
                 "version": __version__}
+
+    # Updates (docs/dev/updates-design.md) -------------------------------------
+
+    def updates_info(self) -> dict:
+        from .. import __version__, updates
+
+        inst = updates.install_kind()
+        last = updates.last_check(self.state_dir)
+        return {"current": __version__, "check": self.settings.update_check,
+                "available": updates.available(self.state_dir),
+                "checked": last.get("checked"), "error": last.get("error"),
+                "whats_new": updates.whats_new(self.state_dir, __version__,
+                                               has_data=bool(self._rec_dirs())),
+                "run": updates.run_state(self.state_dir),
+                "can_update": inst.kind in ("uv", "pipx"), "how": updates.how_to_update(inst),
+                "disclosure": UPDATE_DISCLOSURE}
+
+    def changelog(self) -> dict:
+        from .. import updates
+
+        return {"releases": [r.as_dict() for r in updates.releases()]}
+
+    def mark_seen(self) -> None:
+        from .. import updates
+
+        updates.mark_seen(self.state_dir)
+
+    def check_updates(self) -> dict:
+        """Asked for by a click, so it runs whether or not the daily check is on."""
+        from .. import updates
+
+        updates.check(self.state_dir)
+        return self.updates_info()
+
+    def set_update_check(self, on: bool) -> dict:
+        path = config_dir() / "config.toml"
+        text = path.read_text() if path.exists() else DEFAULT_CONFIG_TOML
+        write_config_atomic(path, with_config_value(text, "update_check", "true" if on else "false"))
+        self.settings = dataclasses.replace(self.settings, update_check=bool(on))
+        poke_daemon("reload-settings")
+        return self.updates_info()
+
+    def start_update(self) -> dict:
+        """Run `wirenote update` as its own systemd unit: restarting the services would
+        otherwise end it halfway, since it is a child of this one."""
+        from .. import updates
+
+        inst = updates.install_kind()
+        if inst.kind not in ("uv", "pipx"):
+            raise Invalid(updates.how_to_update(inst))
+        run = updates.run_state(self.state_dir)
+        if run and run.get("state") in updates.ACTIVE:
+            raise Invalid("an update is already running")
+        argv = [updates.wirenote_exe(), "update", "--yes", "--wait"]
+        updates.progress(self.state_dir, "starting")
+        systemd_run = shutil.which("systemd-run")
+        if systemd_run:
+            r = subprocess.run([systemd_run, "--user", "--collect", "--quiet",
+                                "--unit", UPDATE_UNIT, *argv],
+                               capture_output=True, text=True, check=False)
+            if r.returncode != 0:
+                updates.progress(self.state_dir, "failed", message="could not start the update")
+                raise Invalid("could not start the update: " + (r.stderr.strip().splitlines() or ["?"])[-1])
+        else:
+            subprocess.Popen(argv, start_new_session=True, stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return self.updates_info()
 
     def set_vocabulary(self, terms: list[str]) -> list[str]:
         return save_vocabulary([str(t) for t in terms])

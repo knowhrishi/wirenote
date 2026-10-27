@@ -8,6 +8,7 @@ Nothing here needs root: everything goes to the user's own config and data folde
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,7 @@ from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 
+from ..config.secrets import set_config_value
 from ..config.settings import config_dir, data_dir, load_settings, state_dir
 
 UNITS = ("wirenote.service", "wirenote-ui.service")
@@ -105,9 +107,31 @@ def _apply(actions: list[Action], dry_run: bool) -> int:
     return 1 if failed else 0
 
 
+UPDATE_QUESTION = ("Check once a day for a new Wirenote version? This asks pypi.org (and github.com "
+                   "for the release notes); nothing about you or your calls is sent, but those "
+                   "sites see your IP address. You can change it in Settings. [y/N] ")
+
+
+def ask_update_check(confirm: Callable[[str], str] = input,
+                     interactive: Callable[[], bool] = lambda: sys.stdin.isatty()) -> None:
+    """Ask once, in a terminal, whether to check for updates; the setting stays off otherwise."""
+    path = config_dir() / "config.toml"
+    load_settings(path)     # writes the default file on a first install
+    if re.search(r"^[ \t]*update_check[ \t]*=", path.read_text(), re.MULTILINE) or not interactive():
+        return
+    try:
+        yes = confirm(UPDATE_QUESTION).strip().lower() in ("y", "yes")
+    except EOFError:
+        return
+    set_config_value(path, "update_check", "true" if yes else "false")
+    print("  update check on: Wirenote tells you when a new version is out" if yes else
+          "  update check off: run `wirenote update --check` any time")
+
+
 def install(dry_run: bool = False) -> int:
     rc = _apply(plan_install(_exe()), dry_run)
     if not dry_run and rc == 0:
+        ask_update_check()
         print("\n✓ Wirenote runs in the background and starts with your session.")
         print("  Open it from the app menu, or run: wirenote open. Check the setup: wirenote doctor")
     return rc

@@ -54,6 +54,10 @@ packages = ["src/wirenote"]
 # Non-Python files the program reads at run time: unit and desktop templates, the web UI.
 artifacts = ["src/wirenote/data/*", "src/wirenote/ui/static/*"]
 
+[tool.hatch.build.targets.wheel.force-include]
+# The app shows its own release notes ("What's new"), offline.
+"CHANGELOG.md" = "wirenote/data/CHANGELOG.md"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "/src", "/tests", "/scripts", "/docs/usage.md", "/pyproject.toml", "/uv.lock",

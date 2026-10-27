@@ -11,7 +11,7 @@ const state = {
   query: "",
   status: {},
   call: null,          // the open call (full detail)
-  view: "home",        // home | call | ask | tasks | settings
+  view: "home",        // home | call | ask | tasks | settings | updates
   tab: "notes",
   asking: false,
   find: "",
@@ -21,6 +21,8 @@ const state = {
   showDone: false,
   askingAll: false,
   doctor: null,        // /api/doctor result, fetched once per page load
+  updates: null,       // /api/updates: version, new release, update progress
+  changelog: null,     // /api/changelog, fetched once per page load
 };
 
 // DOM helpers ---------------------------------------------------------------
@@ -261,6 +263,7 @@ function recordingElapsed() {
 }
 
 function renderBanner() {
+  renderUpdateBanner();
   const st = state.status;
   const b = $("#banner");
   const onRecordingPage = state.view === "call" && state.call && state.call.id === st.recording_id;
@@ -996,6 +999,7 @@ async function renderSettings() {
 
   page.append(setupCard(s));
   page.append(calendarsCard(s));
+  try { state.updates = await api("/api/updates"); page.append(updatesCard(state.updates)); } catch { /* shown on the Updates page */ }
 }
 
 const BACKENDS = [["ollama", "On this laptop (Ollama)"], ["anthropic", "Claude (sent to Anthropic)"], ["none", "Off"]];
@@ -1105,6 +1109,181 @@ function calendarsCard(s) {
     list, h("div", { class: "field inline-add" }, h("div", { class: "inline" }, link, add)));
 }
 
+// Updates (docs/dev/updates-design.md) -----------------------------------------
+
+// Changelog text: `code` and [links](https://…) become elements, everything else stays text.
+function inlineMd(text) {
+  const frag = document.createDocumentFragment();
+  const re = /`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  let i = 0, m;
+  while ((m = re.exec(text))) {
+    frag.append(text.slice(i, m.index),
+      m[1] !== undefined ? h("code", {}, m[1]) : h("a", { href: m[3], target: "_blank", rel: "noopener noreferrer" }, m[2]));
+    i = re.lastIndex;
+  }
+  frag.append(text.slice(i));
+  return frag;
+}
+
+const fmtReleaseDate = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(LOCALE, { day: "numeric", month: "long", year: "numeric" });
+const fmtWhen = (ts) => { const d = new Date(ts * 1000); return `${fmtShort(d)}, ${fmtTime(d)}`; };
+
+function releaseNotes(releases) {
+  return h("div", { class: "release-notes" }, releases.map((r) => h("section", { class: "release" },
+    h("h3", {}, `Wirenote ${r.version}`, r.date ? h("span", { class: "muted" }, ` · ${fmtReleaseDate(r.date)}`) : null),
+    r.intro ? h("p", {}, inlineMd(r.intro)) : null,
+    r.groups.flatMap((g) => [h("h4", {}, g.title), h("ul", {}, g.items.map((it) => h("li", {}, inlineMd(it))))]))));
+}
+
+const RUN_TEXT = {
+  starting: "Starting the update…", waiting: "The update waits for the recording to end…",
+  installing: "Installing the new version…", restarting: "Restarting Wirenote…",
+};
+const updateRunning = (u) => !!(u && u.run && RUN_TEXT[u.run.state]);
+
+function updateDismissed(version) {
+  try { return localStorage.getItem("wirenote-update-hidden") === version; } catch { return false; }
+}
+
+function hideUpdate(version) {
+  try { localStorage.setItem("wirenote-update-hidden", version); } catch { /* private window: hidden until reload */ }
+  $("#update-banner").hidden = true;
+}
+
+function renderUpdateBanner() {
+  const b = $("#update-banner");
+  const u = state.updates;
+  const avail = u && u.available;
+  const running = updateRunning(u);
+  if (state.view === "updates" || !(running || (avail && !updateDismissed(avail.version)))) { b.hidden = true; return; }
+  if (running) {
+    b.replaceChildren(h("span", { class: "dot work" }), h("b", {}, RUN_TEXT[u.run.state]), h("span", { class: "grow" }),
+      h("a", { class: "btn", href: "#/updates" }, "Details"));
+  } else {
+    b.replaceChildren(icon("sparkle"), h("b", {}, `Wirenote ${avail.version} is available`), h("span", { class: "grow" }),
+      h("a", { class: "btn", href: "#/updates" }, "See what's new"),
+      u.can_update ? h("button", { class: "btn btn-primary", onclick: startUpdate }, "Update") : null,
+      h("button", { class: "btn-ghost", title: "Hide until the next version", onclick: () => hideUpdate(avail.version) }, "Not now"));
+  }
+  b.hidden = false;
+}
+
+async function refreshUpdates() {
+  try { state.updates = await api("/api/updates"); } catch { return; }
+  renderUpdateBanner();
+}
+
+async function startUpdate() {
+  const u = state.updates;
+  const text = state.status.recording
+    ? "A call is recording. Wirenote updates as soon as it ends, so the recording is not cut short."
+    : "Wirenote restarts for a moment; nothing is lost. This page reloads when the new version runs.";
+  if (!await confirmDialog(`Update to Wirenote ${u.available.version}?`, text, "Update", false)) return;
+  try { state.updates = await api("/api/updates/install", { method: "POST" }); }
+  catch (e) { toast(e.message); return; }
+  followUpdate();
+}
+
+// Follows the update through the restart: the server goes away, comes back on the
+// new version, and the page reloads into "What's new".
+async function followUpdate() {
+  if (followUpdate.running) return;
+  followUpdate.running = true;
+  const from = state.updates.current;
+  const redraw = () => {
+    renderUpdateBanner();
+    const card = $("#updates-card");
+    if (card) card.replaceWith(updatesCard(state.updates));
+  };
+  redraw();
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 2000));
+    let u;
+    try { u = await api("/api/updates"); } catch { continue; }   // restarting
+    if (u.current !== from) { location.reload(); return; }
+    state.updates = u;
+    redraw();
+    if (!updateRunning(u)) break;
+  }
+  followUpdate.running = false;
+  const run = state.updates.run || {};
+  if (run.state === "failed") toast(`The update failed: ${run.message || "run wirenote update in a terminal to see why"}`);
+  else if (run.state === "done") toast(`Wirenote ${run.to} is installed. Restart Wirenote to use it.`);
+}
+
+function updatesCard(u) {
+  const running = updateRunning(u);
+  const status = running ? RUN_TEXT[u.run.state]
+    : u.available ? `Wirenote ${u.available.version} is available. You have ${u.current}.`
+    : u.checked && !u.error ? `You have Wirenote ${u.current}, the newest version (checked ${fmtWhen(u.checked)}).`
+    : `You have Wirenote ${u.current}.`;
+  const card = h("div", { class: "settings-card", id: "updates-card" }, h("h2", {}, "Updates"), h("p", {}, status));
+  if (u.error && !running) card.append(h("div", { class: "notice bad" }, `The last check failed: ${u.error}`));
+  if (u.run && u.run.state === "failed" && !running) {
+    card.append(h("div", { class: "notice bad" }, `The last update failed: ${u.run.message || "unknown error"}. Try again, or run wirenote update in a terminal.`));
+  }
+  if (u.available && !running) {
+    card.append(u.available.notes.length ? releaseNotes(u.available.notes)
+      : h("p", {}, h("a", { href: u.available.url, target: "_blank", rel: "noopener noreferrer" }, "Release notes on GitHub")));
+  }
+  if (!u.can_update) card.append(h("p", { class: "hint" }, u.how));
+
+  const toggle = h("input", { type: "checkbox", id: "update-check" });
+  toggle.checked = u.check;
+  toggle.onchange = async () => {
+    try {
+      state.updates = await api("/api/updates/setting", { method: "POST", body: { check: toggle.checked } });
+      toast(toggle.checked ? "Wirenote now checks once a day and tells you about new versions." : "Update check off.");
+    } catch (e) { toggle.checked = !toggle.checked; toast(e.message); }
+  };
+  const checkNow = h("button", { class: "btn" }, "Check now");
+  checkNow.onclick = async () => {
+    checkNow.disabled = true;
+    try {
+      state.updates = await api("/api/updates/check", { method: "POST" });
+      card.replaceWith(updatesCard(state.updates));
+      renderUpdateBanner();
+      toast(state.updates.error ? "Could not reach PyPI." : state.updates.available ? `Wirenote ${state.updates.available.version} is available.` : "You have the newest version.");
+    } catch (e) { toast(e.message); checkNow.disabled = false; }
+  };
+  card.append(h("label", { class: "check-row", for: "update-check" }, toggle, "Check for new versions once a day"),
+    h("p", { class: "hint" }, u.disclosure),
+    h("div", { class: "row-end" }, checkNow,
+      u.available && u.can_update && !running ? h("button", { class: "btn btn-primary", onclick: startUpdate }, `Update to ${u.available.version}`) : null));
+  return card;
+}
+
+async function renderUpdates() {
+  state.view = "updates";
+  state.call = null;
+  setPlayer(null);
+  renderList();
+  renderBanner();
+  const page = h("div", { class: "page" }, h("h1", { class: "page-title" }, "Updates"),
+    h("div", { class: "page-sub" }, "Your version, new releases, and what changed in each."));
+  $("#main").replaceChildren(page);
+  try {
+    [state.updates, state.changelog] = await Promise.all([api("/api/updates"), state.changelog || api("/api/changelog")]);
+  } catch (e) { page.append(h("p", { class: "hint" }, e.message)); return; }
+  if (state.view !== "updates") return;
+  page.append(updatesCard(state.updates),
+    h("h2", { class: "section-title" }, "Release notes"), releaseNotes(state.changelog.releases));
+}
+
+function whatsNewDialog(w) {
+  const seen = () => api("/api/updates/seen", { method: "POST" }).catch(() => { /* shown again next time */ });
+  const ok = h("button", { class: "btn btn-primary" }, "Got it");
+  const all = h("a", { class: "btn", href: "#/updates" }, "All release notes");
+  const close = openModal(h("div", { class: "dialog wide whats-new", role: "dialog", "aria-modal": "true", "aria-labelledby": "whats-new-title" },
+    h("h3", { id: "whats-new-title" }, `What's new in Wirenote ${w.to}`),
+    w.from ? h("p", {}, `Updated from ${w.from}.`) : null,
+    releaseNotes(w.releases),
+    h("div", { class: "row" }, all, ok)), seen);
+  ok.onclick = close;
+  all.addEventListener("click", () => close());
+  ok.focus();
+}
+
 // Player ---------------------------------------------------------------------
 
 const audio = () => $("#audio");
@@ -1197,6 +1376,7 @@ function route() {
   if (hash === "#/ask") return renderAsk();
   if (hash === "#/tasks") return renderTasks();
   if (hash === "#/settings") return renderSettings();
+  if (hash === "#/updates") return renderUpdates();
   return renderHome();
 }
 
@@ -1264,6 +1444,10 @@ async function start() {
   route();
   setInterval(refreshStatus, 3000);
   setInterval(() => { if (state.status.recording) renderBanner(); }, 1000);
+  await refreshUpdates();
+  if (state.updates && state.updates.whats_new) whatsNewDialog(state.updates.whats_new);
+  if (updateRunning(state.updates)) followUpdate();
+  setInterval(() => { if (!followUpdate.running) refreshUpdates(); }, 10 * 60 * 1000);
 }
 
 start();

@@ -153,3 +153,23 @@ def test_cli_refuses_to_run_outside_linux(monkeypatch, capsys):
     monkeypatch.setattr(cli.sys, "platform", "darwin")
     assert cli.main(["status"]) == 2
     assert "Linux" in capsys.readouterr().err
+
+
+def test_doctor_reports_updates_from_the_last_check_only(monkeypatch):
+    import json
+    from dataclasses import replace
+
+    import pytest
+
+    from wirenote import updates
+    from wirenote.config.settings import Settings, state_dir
+    from wirenote.tools import setup
+
+    monkeypatch.setattr(updates, "_get", lambda url, timeout=10.0: pytest.fail("went online"))
+    (off,) = setup._update_checks(Settings())
+    assert off.status == "ok" and "update --check" in off.message
+    on = replace(Settings(), update_check=True)
+    state_dir().mkdir(parents=True, exist_ok=True)
+    (state_dir() / updates.CHECK).write_text(json.dumps({"checked": 1.0, "latest": "99.0.0"}))
+    (avail,) = setup._update_checks(on)
+    assert avail.status == "warn" and "99.0.0" in avail.message and avail.fix == "wirenote update"
