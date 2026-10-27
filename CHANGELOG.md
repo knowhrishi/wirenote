@@ -2,6 +2,16 @@
 
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-10-27
+
+### Added
+
+- When a recording stops, the call opens in the meetings app in your default browser, where the note fills in once it is written. Turn it off with `open_call_after_recording = false` in `config.toml`.
+
+### Changed
+
+- Stop in the meetings app opens no second tab, and "Recording saved" then says "stopped in the app".
+
 ## [0.1.0] - 2026-10-26
 
 First public release. Runs on Linux (x86_64 and ARM64) with PipeWire and Python 3.11 to 3.14.
@@ -23,4 +33,5 @@ First public release. Runs on Linux (x86_64 and ARM64) with PipeWire and Python 
 - Calendar feeds are limited and must use https; untrusted text is escaped in notifications and notes.
 - Logs leave out room names, note paths and speaker names; model downloads are pinned.
 
+[0.2.0]: https://github.com/knowhrishi/wirenote/releases/tag/v0.2.0
 [0.1.0]: https://github.com/knowhrishi/wirenote/releases/tag/v0.1.0

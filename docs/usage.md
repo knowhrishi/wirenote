@@ -4,8 +4,8 @@
 
 1. A call starts (Jitsi in the browser, Discord, Rocket.Chat, or any app in `apps.toml`), and Wirenote shows a notification: **Record** or **Ignore**.
 2. You click **Record**. Your mic ("Me") and the system audio (the other people) are recorded as two tracks, and a "Recording …" notification with **Stop** stays up.
-3. You leave the call. The recording stops about 4 s later.
-4. The note is written in the background: transcript, speakers, summary, action items. Transcription waits while another call is recording.
+3. You leave the call. The recording stops about 4 s later, and the call opens in the meetings app in your browser. To keep the browser closed, set `open_call_after_recording = false` in `config.toml`.
+4. The note is written in the background: transcript, speakers, summary, action items. The call page shows the progress and fills in when it is done. Transcription waits while another call is recording.
 5. A "Meeting note ready" notification appears with an **Open note** button. The Markdown notes are in `~/Meetings/YYYY/MM/`.
 
 **Consent.** You are responsible for telling people you record. In many countries (for example Germany, §201 StGB) recording without consent is a crime. When you click Record, Wirenote copies your consent line to the clipboard so you can paste it into the call chat. Set it in **Settings**, or with `wirenote setup consent "…"`; turn it off with `wirenote setup consent ""`.

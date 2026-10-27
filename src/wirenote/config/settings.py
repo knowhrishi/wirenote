@@ -97,6 +97,8 @@ class Settings:
 
     # UI (docs/dev/ui-design.md): local web app on 127.0.0.1
     ui_port: int = 8765
+    # Open the call in the web UI by itself when its recording stops
+    open_call_after_recording: bool = True
 
     def recordings_path(self) -> Path:
         return Path(self.recordings_dir).expanduser() if self.recordings_dir \
@@ -152,6 +154,7 @@ DEFAULT_CONFIG_TOML = """# wirenote settings. Defaults come from docs/dev/PLAN.m
 
 # UI
 # ui_port = 8765                     # wirenote ui serves http://127.0.0.1:<port>/
+# open_call_after_recording = true   # open the call in the browser when its recording stops
 """
 
 
