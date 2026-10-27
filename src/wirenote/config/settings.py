@@ -66,6 +66,8 @@ class Settings:
     asr_engine: str = "auto"
     whispercpp_bin: str = "whisper-cli"
     whispercpp_model: str = "ggml-large-v3-turbo-q5_0.bin"   # a file, or one from ggerganov/whisper.cpp
+    # docs/dev/live-design.md: a live transcript during the call, on two CPU threads
+    live_transcript: bool = False
     # Consecutive lines of one speaker closer than this join into a paragraph
     merge_gap_s: float = 2.0
     # Echo dedupe (docs/dev/m2-m4-design.md › M3): overlap share and text similarity
@@ -141,6 +143,7 @@ DEFAULT_CONFIG_TOML = """# wirenote settings. Defaults come from docs/dev/PLAN.m
 # asr_engine = "auto"                # auto | whisper | parakeet (faster on a CPU) | whisper.cpp (GPU)
 # whispercpp_bin = "whisper-cli"     # for asr_engine = "whisper.cpp"
 # whispercpp_model = "ggml-large-v3-turbo-q5_0.bin"
+# live_transcript = false            # show what is said during the call (two CPU threads)
 # diarize = true                     # tell the other speakers apart
 # diarize_threshold = 0.9            # higher: fewer speakers; lower: more
 # voice_match = 0.55                 # how close a voice must be to a remembered one

@@ -260,6 +260,9 @@ def make_handler(app: App):
                 return self._json(app.store.call(m.group(1)))
             if m and m.group(2) == "/audio":
                 return self._file(app.store.mixed_audio(m.group(1)), "audio/ogg")
+            if m and m.group(2) == "/live":
+                after = parse_qs(url.query).get("after", ["0"])[0]
+                return self._json(app.store.live(m.group(1), int(after) if after.isdigit() else 0))
             raise NotFound(path)
 
         def _static(self, rel: str):

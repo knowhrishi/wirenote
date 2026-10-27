@@ -11,6 +11,7 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - Update checks, off unless you turn them on. Once a day, Wirenote asks pypi.org whether a new version is out. If one is, you get one notification, never during a call, and a banner in the app with its notes and an Update button. `wirenote setup install` asks whether you want them, and Settings › Updates has the switch. See PRIVACY.md for what this sends.
 - `wirenote --version`.
 - Two more speech engines. **Parakeet** turns speech into text several times faster on a normal CPU and knows 25 European languages. **whisper.cpp** uses a `whisper-cli` you build yourself, for example to transcribe on an AMD or Intel GPU. Choose in Settings › Setup; see "Speech engines" in docs/usage.md.
+- Live transcript, off unless you turn it on in Settings › Setup: see what is said while you record, a few seconds behind, under your notes on the call page. It uses two CPU threads during the call. If its model is not downloaded yet, it starts from the call after your next note.
 - Transcribe one call again with another engine, model or language: "Transcribe again…" in the call page's menu, or `wirenote reprocess ID --engine parakeet --language de`. Your settings stay as they are.
 - The note's footer names the speech engine that made the transcript.
 - End-to-end tests: a recorded Jitsi call runs through the real daemon, worker and web app, with PipeWire and Ollama faked; a nightly run uses the real speech models.

@@ -86,6 +86,8 @@ Wirenote picks the fastest engine that suits your computer and your calls, unles
 
 Every engine runs on your computer. The note's footer says which one made the transcript, and `wirenote doctor` says which one Automatic picks.
 
+**Live transcript.** Turn on **Live transcript during calls** in **Settings › Setup** (or `live_transcript = true` in `config.toml`) to see what is said while you record, under your notes on the call page. Lines appear a few seconds after they are said, as "Me" and "Others"; the note's transcript afterwards is made from the whole call and names the speakers. It uses two CPU threads during the call. It never downloads a model during a call. It uses Parakeet's model, which is usually there already from your notes; if no model is there yet, the call page says "the live model downloads after your next note", and the calls after that show the transcript.
+
 **Transcribe one call again** with another engine, model or language: **Transcribe again…** in the call page's menu, or
 
 ```sh

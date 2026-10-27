@@ -217,3 +217,29 @@ def test_transcribe_again_with_another_model(call):
 
 def note_text_of(manifest: dict) -> str:
     return open(manifest["note"]).read()
+
+
+def test_live_transcript_without_a_model_says_so_and_the_note_still_comes(tmp_path):
+    """The live transcript runs beside the recording; with no model downloaded (the
+    first call) it says so in the app and leaves the recording and the note alone."""
+    world = World(tmp_path, settings={"live_transcript": True})
+    try:
+        world.start_daemon()
+        world.start_ui()
+        world.wait_for(lambda: "prompt" in world.event_names(), 30, "the Record prompt")
+        assert world.cli("record").returncode == 0
+        ui = world.login()
+        rec_id = world.recording_dir().name
+
+        def live_status():
+            return (ui.json("GET", f"/api/calls/{rec_id}/live?after=0")["status"] or {}).get("status")
+        world.wait_for(lambda: live_status() == "unavailable", 30, "the live transcript's status")
+        assert "live_start" in world.event_names()
+        world.wait_for(lambda: world.wav_bytes("system") > 44 + 3 * 16000 * 2, 30, "audio")
+        world.hangup()
+        note_done(world)
+        assert ME in note_text_of(json.loads((world.recording_dir() / "manifest.json").read_text()))
+        assert not (world.recording_dir() / "live.jsonl").exists()
+        assert world.stop_daemon() == 0
+    finally:
+        world.close()

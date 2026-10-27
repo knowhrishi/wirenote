@@ -11,6 +11,7 @@ import json
 import os
 import socket
 import sys
+from pathlib import Path
 
 from .config.apps import AppsError, load_apps
 from .config.settings import config_dir, load_settings, state_dir
@@ -133,6 +134,14 @@ def cmd_reprocess(args) -> int:
     job_id = Jobs(state_dir() / "jobs.db").add(rec, summary_only=args.summary)
     print(f"queued job {job_id}; the daemon picks it up within 30 s (`wirenote jobs`)")
     return 0
+
+
+def cmd_live(args) -> int:
+    """Live transcript of one recording; the daemon starts and stops it (process/live.py)."""
+    from .config.vocabulary import load_vocabulary
+    from .process.live import run
+
+    return run(Path(args.recording_dir), _settings(), load_vocabulary())
 
 
 def cmd_process(args) -> int:
@@ -315,6 +324,9 @@ def main(argv: list[str] | None = None) -> int:
     chg.add_argument("--since", metavar="VERSION", help="every release after this one")
     chg.add_argument("--all", action="store_true", help="every release")
     chg.set_defaults(fn=cmd_changelog)
+    live = sub.add_parser("live", help=argparse.SUPPRESS)
+    live.add_argument("recording_dir")
+    live.set_defaults(fn=cmd_live)
     proc = sub.add_parser("process", help=argparse.SUPPRESS)
     proc.add_argument("job", type=int)
     proc.set_defaults(fn=cmd_process)

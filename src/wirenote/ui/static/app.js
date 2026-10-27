@@ -450,7 +450,58 @@ function recordingView(c) {
     h("div", { class: "live-head" }, h("span", { class: "dot rec" }), "Recording", clockEl,
       h("span", { class: "grow" }), h("button", { class: "btn btn-stop", onclick: stopRecording }, icon("stop"), "Stop")),
     myNotesEditor(c, true),
-    h("div", { class: "live-tip" }, "Jot what matters: decisions, who does what, names. A word or two is enough; the summary fills in the rest from the transcript."));
+    h("div", { class: "live-tip" }, "Jot what matters: decisions, who does what, names. A word or two is enough; the summary fills in the rest from the transcript."),
+    liveTranscript(c));
+}
+
+// What is said during the call (docs/dev/live-design.md). Each poll asks only for lines
+// after the last byte it has; the lines are kept per call, so a re-render keeps them.
+const live = { id: null, after: 0, lines: [], status: null, enabled: false, timer: null };
+
+function liveTranscript(c) {
+  if (live.id !== c.id) Object.assign(live, { id: c.id, after: 0, lines: [], status: null, enabled: false });
+  const head = h("div", { class: "live-transcript-head" });
+  const list = h("div", { class: "live-lines", "aria-live": "polite" });
+  const box = h("section", { class: "live-transcript" }, head, list);
+  const line = (l) => h("div", { class: "live-line" + (l.speaker === "Me" ? " me" : "") },
+    h("span", { class: "live-who" }, l.speaker === "Me" ? "Me" : "Others"),
+    h("span", { class: "live-time" }, clock(l.start)), h("span", { class: "live-text" }, l.text));
+  const show = () => {
+    box.hidden = !live.enabled && !live.status;
+    const st = live.status;
+    head.replaceChildren(icon("sparkle"), "Live transcript",
+      h("span", { class: "live-state" }, !st ? "starting…" : st.status === "listening" ? st.engine
+        : st.reason || st.status));
+    if (!live.lines.length) list.replaceChildren(h("div", { class: "live-empty" },
+      st && st.status === "unavailable" ? "Your notes and the recording are not affected." : "Lines appear here a few seconds after they are said."));
+  };
+  // Each track is cut at its own pauses, so a line can arrive after a later one: it goes
+  // in at its time, in the list and on the page alike.
+  const add = (l) => {
+    if (!live.lines.length) list.replaceChildren();
+    let i = live.lines.length;
+    while (i > 0 && live.lines[i - 1].start > l.start) i--;
+    live.lines.splice(i, 0, l);
+    list.insertBefore(line(l), list.children[i] || null);
+  };
+  const poll = async () => {
+    if (!box.isConnected) { clearInterval(live.timer); return; }
+    try {
+      const r = await api(`/api/calls/${encodeURIComponent(c.id)}/live?after=${live.after}`);
+      if (r.after < live.after) live.lines = [];
+      const nearEnd = list.scrollHeight - list.scrollTop - list.clientHeight < 60;
+      Object.assign(live, { after: r.after, enabled: r.enabled, status: r.status || live.status });
+      r.lines.forEach(add);
+      show();
+      if (nearEnd && r.lines.length) list.scrollTop = list.scrollHeight;
+    } catch { /* the next poll retries */ }
+  };
+  list.replaceChildren(...live.lines.map(line));
+  show();
+  clearInterval(live.timer);
+  live.timer = setInterval(poll, 2000);
+  setTimeout(poll, 0);           // once the panel is on the page; poll() stops when it is gone
+  return box;
 }
 
 function callView(c) {
@@ -497,7 +548,7 @@ function statusNotice(c) {
   const working = { queued: "Waiting to write the note…", transcribing: "Transcribing and telling the speakers apart…", summarizing: "Writing the summary…" }[c.state];
   if (working)
     return h("div", { class: "notice info" }, h("span", { class: "spinner" }), h("span", { class: "grow" }, working,
-      c.state === "transcribing" ? " This takes about half the call's length." : ""));
+      c.state === "transcribing" ? " A long call takes a few minutes." : ""));
   if (c.state === "failed")
     return h("div", { class: "notice bad" }, h("span", { class: "grow" }, `The note failed: ${c.error || "unknown error"}`),
       c.has_audio ? h("button", { class: "btn", onclick: () => requeue(false) }, icon("refresh"), "Try again") : null);
@@ -1044,8 +1095,11 @@ function setupCard(s) {
     whisper_model: text("whisper_model"), whisper_language: text("whisper_language", "auto"),
     asr_engine: h("select", {}, ENGINES.map(([v, label]) => h("option", { value: v, selected: v === e.asr_engine }, label))),
     consent_line: h("textarea", { class: "short", maxlength: "500", placeholder: "e.g. Is it OK if I record this call for my notes?" }),
+    live_transcript: h("input", { type: "checkbox", id: "live-transcript" }),
   };
   inputs.consent_line.value = e.consent_line;
+  inputs.live_transcript.checked = e.live_transcript;
+  const value = (el) => (el.type === "checkbox" ? el.checked : el.value);
   const ollamaRow = field("Ollama model", inputs.ollama_model);
   const claudeRow = field("Claude model", inputs.anthropic_model);
   const keyBox = h("div", {});
@@ -1072,7 +1126,7 @@ function setupCard(s) {
   const save = h("button", { class: "btn btn-primary" }, "Save");
   save.onclick = async () => {
     const changes = {};
-    for (const [k, el] of Object.entries(inputs)) if (el.value !== e[k]) changes[k] = el.value;
+    for (const [k, el] of Object.entries(inputs)) if (value(el) !== e[k]) changes[k] = value(el);
     if (!Object.keys(changes).length) { toast("Nothing changed."); return; }
     let confirm_cloud = false;
     if (changes.summary_backend === "anthropic") {
@@ -1098,6 +1152,8 @@ function setupCard(s) {
     field("Whisper model", inputs.whisper_model, "e.g. large-v3-turbo, medium, small."),
     field("Call language", inputs.whisper_language, "auto, or a code like en, de."),
     field("Speech engine", inputs.asr_engine, "Automatic uses Parakeet, several times faster on a CPU, when it knows your language and no vocabulary is set; otherwise Whisper. whisper.cpp uses a GPU if you installed a whisper-cli built for it."),
+    h("label", { class: "check-row tight", for: "live-transcript" }, inputs.live_transcript, "Live transcript during calls"),
+    h("div", { class: "hint below-check" }, "See what is said while you record, a few seconds behind. It uses two CPU threads during the call. If its model is not downloaded yet, it starts after your next note."),
     field("Consent line", inputs.consent_line, "Copied to the clipboard when you press Record, to paste into the call chat."),
     h("div", { class: "row-end" }, save),
     h("dl", { class: "kv" },

@@ -30,6 +30,7 @@ from ..config.settings import DEFAULT_CONFIG_TOML, Settings, config_dir, parse_s
 from ..config.vocabulary import load_vocabulary, save_vocabulary
 from ..process.engines import ENGINES, OVERRIDES, check_overrides
 from ..process.jobs import Jobs
+from ..process.live import LIVE
 from ..process.merge import Line, as_text, paragraphs, stamp
 from ..process.note import action_line, own_note, segment_file, title_for
 from ..process.speakers import Voices, display_name
@@ -77,7 +78,10 @@ subject: a short subject line."""
 # Settings the UI may change; everything else stays
 # in config.toml.
 EDITABLE = ("consent_line", "summary_backend", "ollama_model", "anthropic_model",
-            "whisper_model", "whisper_language", "summary_language", "asr_engine")
+            "whisper_model", "whisper_language", "summary_language", "asr_engine",
+            "live_transcript")
+SWITCHES = ("live_transcript",)    # the EDITABLE settings that are true or false
+LIVE_READ = 256 * 1024             # most of live.jsonl sent per poll
 BACKENDS = ("ollama", "anthropic", "none")
 UPDATE_UNIT = "wirenote-update"
 MAX_SETTING = 500
@@ -338,6 +342,33 @@ class Store:
         note = self._note(read_manifest(d))
         if note and note.exists():
             _tick_in_note(note, item, done)
+
+    def live(self, rec_id: str, after: int = 0) -> dict:
+        """Live transcript lines written since byte `after` of live.jsonl (process/live.py).
+        Starts over from 0 when the file is shorter than `after` (a new recording)."""
+        path = self.rec_dir(rec_id) / LIVE
+        out = {"enabled": self.settings.live_transcript, "status": None, "lines": [],
+               "after": 0}
+        try:
+            with path.open("rb") as f:
+                size = f.seek(0, 2)
+                after = after if 0 <= after <= size else 0
+                f.seek(after)
+                chunk = f.read(LIVE_READ)
+        except OSError:
+            return out
+        end = chunk.rfind(b"\n") + 1         # only whole lines; the rest comes next poll
+        for raw in chunk[:end].splitlines():
+            try:
+                item = json.loads(raw)
+            except ValueError:
+                continue
+            if "status" in item:
+                out["status"] = {k: item.get(k) for k in ("status", "engine", "reason")}
+            elif {"speaker", "start", "end", "text"} <= item.keys():
+                out["lines"].append({k: item[k] for k in ("speaker", "start", "end", "text")})
+        out["after"] = after + end
+        return out
 
     def save_my_notes(self, rec_id: str, text: str, base: str | None = None) -> None:
         """base: the notes the editor started from. If they changed since (another tab,
@@ -602,6 +633,10 @@ class Store:
         if unknown:
             raise Invalid(f"cannot change {', '.join(unknown)} here")
         for k, v in changes.items():
+            if k in SWITCHES:
+                if not isinstance(v, bool):
+                    raise Invalid(f"{k}: true or false")
+                continue
             if not isinstance(v, str) or len(v) > MAX_SETTING:
                 raise Invalid(f"{k}: expected text of at most {MAX_SETTING} characters")
             if k != "consent_line" and not v.isprintable():

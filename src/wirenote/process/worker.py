@@ -21,6 +21,7 @@ from ..config.settings import Settings
 from ..config.vocabulary import load_vocabulary
 from .engines import engine_label, with_overrides
 from .jobs import Job, Jobs
+from .live import LIVE, prefetch
 from .merge import Line, as_text, dedupe_echo, paragraphs
 from .note import action_line, note_path, own_note, render, segment_file, title_for
 from .speakers import Voices, display_name, guess_names
@@ -96,6 +97,7 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
             "lines": [l.as_dict() for l in lines],
             "speakers": speakers,
             "dropped_echo": [l.as_dict() for l in dropped]}, indent=2, ensure_ascii=False))
+        (rec / LIVE).unlink(missing_ok=True)     # the preview is replaced by the transcript
         log(f"job {job.id}: {len(lines)} paragraphs, {len(speakers)} other speaker(s), "
             f"{len(dropped)} echo lines dropped")
 
@@ -122,6 +124,11 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
     write_manifest(rec, manifest)
     jobs.set_state(job.id, "done", note=str(path))
     log(f"job {job.id}: note written")   # no path: it carries the title
+    if settings.live_transcript:
+        try:
+            prefetch(settings)
+        except Exception as e:  # noqa: BLE001 - the note is done; the next one retries
+            log(f"live transcript model not downloaded: {type(e).__name__}")
 
 
 def _name_speakers(book, lines: list[Line], manifest: dict, settings: Settings, backend,

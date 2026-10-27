@@ -44,6 +44,7 @@ PW_DUMP = ("pw-dump", "--monitor", "--no-colors")
 STATUS_EVERY_S = 5.0
 HOUSEKEEPING_EVERY_S = 6 * 3600.0
 JOB_RETRY_DELAY_S = 60.0
+LIVE_STOP_S = 5.0        # the live transcript gets this long to exit after the call
 UPDATE_LOOP_S = 3600.0   # how often to see whether the daily update check is due
 STOPPED_IN_APP = "stopped in the app"   # the web UI is already showing the call
 
@@ -71,6 +72,14 @@ def _worker_setup() -> None:
         ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
     except OSError:
         pass
+
+
+async def spawn_live(rec_dir: Path) -> asyncio.subprocess.Process:
+    """The live transcript beside a recording (process/live.py), at worker priority."""
+    return await asyncio.create_subprocess_exec(
+        sys.executable, "-m", "wirenote.cli", "live", str(rec_dir),
+        stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.DEVNULL,
+        preexec_fn=_worker_setup)
 
 
 class EventLog:
@@ -131,6 +140,8 @@ class Daemon:
         self.jobs = Jobs(state_dir / "jobs.db")
         self.recording: Recording | None = None
         self.spawn = spawn_pw_record                # tests swap in fake pw-record children
+        self.spawn_live = spawn_live
+        self._live: asyncio.subprocess.Process | None = None
         self.calendar_events: list[ics.Event] = []
         self._prompt_events: dict[str, ics.Event] = {}   # app key -> event shown in its prompt
         self._shown: dict[int, Shown] = {}          # notification id -> purpose
@@ -516,6 +527,12 @@ class Daemon:
             self._worker.send_signal(signal.SIGSTOP)   # no transcription during a call
             self.log.write("job_paused")
         self._write_status(force=True)   # the app opens the live page from recording_id
+        if self.settings.live_transcript:
+            try:
+                self._live = await self.spawn_live(rec.dir)
+                self.log.write("live_start", recording=rec.id)
+            except Exception as err:  # noqa: BLE001 - the recording matters, the preview not
+                self.log.write("warning", message=f"live transcript did not start: {err!r}")
         self._ops.put_nowait((self._show_recording, rec))
         if self.settings.consent_line:
             self._ops.put_nowait((self._copy_consent, self.settings.consent_line))
@@ -547,6 +564,7 @@ class Daemon:
 
     async def _finish_recording(self, reason: str) -> int:
         rec, self.recording = self.recording, None
+        await self._stop_live()
         await rec.stop(reason)
         job_id = self.jobs.add(rec.dir)
         self.log.write("capture_stop", recording=rec.id, reason=reason, job=job_id,
@@ -557,6 +575,17 @@ class Daemon:
         self._worker_kick.set()
         self._write_status(force=True)
         return job_id
+
+    async def _stop_live(self) -> None:
+        live, self._live = self._live, None
+        if live is None or live.returncode is not None:
+            return
+        live.terminate()
+        try:
+            await asyncio.wait_for(live.wait(), LIVE_STOP_S)
+        except asyncio.TimeoutError:
+            live.kill()
+            await live.wait()
 
     async def _capture_tick(self, _arg) -> None:
         self._capture_tick_queued = False
