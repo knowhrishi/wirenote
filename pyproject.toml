@@ -43,6 +43,7 @@ wirenote = "wirenote.cli:main"
 dev = [
     "pyflakes>=4.0.3",
     "pytest>=8",
+    "quickjs>=1.19.4",
 ]
 
 [build-system]

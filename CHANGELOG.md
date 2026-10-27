@@ -4,6 +4,10 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Fixed
+
+- The meetings app showed nothing in 0.3.0: no calls, no settings, only an empty window. Your recordings and notes were never touched; they show again after the update. What you need to do: run `wirenote update`.
+
 ## [0.3.0] - 2026-10-27
 
 ### Added
