@@ -124,6 +124,10 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | Update check | off; when on, once a day | Nothing leaves the computer unless asked; releases are rarer than daily |
 | Update notification | once per version, never while recording | A reminder, not a nag; never during a call |
 | Waiting for a call before updating | at most 4 h, the recording cap | An update must not end a recording |
+| Speech engine | `auto`: Parakeet when it knows the language (setting or locale), no vocabulary is set and the Whisper model is the default; else Whisper | Parakeet is several times faster on a CPU; Whisper covers every other case |
+| Speech pieces for Parakeet and whisper.cpp | at most 30 s, 0.2 s padding | Parakeet is trained on short audio; padding keeps word edges |
+| Parakeet batch | 8 pieces | Bounded memory on long calls |
+| whisper.cpp model | `ggml-large-v3-turbo-q5_0.bin` | Same model as the Whisper default, quantized for the GPU |
 
 ## Prompt, capture and processing
 

@@ -19,6 +19,7 @@ from pathlib import Path
 from ..capture.recorder import read_manifest, write_manifest
 from ..config.settings import Settings
 from ..config.vocabulary import load_vocabulary
+from .engines import engine_label, with_overrides
 from .jobs import Job, Jobs
 from .merge import Line, as_text, dedupe_echo, paragraphs
 from .note import action_line, note_path, own_note, render, segment_file, title_for
@@ -75,19 +76,23 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
         data = json.loads(cache.read_text())
         lines = [Line(**l) for l in data["lines"]]
         speakers = data.get("speakers", {})
+        model = data.get("model") or settings.whisper_model
         log(f"job {job.id}: reusing {cache}")
     else:
         jobs.set_state(job.id, "transcribing")
-        log(f"job {job.id}: transcribing {rec.name} with {settings.whisper_model}")
+        heard_with = with_overrides(settings, manifest)
         if transcriber is None:
             from .transcribe import Transcriber
-            transcriber = Transcriber(settings, vocabulary)
+            transcriber = Transcriber(heard_with, vocabulary)
+        engine = getattr(transcriber, "engine", None)
+        model = engine.label if engine is not None else engine_label(heard_with, vocabulary)
+        log(f"job {job.id}: transcribing {rec.name} with {model}")
         raw, runs, book = transcriber.recording(rec, manifest)
         kept, dropped = dedupe_echo(raw, settings.echo_overlap, settings.echo_similarity)
         lines = paragraphs(kept, settings.merge_gap_s)
         speakers = _name_speakers(book, lines, manifest, settings, backend, voices)
         cache.write_text(json.dumps({
-            "model": settings.whisper_model, "runs": runs,
+            "model": model, "runs": runs,
             "lines": [l.as_dict() for l in lines],
             "speakers": speakers,
             "dropped_echo": [l.as_dict() for l in dropped]}, indent=2, ensure_ascii=False))
@@ -110,7 +115,8 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
     if summary:
         (rec / SUMMARY).write_text(json.dumps(summary.as_dict(), indent=2, ensure_ascii=False))
 
-    path = _write_note(rec, manifest, lines, summary, settings, backend_name, error, names, my_notes)
+    path = _write_note(rec, manifest, lines, summary, settings, backend_name, error, names, my_notes,
+                       model)
     manifest.update(note=str(path), summary_error=error, summary_backend=backend_name,
                     note_written=dt.datetime.now().astimezone().isoformat(timespec="seconds"))
     write_manifest(rec, manifest)
@@ -155,7 +161,7 @@ def _name_speakers(book, lines: list[Line], manifest: dict, settings: Settings, 
 
 def _write_note(rec: Path, manifest: dict, lines: list[Line], summary: Summary | None,
                 settings: Settings, backend_name: str | None, error: str | None,
-                names: dict[str, str], my_notes: str) -> Path:
+                names: dict[str, str], my_notes: str, transcript_model: str) -> Path:
     title = title_for(manifest, summary)
     started = dt.datetime.fromisoformat(manifest["started"])
     path = note_path(settings.notes_path(), started, title)
@@ -168,7 +174,7 @@ def _write_note(rec: Path, manifest: dict, lines: list[Line], summary: Summary |
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     tmp = path.with_suffix(".md.tmp")
     tmp.write_text(render(manifest, lines, summary, title=title, duration_min=duration,
-                          audio=audio, transcript_model=settings.whisper_model,
+                          audio=audio, transcript_model=transcript_model,
                           summary_backend=backend_name, summary_error=error, names=names,
                           my_notes=my_notes))
     tmp.replace(path)
@@ -196,7 +202,8 @@ def rewrite_note(rec: Path, settings: Settings) -> Path | None:
         summary, done = None, []
     names = speaker_names(data.get("speakers", {}))
     path = _write_note(rec, manifest, lines, summary, settings, manifest.get("summary_backend"),
-                       manifest.get("summary_error"), names, read_my_notes(rec))
+                       manifest.get("summary_error"), names, read_my_notes(rec),
+                       data.get("model") or settings.whisper_model)
     if done and any(done):
         text = path.read_text()
         for a, d in zip(summary.action_items, done):

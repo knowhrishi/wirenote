@@ -57,6 +57,44 @@ A backend change applies to the next note. To redo an older note's summary:
 wirenote reprocess 20261027-100000-chrome --summary
 ```
 
+## Speech engines
+
+Wirenote picks the fastest engine that suits your computer and your calls, unless you choose one in **Settings › Setup**, or with `asr_engine` in `config.toml`:
+
+- **Automatic**, the default. Parakeet if it knows your language (the call language, or your desktop's language when that is `auto`), you have no vocabulary of names and terms, and you have not picked a Whisper model. Otherwise Whisper. If Parakeet cannot be downloaded, Whisper writes the note.
+- **Whisper** (`asr_engine = "whisper"`). 99 languages, and uses your vocabulary of names and terms. The model (about 1.6 GB) downloads on the first note.
+- **Parakeet** (`asr_engine = "parakeet"`). Several times faster on a CPU, and good on English and 24 other European languages, which it detects by itself. It does not use the vocabulary. The model (about 670 MB) downloads on the first note.
+- **whisper.cpp** (`asr_engine = "whisper.cpp"`). Runs a `whisper-cli` you build yourself, for example with Vulkan to use an AMD or Intel GPU. On Debian or Ubuntu:
+
+  ```sh
+  sudo apt install build-essential cmake git libvulkan-dev glslc
+  git clone https://github.com/ggml-org/whisper.cpp
+  cd whisper.cpp
+  cmake -B build -DGGML_VULKAN=1
+  cmake --build build -j --config Release --target whisper-cli
+  ```
+
+  Then set the path in `config.toml` and restart (`systemctl --user restart wirenote`):
+
+  ```toml
+  asr_engine = "whisper.cpp"
+  whispercpp_bin = "/home/you/whisper.cpp/build/bin/whisper-cli"
+  # whispercpp_model = "ggml-large-v3-turbo-q5_0.bin"   # or a full path to a ggml model
+  ```
+
+  The model downloads from Hugging Face on the first note. `wirenote doctor` tells you whether `whisper-cli` and the model are found.
+
+Every engine runs on your computer. The note's footer says which one made the transcript, and `wirenote doctor` says which one Automatic picks.
+
+**Transcribe one call again** with another engine, model or language: **Transcribe again…** in the call page's menu, or
+
+```sh
+wirenote reprocess 20261027-100000-chrome --engine parakeet
+wirenote reprocess 20261027-100000-chrome --model large-v3 --language de
+```
+
+These choices apply to that call only, also when it is transcribed again later; your settings stay as they are.
+
 ## Calendar (optional)
 
 With a calendar, the prompt and the note use the event title, and the note lists the invited people. Add the calendar's secret ICS link in **Settings › Calendars**, or:
@@ -81,7 +119,7 @@ wirenote stop            # stop the recording (also works if the notification wa
 wirenote record          # answer the open prompt with Record
 wirenote record --now    # record a meeting without a call app
 wirenote jobs            # recent notes and failures
-wirenote reprocess <id>  # transcribe again; add --summary to keep the transcript
+wirenote reprocess <id>  # transcribe again (--engine, --model, --language); --summary keeps the transcript
 wirenote doctor          # check every part of the setup; --fix makes your files private again
 wirenote setup install   # install or update the services and the app-menu entry
 wirenote setup uninstall # remove them; --purge also deletes recordings and settings

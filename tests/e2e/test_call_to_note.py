@@ -191,5 +191,29 @@ def test_a_killed_daemon_still_yields_the_note(tmp_path):
         world.close()
 
 
+def test_transcribe_again_with_another_model(call):
+    """Transcribe again… in the app: the choice reaches the worker through the manifest,
+    the new transcript names the model, and the settings stay as they were."""
+    other = call.root / "other-whisper-model"
+    other.mkdir()
+    ui = logged_in(call)
+    rec_id = call.recording_dir().name
+    call.start_daemon()
+    try:
+        assert "job" in ui.json("POST", f"/api/calls/{rec_id}/retranscribe",
+                                {"choices": {"model": str(other), "language": "de"}})
+        # The call keeps its one job row; the daemon logs a second job_end for it.
+        call.wait_for(lambda: call.event_names().count("job_end") == 2, 120,
+                      "the second transcription")
+        assert [state for state, _ in call.jobs()] == ["done"], call.diagnostics()
+    finally:
+        assert call.stop_daemon() == 0
+    transcript = json.loads((call.recording_dir() / "transcript.json").read_text())
+    assert transcript["model"] == str(other)
+    detail = ui.json("GET", f"/api/calls/{rec_id}")
+    assert detail["transcribe"]["model"] == str(other) and detail["transcribe"]["language"] == "de"
+    assert ui.json("GET", "/api/settings")["whisper_model"] != str(other)
+
+
 def note_text_of(manifest: dict) -> str:
     return open(manifest["note"]).read()

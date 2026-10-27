@@ -354,7 +354,8 @@ def make_handler(app: App):
             if action == "/resummarize":
                 return self._json({"job": store.requeue(rec_id, summary_only=True)})
             if action == "/retranscribe":
-                return self._json({"job": store.requeue(rec_id, summary_only=False)})
+                return self._json({"job": store.requeue(rec_id, summary_only=False,
+                                                        choices=body.get("choices"))})
             if action == "/ask":
                 return self._json(store.ask(rec_id, str(body.get("question", ""))))
             if action == "/notes":

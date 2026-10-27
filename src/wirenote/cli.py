@@ -114,6 +114,22 @@ def cmd_reprocess(args) -> int:
     if not args.summary and not any(rec.glob("*.wav")):
         print("wirenote: the audio was deleted; only --summary can be redone")
         return 1
+    choices = {k: getattr(args, k) for k in ("engine", "model", "language") if getattr(args, k)}
+    if choices:
+        from .capture.recorder import read_manifest, write_manifest
+        from .process.engines import check_overrides
+
+        if args.summary:
+            print("wirenote: --engine, --model and --language need a new transcript, not --summary")
+            return 2
+        try:
+            choices = check_overrides(choices)
+        except ValueError as e:
+            print(f"wirenote: {e}")
+            return 2
+        m = read_manifest(rec)
+        m["transcribe"] = {**(m.get("transcribe") or {}), **choices}
+        write_manifest(rec, m)
     job_id = Jobs(state_dir() / "jobs.db").add(rec, summary_only=args.summary)
     print(f"queued job {job_id}; the daemon picks it up within 30 s (`wirenote jobs`)")
     return 0
@@ -260,6 +276,10 @@ def main(argv: list[str] | None = None) -> int:
     rep.add_argument("recording", help="recording id, e.g. 20261027-100000-chrome")
     rep.add_argument("--summary", action="store_true",
                      help="keep the transcript, redo only the summary and the note")
+    rep.add_argument("--engine", choices=["auto", "whisper", "parakeet", "whisper.cpp"],
+                     help="speech engine for this call from now on")
+    rep.add_argument("--model", help="Whisper model for this call, e.g. large-v3, medium")
+    rep.add_argument("--language", help="language of this call, e.g. de, en, or auto")
     rep.set_defaults(fn=cmd_reprocess)
     st = sub.add_parser("setup", help="install the services, choose the summary backend, "
                                       "or set the consent line")
