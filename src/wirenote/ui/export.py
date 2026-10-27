@@ -84,6 +84,11 @@ def body_xml(call: dict) -> str:
                            _run(f"{a.get('owner') or ''}: ", bold=True),
                            _run(f"{a.get('task') or ''}{due}")], "Bullet"))
     section("Open questions", s.get("open_questions") or [])
+    flagged = [f for f in call.get("flags") or [] if f.get("text")]      # as in the note
+    if flagged:
+        out.append(_p("Flagged moments", "Heading1"))
+        out.extend(_p([_run(f"{stamp(f['start'])}  ", grey=True), _run(f"{f.get('name') or ''} ", bold=True),
+                       _run(f["text"])], "Bullet") for f in flagged)
     notes = (call.get("my_notes") or "").strip()
     if notes:
         out.append(_p("My notes", "Heading1"))

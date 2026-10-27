@@ -128,6 +128,8 @@ def test_cli_lists_templates_and_reprocess_sets_one(tmp_path, capsys):
     assert "template" not in read_manifest(rec)
     assert main(["reprocess", rec.name, "--summary", "--template", "huddle"]) == 0
     assert read_manifest(rec)["template"] == "huddle"
+    assert main(["reprocess", rec.name, "--summary", "--template", "auto"]) == 0   # back to automatic
+    assert "template" not in read_manifest(rec)
     assert Settings().default_template == "general"
 
 

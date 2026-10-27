@@ -171,7 +171,7 @@ def cmd_reprocess(args) -> int:
         return 1
     from .capture.recorder import read_manifest, write_manifest
 
-    if args.template:
+    if args.template and args.template != "auto":
         from .process.templates import scan
 
         if args.template not in scan()[0]:
@@ -192,7 +192,9 @@ def cmd_reprocess(args) -> int:
     # Everything is valid: only now change the recording.
     if args.template or choices:
         m = read_manifest(rec)
-        if args.template:
+        if args.template == "auto":
+            m.pop("template", None)          # back to the automatic choice
+        elif args.template:
             m["template"] = args.template
         if choices:
             m["transcribe"] = {**(m.get("transcribe") or {}), **choices}
@@ -381,7 +383,8 @@ def main(argv: list[str] | None = None) -> int:
     rep.add_argument("--summary", action="store_true",
                      help="keep the transcript, redo only the summary and the note")
     rep.add_argument("--template", metavar="ID",
-                     help="summary template for this call (`wirenote templates` lists them)")
+                     help="summary template for this call (`wirenote templates` lists them); "
+                          "auto goes back to the automatic choice")
     rep.add_argument("--engine", choices=["auto", "whisper", "parakeet", "whisper.cpp"],
                      help="speech engine for this call from now on")
     rep.add_argument("--model", help="Whisper model for this call, e.g. large-v3, medium")

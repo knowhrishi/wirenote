@@ -648,6 +648,7 @@ function printCall(c) {
     ...(s.action_items && s.action_items.length ? [h("h2", {}, "Action items"), h("ul", { class: "print-actions" },
       s.action_items.map((a) => h("li", {}, a.done ? "☑ " : "☐ ", h("b", {}, `${a.owner}: `), a.task + (a.due ? ` (due: ${a.due})` : ""))))] : []),
     ...list("Open questions", s.open_questions),
+    ...(flagWithText(c).length ? [h("h2", {}, "Flagged moments"), h("ul", {}, flagWithText(c).map((f) => h("li", {}, h("span", { class: "print-time" }, clock(f.start)), h("b", {}, `${f.name} `), f.text)))] : []),
     ...(c.my_notes && c.my_notes.trim() ? [h("h2", {}, "My notes"), h("pre", { class: "print-notes" }, c.my_notes.trim())] : []),
     h("h2", {}, "Transcript"),
     ...(c.lines || []).map((l) => h("p", { class: "print-line" }, h("b", {}, names[l.speaker] || l.speaker), h("span", { class: "print-time" }, clock(l.start)), l.text)));
@@ -800,7 +801,13 @@ function notesMarkdown(c) {
     out.push("## Action items", "", ...s.action_items.map((a) => `- [${a.done ? "x" : " "}] **${a.owner}**: ${a.task}${a.due ? ` (due: ${a.due})` : ""}`), "");
   }
   list("Open questions", s.open_questions);
+  list("Flagged moments", flagWithText(c).map((f) => `[${clock(f.start)}] **${f.name}** ${f.text}`));
   return out.join("\n");
+}
+
+// The flags the note lists: those with a transcript line (an import may not have one yet).
+function flagWithText(c) {
+  return (c.flags || []).filter((f) => f.text);
 }
 
 async function copyNotes() {

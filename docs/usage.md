@@ -108,7 +108,7 @@ The interview template records only what was said. It does not rate, rank or jud
 
 Wirenote picks the first of these that applies:
 
-1. The template you chose for the call: **Summary template…** in the call page's menu, or `wirenote reprocess ID --summary --template standup`.
+1. The template you chose for the call: **Summary template…** in the call page's menu, or `wirenote reprocess ID --summary --template standup`. `--template auto` goes back to the automatic choice, so `auto` is not a name for a template file.
 2. The template you chose for the call's calendar series ("Use it for every meeting in this calendar series" in the same dialog). To stop, choose **Automatic** in that dialog and tick "Stop using a template for this series".
 3. A template with one of its words in the calendar event's title (for an import, in its title). Whole words only, any capitals: "Daily sync" matches `daily`, "Dailymotion review" does not. Your own templates are checked before the built-in ones, so a file with `titles = ["customer interview"]` wins over the built-in `interview`.
 4. A template whose `apps` lists the call app, again your own templates first.
@@ -220,7 +220,7 @@ wirenote record --now    # record a meeting without a call app
 wirenote flag            # flag this moment of the recording as important
 wirenote toggle          # stop the recording, or start one (the open prompt, else a meeting)
 wirenote jobs            # recent notes and failures
-wirenote reprocess <id>  # transcribe again (--engine, --model, --language); --summary keeps the transcript; --template ID
+wirenote reprocess <id>  # transcribe again (--engine, --model, --language); --summary keeps the transcript; --template ID (or auto)
 wirenote templates       # the summary templates and the words that pick them
 wirenote import <file>   # make a note from an audio or video file (--title, --date)
 wirenote export <id>     # save a call as a Word file (-o file or folder)
@@ -238,7 +238,7 @@ wirenote changelog       # what changed in this version; --since 0.1.0 for more
 | Path | What |
 | --- | --- |
 | `~/Meetings/YYYY/MM/*.md` | notes; deleted only when you delete the call in the app, never by the audio clean-up |
-| `~/.local/share/wirenote/recordings/<id>/` | `mic-000.wav`, `system-000.wav`, `manifest.json`, `transcript.json`, `summary.json`; the audio is deleted 30 days after the note (`audio_retention_days`) |
+| `~/.local/share/wirenote/recordings/<id>/` | `mic-000.wav`, `system-000.wav`, `manifest.json`, `transcript.json`, `summary.json`, `flags.json` (the moments you flagged); the audio is deleted 30 days after the note (`audio_retention_days`) |
 | `~/.config/wirenote/config.toml` | settings; every option is listed there, commented out |
 | `~/.config/wirenote/apps.toml` | which apps count as calls |
 | `~/.config/wirenote/templates/*.toml` | your own summary templates |
