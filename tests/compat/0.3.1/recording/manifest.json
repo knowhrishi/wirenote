@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "20261027-192142-firefox",
+  "app": "firefox",
+  "name": "Firefox",
+  "service": "Jitsi",
+  "room": "Room",
+  "calendar": null,
+  "started": "2026-10-27T19:21:42+00:00",
+  "ended": "2026-10-27T19:21:47+00:00",
+  "end_reason": "app left the mic",
+  "segments": [
+    {
+      "track": "mic",
+      "file": "mic-000.wav",
+      "target": "source-58",
+      "start_offset_s": 0.0,
+      "pid": 2558,
+      "end_offset_s": 5.712,
+      "end_reason": "app left the mic"
+    },
+    {
+      "track": "system",
+      "file": "system-000.wav",
+      "target": null,
+      "start_offset_s": 0.005,
+      "pid": 2559,
+      "end_offset_s": 5.716,
+      "end_reason": "app left the mic"
+    }
+  ],
+  "note": "/tmp/pytest-of-runner/pytest-0/e2e0/Meetings/2026/10/2026-10-27 1921 Release planning.md",
+  "summary_error": null,
+  "summary_backend": "ollama:fake:latest",
+  "note_written": "2026-10-27T19:21:48+00:00"
+}
