@@ -6,7 +6,8 @@
 Plasma and GNOME's AppIndicator extension both host it. The item asks for the bus name
 org.freedesktop.StatusNotifierItem-<pid>-1, lives at /StatusNotifierItem on the interface
 org.kde.StatusNotifierItem, and registers with org.kde.StatusNotifierWatcher under that
-name, again whenever the watcher comes back (a panel restart). Status is Active, or
+name as soon as the watcher exists, which at login is often after Wirenote starts, and
+again whenever it comes back (a panel restart). Status is Active, or
 NeedsAttention while a prompt shows; Passive would hide the icon.
 
 Every D-Bus call is guarded: a failure is reported once through on_error and the daemon
@@ -93,6 +94,9 @@ class TrayIndicator:
     def __init__(self, bus_factory: Callable[[], Awaitable[Any]] = session_bus) -> None:
         self.on_menu: Callable[[str], None] = lambda key: None
         self.on_error: Callable[[str], None] = log.warning
+        # Called with True when a watcher lists the icon, False when that watcher goes away
+        self.on_host: Callable[[bool], None] = lambda shown: None
+        self.registered = False
         self.name = f"org.freedesktop.StatusNotifierItem-{os.getpid()}-1"
         self.state = IndicatorState()
         self.revision = 1
@@ -104,23 +108,22 @@ class TrayIndicator:
         self._menu = _Menu(self)
 
     async def start(self) -> bool:
-        """False, with nothing left on the bus, where no watcher hosts tray icons."""
+        """True once a watcher lists the icon. False means no tray host right now: at login
+        Wirenote often starts before the panel, so the icon registers when a watcher appears.
+        Without a session bus nothing is left behind and the icon never shows."""
         try:
             bus = await self._bus_factory()
         except Exception as e:  # noqa: BLE001 - no session bus: no icon, nothing else changes
             self._fail("start", e)
             return False
         try:
-            (present,) = await self._call(bus, DBUS, DBUS_PATH, DBUS, "NameHasOwner", "s", [WATCHER])
-            if not present:
-                bus.disconnect()
-                return False
             bus.export(ITEM_PATH, self._item)
             bus.export(MENU_PATH, self._menu)
             await bus.request_name(self.name)
             bus.add_message_handler(self._on_message)
+            # Watch first, then look: a watcher that appears in between is not missed
             await self._call(bus, DBUS, DBUS_PATH, DBUS, "AddMatch", "s", [WATCHER_MATCH])
-            await self._register(bus)
+            (present,) = await self._call(bus, DBUS, DBUS_PATH, DBUS, "NameHasOwner", "s", [WATCHER])
         except Exception as e:  # noqa: BLE001
             self._fail("start", e)
             try:
@@ -129,16 +132,19 @@ class TrayIndicator:
                 pass
             return False
         self._bus = bus
-        return True
+        if present:
+            await self._register()
+        return self.registered
 
     def update(self, s: IndicatorState) -> None:
+        """Before registration this only stores s; the host reads it when it lists the icon."""
         if s == self.state:
             return
         old, self.state = self.state, s
         menu_changed = menu_for(old) != menu_for(s)
         if menu_changed:
             self.revision += 1
-        if self._bus is None:
+        if not self.registered:
             return
         try:
             if _icon(old) != _icon(s):
@@ -178,24 +184,35 @@ class TrayIndicator:
             raise TrayCallError(reply.error_name)
         return reply.body
 
-    async def _register(self, bus) -> None:
-        await self._call(bus, WATCHER, WATCHER_PATH, WATCHER, "RegisterStatusNotifierItem", "s",
-                         [self.name])
-
-    async def _register_again(self) -> None:
+    async def _register(self) -> None:
         try:
-            await self._register(self._bus)
+            await self._call(self._bus, WATCHER, WATCHER_PATH, WATCHER,
+                             "RegisterStatusNotifierItem", "s", [self.name])
         except Exception as e:  # noqa: BLE001
             self._fail("register", e)
+            return
+        self._set_registered(True)
+
+    def _set_registered(self, on: bool) -> None:
+        if on == self.registered:
+            return
+        self.registered = on
+        try:
+            self.on_host(on)
+        except Exception as e:  # noqa: BLE001
+            self._fail("host", e)
 
     def _on_message(self, msg: Message) -> None:
         """Sees every message on the bus; returns None so the rest are handled as usual."""
         if (msg.message_type == MessageType.SIGNAL and msg.interface == DBUS
                 and msg.member == "NameOwnerChanged" and len(msg.body) == 3
-                and msg.body[0] == WATCHER and msg.body[2] and self._bus is not None):
-            task = asyncio.ensure_future(self._register_again())
-            self._tasks.add(task)
-            task.add_done_callback(self._tasks.discard)
+                and msg.body[0] == WATCHER and self._bus is not None):
+            if msg.body[2]:            # a watcher appeared: the panel started or restarted
+                task = asyncio.ensure_future(self._register())
+                self._tasks.add(task)
+                task.add_done_callback(self._tasks.discard)
+            else:                      # it went away, and with it our listing
+                self._set_registered(False)
         return None
 
 

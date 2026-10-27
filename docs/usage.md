@@ -56,7 +56,7 @@ Wirenote puts a microphone icon in your panel's tray. It turns into a record ico
 - **While a call prompt shows:** **Record** the call, or **Ignore** it, like the notification's buttons.
 - **Otherwise:** **Record a meeting** (one without a call app, like `wirenote record --now`) and **Open Wirenote**.
 
-KDE Plasma shows the icon as it is. GNOME has no tray of its own: install and turn on the AppIndicator extension (on Ubuntu it is already there; elsewhere the package is usually `gnome-shell-extension-appindicator`), then run `systemctl --user restart wirenote`. Without a tray, Wirenote works as before, and `wirenote doctor` says why there is no icon.
+KDE Plasma shows the icon as it is. GNOME has no tray of its own: install and turn on the AppIndicator extension (on Ubuntu it is already there; elsewhere the package is usually `gnome-shell-extension-appindicator`). The icon appears as soon as the panel is ready, also when you turn the extension on later or the panel restarts. Without a tray, Wirenote works as before, and `wirenote doctor` says why there is no icon.
 
 To hide the icon, set `tray_icon = false` in `config.toml` and run `systemctl --user restart wirenote`.
 

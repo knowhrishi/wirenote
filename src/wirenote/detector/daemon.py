@@ -251,16 +251,22 @@ class Daemon:
             self.log.write("job_interrupted", job=job.id, state=job.state, attempts=job.attempts)
 
     async def _start_indicator(self) -> None:
-        """docs/usage.md › Tray icon. Without a tray host the daemon runs on without one."""
+        """docs/usage.md › Tray icon. The tray is kept even with no tray host yet: at login
+        the panel often starts after the daemon, and the icon shows once it does."""
         if not self.settings.tray_icon:
             return
         tray = self.make_tray()
         tray.on_menu = self._on_menu
         tray.on_error = lambda message: self.log.write("warning", message=message)
-        self.tray_ok = await tray.start()
-        if self.tray_ok:
-            self.indicator = tray
-        self.log.write("tray", shown=self.tray_ok)
+        tray.on_host = self._on_tray_host
+        self.indicator = tray
+        if not await tray.start():
+            self._on_tray_host(False)
+
+    def _on_tray_host(self, shown: bool) -> None:
+        self.tray_ok = shown
+        self.log.write("tray", shown=shown)
+        self._write_status(force=True)      # for `wirenote doctor`
 
     # Inputs ----------------------------------------------------------------
 

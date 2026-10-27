@@ -410,9 +410,8 @@ def test_toggle_records_the_one_prompt_and_refuses_several(tmp_path):
 
 
 def test_daemon_runs_without_tray_watcher(tmp_path):
-    from test_tray import FakeBus
+    from test_tray import FakeBus, labels, settle
 
-    from wirenote.notify.indicator import NullIndicator
     from wirenote.notify.tray import TrayIndicator
 
     d = make(tmp_path)
@@ -422,9 +421,20 @@ def test_daemon_runs_without_tray_watcher(tmp_path):
         return bus
     d.make_tray = lambda: TrayIndicator(factory)
     asyncio.run(d._start_indicator())
-    assert isinstance(d.indicator, NullIndicator) and bus.disconnected
+    assert d.indicator.registered is False and not bus.disconnected
     _record_and_stop(d)                         # detection and recording carry on
     assert json.loads((tmp_path / "status.json").read_text())["tray"] is False
+
+    assert d._control("record-now")["ok"]
+    asyncio.run(drain(d))
+
+    async def panel_starts():                   # the extension is turned on, or the panel was late
+        bus.set_watcher(True)
+        await settle()
+    asyncio.run(panel_starts())
+    assert d.indicator.registered is True
+    assert json.loads((tmp_path / "status.json").read_text())["tray"] is True
+    assert labels(bus)[0][0].startswith("Recording In-person meeting since ")   # the state of now
 
     off = tmp_path / "off"
     off.mkdir()

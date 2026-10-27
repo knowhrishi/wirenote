@@ -28,9 +28,10 @@ class FakeBus:
     """What the tray uses of dbus_fast.aio.MessageBus. Calls into exported objects go through
     dbus-fast's own method table, and every reply and signal is marshalled, as on a real bus."""
 
-    def __init__(self, watcher=True, fail_calls=False, fail_signals=False):
+    def __init__(self, watcher=True, fail_calls=False, fail_signals=False, fail_register=False):
         self.watcher = watcher
         self.fail_calls = fail_calls
+        self.fail_register = fail_register
         self.fail_signals = fail_signals
         self.exported: dict[str, ServiceInterface] = {}
         self.names: list[str] = []
@@ -58,7 +59,7 @@ class FakeBus:
         self.calls.append((msg.member, list(msg.body)))
         if msg.member == "NameHasOwner":
             return Reply([self.watcher and msg.body[0] == WATCHER])
-        if msg.member == "RegisterStatusNotifierItem" and not self.watcher:
+        if msg.member == "RegisterStatusNotifierItem" and (self.fail_register or not self.watcher):
             return Reply([], "org.freedesktop.DBus.Error.ServiceUnknown")
         return Reply([])
 
@@ -86,12 +87,22 @@ class FakeBus:
             out[p.name] = Variant(p.signature, value).value   # checks the type, like GetAll
         return out
 
-    def watcher_returns(self):
+    def set_watcher(self, present):
+        """The panel (or GNOME's extension) starts, stops or restarts."""
+        self.watcher = present
         msg = Message(message_type=MessageType.SIGNAL, path="/org/freedesktop/DBus",
                       interface="org.freedesktop.DBus", member="NameOwnerChanged", signature="sss",
-                      body=[WATCHER, "", ":1.99"])
+                      body=[WATCHER, "" if present else ":1.98", ":1.99" if present else ""])
         for h in self.handlers:
             assert not h(msg)          # never swallows a message meant for someone else
+
+    def registrations(self):
+        return len([c for c in self.calls if c[0] == "RegisterStatusNotifierItem"])
+
+
+async def settle():
+    for _ in range(3):
+        await asyncio.sleep(0)
 
 
 def _marshal(signature, body):
@@ -156,19 +167,50 @@ def test_tray_registers_with_the_watcher():
 
 
 def test_registers_again_when_the_watcher_returns():
+    hosts = []
+
     async def run():
         bus = FakeBus()
 
         async def factory():
             return bus
         tray = TrayIndicator(factory)
+        tray.on_host = hosts.append
         assert await tray.start()
-        bus.watcher_returns()                    # the panel restarted
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
+        bus.set_watcher(False)                   # the panel restarts: gone...
+        assert tray.registered is False
+        bus.set_watcher(True)                    # ...and back
+        await settle()
+        assert tray.registered is True
         return bus
     bus = asyncio.run(run())
-    assert len([c for c in bus.calls if c[0] == "RegisterStatusNotifierItem"]) == 2
+    assert bus.registrations() == 2 and hosts == [True, False, True]
+
+
+def test_icon_appears_when_the_panel_starts_after_wirenote():
+    """At login the daemon usually starts before plasmashell or GNOME's extension."""
+    hosts = []
+
+    async def run():
+        bus = FakeBus(watcher=False)
+
+        async def factory():
+            return bus
+        tray = TrayIndicator(factory)
+        tray.on_host = hosts.append
+        assert await tray.start() is False       # no tray host yet...
+        assert not bus.disconnected and bus.registrations() == 0
+        tray.update(RECORDING)                   # ...the state is kept for when it comes
+        assert bus.signals == []
+        bus.set_watcher(True)
+        await settle()
+        return tray, bus
+    tray, bus = asyncio.run(run())
+    assert tray.registered and bus.registrations() == 1 and hosts == [True]
+    assert bus.props(ITEM_PATH)["IconName"] == "media-record"
+    assert labels(bus)[2] == ("Stop", True)
+    tray.update(IDLE)                            # and it follows the state from then on
+    assert ("NewIcon", []) in bus.signals
 
 
 def test_menu_layout_per_state():
@@ -297,6 +339,24 @@ def test_tray_errors_are_contained(tmp_path):
     tray = TrayIndicator(factory)
     tray.on_error = errors.append
     assert asyncio.run(tray.start()) is False and bus.disconnected
+
+    async def late_refusal():                   # the watcher appears, then refuses the item
+        bus = FakeBus(watcher=False, fail_register=True)
+
+        async def factory():
+            return bus
+        tray = TrayIndicator(factory)
+        tray.on_error = errors.append
+        assert await tray.start() is False
+        bus.set_watcher(True)
+        await settle()
+        bus.set_watcher(True)
+        await settle()
+        return tray
+    errors.clear()
+    assert asyncio.run(late_refusal()).registered is False
+    assert errors == ["tray icon: register failed (TrayCallError: "
+                      "org.freedesktop.DBus.Error.ServiceUnknown)"]
 
     tray, bus = started()
     tray.on_error = errors.append
