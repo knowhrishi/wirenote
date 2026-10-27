@@ -48,6 +48,18 @@ Something important was just said? While a call records, press `F` in the meetin
 
 Change the window with `flag_before_s` and `flag_after_s` in `config.toml`.
 
+## Tray icon
+
+Wirenote puts a microphone icon in your panel's tray. It turns into a record icon while a call records, and asks for your attention while a call prompt is showing. Hover it to see what records and since when. Click it for a short menu:
+
+- **While recording:** what records and since when, then **Flag this moment**, **Stop** and **Open Wirenote**.
+- **While a call prompt shows:** **Record** the call, or **Ignore** it, like the notification's buttons.
+- **Otherwise:** **Record a meeting** (one without a call app, like `wirenote record --now`) and **Open Wirenote**.
+
+KDE Plasma shows the icon as it is. GNOME has no tray of its own: install and turn on the AppIndicator extension (on Ubuntu it is already there; elsewhere the package is usually `gnome-shell-extension-appindicator`), then run `systemctl --user restart wirenote`. Without a tray, Wirenote works as before, and `wirenote doctor` says why there is no icon.
+
+To hide the icon, set `tray_icon = false` in `config.toml` and run `systemctl --user restart wirenote`.
+
 ## Summaries
 
 **Local, the default.** [Ollama](https://ollama.com) runs on your computer and listens on 127.0.0.1; nothing leaves the laptop. The default model is `qwen3:4b`:

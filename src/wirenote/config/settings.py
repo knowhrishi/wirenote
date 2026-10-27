@@ -114,6 +114,8 @@ class Settings:
     ui_port: int = 8765
     # Open the call in the web UI by itself when its recording stops
     open_call_after_recording: bool = True
+    # docs/dev/PLAN.md › Defaults › Tray icon: on where the desktop hosts one
+    tray_icon: bool = True
 
     # Updates (docs/dev/updates-design.md) -----------------------------------
     # docs/dev/PLAN.md › Defaults › Update check: off; when on, ask PyPI once a day
@@ -183,6 +185,7 @@ DEFAULT_CONFIG_TOML = """# wirenote settings. Defaults come from docs/dev/PLAN.m
 # UI
 # ui_port = 8765                     # wirenote ui serves http://127.0.0.1:<port>/
 # open_call_after_recording = true   # open the call in the browser when its recording stops
+# tray_icon = true                   # an icon in the panel: recording state, Stop, Flag
 
 # Updates
 # update_check = false               # once a day, ask pypi.org whether a newer Wirenote exists

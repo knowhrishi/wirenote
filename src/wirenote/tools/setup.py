@@ -263,6 +263,13 @@ def _daemon_checks() -> list[Check]:
     if status.get("notifications") and status.get("notification_buttons") is False:
         out.append(Check("warn", "notifications here have no buttons: record from the Wirenote "
                                  "window or with `wirenote record`"))
+    if status.get("tray") is True:
+        out.append(Check("ok", "tray icon shown"))
+    elif status.get("tray") is False:
+        # No org.kde.StatusNotifierWatcher on the session bus; recording works without it
+        out.append(Check("warn", "no tray icon: this desktop has no tray for it",
+                         "on GNOME, install and turn on the AppIndicator extension, then "
+                         "systemctl --user restart wirenote; or set tray_icon = false"))
     failed = (status.get("jobs") or {}).get("failed", 0)
     out.append(_ok(not failed, "no failed note jobs", f"{failed} failed note job(s)",
                    "wirenote jobs", warn=True))

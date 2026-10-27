@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "anthropic>=2.3.0",
-    "dbus-fast>=2.0",
+    "dbus-fast>=4.0",
     "faster-whisper>=1.2.1",
     "icalendar>=7.3.0",
     "recurring-ical-events>=3.8.2",

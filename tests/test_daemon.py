@@ -8,6 +8,8 @@ import asyncio
 import json
 from dataclasses import replace
 
+import pytest
+
 from wirenote.config.apps import DEFAULT_APPS_TOML, parse_apps
 from wirenote.config.settings import Settings
 from wirenote.detector.daemon import Daemon
@@ -405,3 +407,45 @@ def test_toggle_records_the_one_prompt_and_refuses_several(tmp_path):
     reply = d._control("toggle")
     assert reply["ok"] is False and reply["error"].startswith("several prompts: ")
     assert d.recording is None
+
+
+def test_daemon_runs_without_tray_watcher(tmp_path):
+    from test_tray import FakeBus
+
+    from wirenote.notify.indicator import NullIndicator
+    from wirenote.notify.tray import TrayIndicator
+
+    d = make(tmp_path)
+    bus = FakeBus(watcher=False)               # GNOME without the AppIndicator extension
+
+    async def factory():
+        return bus
+    d.make_tray = lambda: TrayIndicator(factory)
+    asyncio.run(d._start_indicator())
+    assert isinstance(d.indicator, NullIndicator) and bus.disconnected
+    _record_and_stop(d)                         # detection and recording carry on
+    assert json.loads((tmp_path / "status.json").read_text())["tray"] is False
+
+    off = tmp_path / "off"
+    off.mkdir()
+    d = make(off)
+    d.settings = replace(d.settings, tray_icon=False)
+    d.make_tray = lambda: pytest.fail("the tray is turned off")
+    asyncio.run(d._start_indicator())
+    d._write_status(force=True)
+    assert json.loads((off / "status.json").read_text())["tray"] is None
+
+
+def test_doctor_explains_a_missing_tray(tmp_path, monkeypatch):
+    import os
+
+    from wirenote.tools import setup
+
+    monkeypatch.setattr(setup, "state_dir", lambda: tmp_path)
+    status = {"running": True, "pid": os.getpid(), "notifications": True, "jobs": {}}
+    for tray, want in ((True, "ok"), (False, "warn"), (None, None)):
+        (tmp_path / "status.json").write_text(json.dumps({**status, "tray": tray}))
+        found = [c for c in setup._daemon_checks() if "tray" in c.message]
+        assert [c.status for c in found] == ([want] if want else [])
+        if tray is False:
+            assert "AppIndicator" in found[0].fix

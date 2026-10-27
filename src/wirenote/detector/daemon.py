@@ -33,6 +33,8 @@ from ..config.secrets import calendar_sources
 from ..config.settings import Settings, config_dir, load_settings
 from ..notify import clipboard
 from ..notify.dbus import CLOSED_BY_CALL, Notifier, watch_sleep
+from ..notify.indicator import Indicator, IndicatorState, NullIndicator
+from ..notify.tray import TrayIndicator
 from ..process.jobs import ACTIVE, Job, Jobs
 from .core import Detector, DetectorEvent, Identified
 from .graph import BatchFramer
@@ -47,6 +49,7 @@ JOB_RETRY_DELAY_S = 60.0
 LIVE_STOP_S = 5.0        # the live transcript gets this long to exit after the call
 UPDATE_LOOP_S = 3600.0   # how often to see whether the daily update check is due
 STOPPED_IN_APP = "stopped in the app"   # the web UI is already showing the call
+TRAY_COMMANDS = ("record", "ignore", "stop", "flag", "record-now")   # sent on to _control
 
 
 def now_iso() -> str:
@@ -56,6 +59,11 @@ def now_iso() -> str:
 def room_hash(room: str | None) -> str | None:
     """Enough to group a call's events in the log without writing its name."""
     return hashlib.sha256(room.encode()).hexdigest()[:8] if room else None
+
+
+def recording_label(m: RecordingMeta) -> str:
+    """What a recording is called on the desktop: its calendar event, call service or app."""
+    return (m.calendar or {}).get("title") or (f"{m.service} call" if m.service else m.name)
 
 
 def control_socket_path() -> Path:
@@ -137,6 +145,9 @@ class Daemon:
         self.detector.calendar_hint = self._calendar_hint
         self.notifier = Notifier()
         self.notify_ok = False
+        self.indicator: Indicator = NullIndicator()
+        self.tray_ok: bool | None = None            # None: tray_icon is off
+        self.make_tray = TrayIndicator              # tests swap in a fake session bus
         self.jobs = Jobs(state_dir / "jobs.db")
         self.recording: Recording | None = None
         self.spawn = spawn_pw_record                # tests swap in fake pw-record children
@@ -182,6 +193,7 @@ class Daemon:
             await watch_sleep(self._on_sleep)
         except Exception as e:  # noqa: BLE001
             self.log.write("warning", message=f"sleep/wake signals unavailable: {e!r}")
+        await self._start_indicator()
         self._recover()
 
         loop = asyncio.get_running_loop()
@@ -237,6 +249,18 @@ class Daemon:
             self.log.write("recovered", recording=rec_dir.name, job=job)
         for job in self.jobs.requeue_interrupted():
             self.log.write("job_interrupted", job=job.id, state=job.state, attempts=job.attempts)
+
+    async def _start_indicator(self) -> None:
+        """docs/usage.md › Tray icon. Without a tray host the daemon runs on without one."""
+        if not self.settings.tray_icon:
+            return
+        tray = self.make_tray()
+        tray.on_menu = self._on_menu
+        tray.on_error = lambda message: self.log.write("warning", message=message)
+        self.tray_ok = await tray.start()
+        if self.tray_ok:
+            self.indicator = tray
+        self.log.write("tray", shown=self.tray_ok)
 
     # Inputs ----------------------------------------------------------------
 
@@ -315,6 +339,15 @@ class Daemon:
             shown.handled = False   # e.g. a click on the body ("default"): wait for a button
             return
         self._save_state()
+
+    def _on_menu(self, key: str) -> None:
+        """A click in the tray icon's menu (notify/indicator.py MENU_KEYS)."""
+        if key == "open":
+            self._open_ui("#/")
+        elif key in TRAY_COMMANDS:
+            reply = self._control(key)
+            if not reply["ok"]:
+                self.log.write("note", message=f"tray {key}: {reply['error']}")
 
     def _on_closed(self, nid: int, reason: int) -> None:
         shown = self._shown.pop(nid, None)
@@ -409,8 +442,7 @@ class Daemon:
 
     async def _show_recording(self, rec: Recording) -> None:
         m = rec.meta
-        what = (m.calendar or {}).get("title") or (f"{m.service} call" if m.service else m.name)
-        nid = await self.notifier.notify(f"Recording {what}",
+        nid = await self.notifier.notify(f"Recording {recording_label(m)}",
                                          "Mic and system audio. Stop ends the recording.",
                                          [("stop", "Stop")])
         self._shown[nid] = Shown("recording", m.app)
@@ -772,18 +804,23 @@ class Daemon:
             self._handle(tracker.stop(now, STOPPED_IN_APP if cmd == "stop-in-app"
                                       else "stopped by you"))
             return {"ok": True, "app": key}
-        if cmd == "record":
+        if cmd in ("record", "ignore"):
+            # The prompt's two buttons, from the command line, the app or the tray
             prompted = [k for k, t in tracker.apps.items() if t.state is State.PROMPTED]
             if len(prompted) != 1:
                 return {"ok": False, "error": "no prompt showing" if not prompted
                         else f"several prompts: {', '.join(prompted)}"}
             key = prompted[0]
-            self.log.write("control", command="record", app=key)
+            self.log.write("control", command=cmd, app=key)
             nid = self._prompt_ids.pop(key, None)
             if nid is not None:
                 self._shown[nid].handled = True
                 self._ops.put_nowait((self._safe_close, nid))
-            self._handle(tracker.record(key, now))
+            if cmd == "record":
+                self._handle(tracker.record(key, now))
+            else:
+                self._handle(tracker.ignore(key, now))
+                self._save_state()
             return {"ok": True, "app": key}
         if cmd == "flag":
             rec = self.recording
@@ -840,6 +877,7 @@ class Daemon:
         status = {"updated": now_iso(), "pid": os.getpid(), "running": running,
                   "notifications": self.notify_ok,
                   "notification_buttons": self.notifier.has_actions if self.notify_ok else None,
+                  "tray": self.tray_ok,
                   "recording": self.detector.tracker.recording_key,
                   "recording_id": self.recording.id if self.recording else None,
                   "flags": len(self.recording.flags) if self.recording else 0,
@@ -848,3 +886,18 @@ class Daemon:
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(status, indent=2))
         tmp.replace(path)
+        try:
+            self.indicator.update(self._indicator_state())
+        except Exception as e:  # noqa: BLE001 - the tray must never stop detection
+            self.log.write("error", message=f"tray update failed: {type(e).__name__}; tray off")
+            self.indicator = NullIndicator()
+
+    def _indicator_state(self) -> IndicatorState:
+        rec = self.recording
+        prompted = [t for t in self.detector.tracker.apps.values() if t.state is State.PROMPTED]
+        first = prompted[0] if prompted else None
+        return IndicatorState(
+            recording=recording_label(rec.meta) if rec else None,
+            recording_since=rec.started_wall.isoformat(timespec="seconds") if rec else None,
+            prompt=(first.key, first.obs.name if first.obs else first.key) if first else None,
+            flags=len(rec.flags) if rec else 0)
