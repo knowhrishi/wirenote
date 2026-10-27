@@ -1,4 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (c) 2026 Hrishikesh Jadhav
+"""scripts/ci_apt_install.sh: bounded, retried apt installs on CI runners. apt and
+everything run as root are faked."""
+
+from __future__ import annotations
+
 import os
 import subprocess
 from pathlib import Path
