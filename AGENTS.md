@@ -114,6 +114,7 @@ If it is already pushed but has no pull request, push the new name and delete th
 ## Pull requests
 
 - One change per pull request, into `main`. Fill in the checklist in `.github/pull_request_template.md`.
-- A user-visible change gets an entry in `CHANGELOG.md` under `## [Unreleased]` (add the heading if it is missing), in the Keep a Changelog groups: Added, Changed, Fixed, Security. Update `docs/usage.md` when commands, settings or behaviour change.
+- A user-visible change gets an entry in `CHANGELOG.md` under `## [Unreleased]` (add the heading if it is missing), in the Keep a Changelog groups: Added, Changed, Fixed, Security. Users read these in the app after an update, so write what they notice, not how it was done, and add "What you need to do: …" when they must act. Update `docs/usage.md` when commands, settings or behaviour change.
+- CI (`changelog.yml`) fails a pull request that changes `src/` without changing `CHANGELOG.md`, unless it has the `no-changelog` label.
 - To support a new call app, add a rule to the defaults in `src/wirenote/config/apps.py` and say how you checked it (`wirenote dump-streams` during a call).
 - Agents do not push to `main`, create tags or publish releases. Releases are the maintainer's job (`docs/dev/releasing.md`).
