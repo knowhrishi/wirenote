@@ -173,3 +173,63 @@ def test_doctor_reports_updates_from_the_last_check_only(monkeypatch):
     (state_dir() / updates.CHECK).write_text(json.dumps({"checked": 1.0, "latest": "99.0.0"}))
     (avail,) = setup._update_checks(on)
     assert avail.status == "warn" and "99.0.0" in avail.message and avail.fix == "wirenote update"
+
+
+def test_setup_openai_checks_before_it_saves(monkeypatch, capsys):
+    import io
+    import json
+    import urllib.error
+
+    from wirenote.config.settings import config_dir, load_settings
+    from wirenote.process import summarize as summ
+    from wirenote.tools import setup
+
+    answers = iter(["", ""])                       # the default address and model
+    monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+    monkeypatch.setattr(setup.getpass, "getpass", lambda prompt: "sk-or-v1-test1234")
+    monkeypatch.setattr(summ.socket, "getaddrinfo", lambda *a, **k: (_ for _ in ()).throw(OSError()))
+    replies = [urllib.error.HTTPError("u", 401, "x", {}, io.BytesIO(b"{}")), {"ok": "ok"}]
+
+    class Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            self.close()
+
+    def urlopen(req, timeout):
+        r = replies.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return Resp(json.dumps({"choices": [{"message": {"content": json.dumps(r)}}]}).encode())
+    monkeypatch.setattr(summ.urllib.request, "urlopen", urlopen)
+
+    assert setup.setup_openai() == 1                          # the key was rejected
+    assert "rejected the API key" in capsys.readouterr().out and load_secrets() == {}
+    answers = iter(["", ""])
+    assert setup.setup_openai() == 0
+    out = capsys.readouterr().out
+    assert "sent to openrouter.ai" in out and "sk-or-v1-test1234" not in out
+    assert load_secrets()["openai_api_key"] == "sk-or-v1-test1234"
+    s = load_settings(config_dir() / "config.toml")
+    assert (s.summary_backend, s.openai_url) == ("openai", "https://openrouter.ai/api/v1")
+
+
+def test_setup_claude_without_a_key_says_how_to_log_in(monkeypatch, capsys):
+    import anthropic
+
+    from wirenote.tools import setup
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(setup.getpass, "getpass", lambda prompt: "")
+
+    class NoCredentials:
+        def __init__(self, api_key=None):
+            self.models = self
+
+        def retrieve(self, model):
+            raise TypeError("Could not resolve authentication method")
+    monkeypatch.setattr(anthropic, "Anthropic", NoCredentials)
+    assert setup.setup_claude() == 1
+    out = capsys.readouterr().out
+    assert "ant auth login" in out and "subscription cannot be used" in out

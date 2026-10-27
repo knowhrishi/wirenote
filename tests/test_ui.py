@@ -530,6 +530,10 @@ def test_api_key_is_write_only(server, cfg_env):
     assert request(port, "POST", "/api/settings/anthropic-key", body={"key": key}, headers=hdrs)[0] == 200
     status, body = request(port, "GET", "/api/settings")
     assert status == 200 and key.encode() not in body and json.loads(body)["anthropic_key_set"] is True
+    other = "sk-or-v1-" + "b" * 40
+    assert request(port, "POST", "/api/settings/openai-key", body={"key": other}, headers=hdrs)[0] == 200
+    status, body = request(port, "GET", "/api/settings")
+    assert other.encode() not in body and json.loads(body)["openai_key_set"] is True
 
 
 def test_calendars_never_show_links(store, cfg_env, monkeypatch):
@@ -637,3 +641,26 @@ def test_update_routes(server, monkeypatch):
     assert request(port, "POST", "/api/updates/check", headers=write, body={})[0] == 200
     assert request(port, "POST", "/api/updates/seen", body={})[0] == 403       # no token
     assert request(port, "GET", "/api/updates", session=False)[0] == 401
+
+
+def test_an_online_api_needs_confirmation_but_one_on_this_computer_does_not(store, cfg_env, monkeypatch):
+    from wirenote.process import summarize as summ
+
+    def no_dns(*a, **k):
+        raise OSError("offline")
+    monkeypatch.setattr(summ.socket, "getaddrinfo", no_dns)
+    st, _ = store
+    lm_studio = {"summary_backend": "openai", "openai_url": "http://127.0.0.1:1234/v1"}
+    assert st.update_settings(lm_studio, confirm_cloud=False)["summary_backend"] == "openai"
+    with pytest.raises(Invalid, match="confirm what is sent to openrouter.ai"):
+        st.update_settings({"openai_url": "https://openrouter.ai/api/v1"}, confirm_cloud=False)
+    st.update_settings({"openai_url": "https://openrouter.ai/api/v1"}, confirm_cloud=True)
+    st.update_settings({"openai_model": "qwen/qwen3.8-flash"}, confirm_cloud=False)   # same place
+    with pytest.raises(Invalid, match="confirm what is sent to api.openai.com"):     # another one
+        st.update_settings({"openai_url": "https://api.openai.com/v1"}, confirm_cloud=False)
+    with pytest.raises(Invalid, match="confirm what is sent to Claude"):
+        st.update_settings({"summary_backend": "anthropic"}, confirm_cloud=False)
+    with pytest.raises(Invalid, match="https://"):
+        st.update_settings({"openai_url": "http://api.example.com/v1"}, confirm_cloud=True)
+    info = st.settings_info()
+    assert info["model"] == "qwen/qwen3.8-flash" and "OpenRouter" in info["cloud_disclosure"]

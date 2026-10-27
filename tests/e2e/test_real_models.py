@@ -86,3 +86,34 @@ def test_parakeet_turns_speech_into_a_note(tmp_path):
     me, others = talk_and_note(tmp_path, {"asr_engine": "parakeet"})
     assert "thursday" in me and "friday" not in me, me
     assert "friday" in others and "thursday" not in others, others
+
+
+def test_live_transcript_shows_speech_during_the_call(tmp_path):
+    mic = tmp_path / "mic.wav"
+    system = tmp_path / "system.wav"
+    seconds = max(speech("I will send the changelog by Thursday.", mic, "en-us"),
+                  speech("Great. Then we ship the release on Friday.", system, "en-gb"))
+    world = World(tmp_path / "world", models=True, mic_wav=mic, system_wav=system,
+                  settings={"asr_engine": "parakeet", "live_transcript": True})
+    try:
+        # The live transcript never downloads during a call; a note before does it.
+        subprocess.run([sys.executable, "-c", "from wirenote.config.settings import Settings; "
+                        "from wirenote.process.live import prefetch; "
+                        "prefetch(Settings(asr_engine='parakeet'))"],
+                       env=world.env, check=True, timeout=900)
+        world.start_daemon()
+        world.wait_for(lambda: "prompt" in world.event_names(), 30, "the Record prompt")
+        assert world.cli("record").returncode == 0
+        live = world.recording_dir() / "live.jsonl"
+
+        def heard() -> str:
+            return live.read_text().lower() if live.exists() else ""
+        world.wait_for(lambda: "thursday" in heard() and "friday" in heard(),
+                       seconds + 60, "both lines in the live transcript")
+        assert '"status": "listening"' in heard()
+        world.hangup()
+        note_done(world, timeout=900)
+        assert not live.exists()          # the note's transcript replaced the preview
+        assert world.stop_daemon() == 0
+    finally:
+        world.close()

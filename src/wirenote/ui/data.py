@@ -30,10 +30,11 @@ from ..config.settings import DEFAULT_CONFIG_TOML, Settings, config_dir, parse_s
 from ..config.vocabulary import load_vocabulary, save_vocabulary
 from ..process.engines import ENGINES, OVERRIDES, check_overrides
 from ..process.jobs import Jobs
+from ..process.live import LIVE
 from ..process.merge import Line, as_text, paragraphs, stamp
 from ..process.note import action_line, own_note, segment_file, title_for
 from ..process.speakers import Voices, display_name
-from ..process.summarize import Summary, SummaryError, make_backend
+from ..process.summarize import Summary, SummaryError, make_backend, pin_local
 from ..process.worker import MY_NOTES, SUMMARY, TRANSCRIPT, read_my_notes, rewrite_note
 
 REC_ID = re.compile(r"^\d{8}-\d{6}-[A-Za-z0-9_.-]{1,64}$")
@@ -44,6 +45,7 @@ FOLLOWUP = "followup.json"
 _WORD = re.compile(r"\w+", re.UNICODE)
 # Ask: how much transcript a local model gets (its context is 8k tokens).
 OLLAMA_ASK_CHARS = 18000
+LOCAL_BACKENDS = ("ollama:", "local:")      # Backend.name prefixes of models on this computer
 ALL_CALLS_CHARS_API = 120000
 
 ASK_SYSTEM = """You answer questions about one call, using only its transcript.
@@ -77,16 +79,22 @@ subject: a short subject line."""
 # Settings the UI may change; everything else stays
 # in config.toml.
 EDITABLE = ("consent_line", "summary_backend", "ollama_model", "anthropic_model",
-            "whisper_model", "whisper_language", "summary_language", "asr_engine")
-BACKENDS = ("ollama", "anthropic", "none")
+            "openai_url", "openai_model",
+            "whisper_model", "whisper_language", "summary_language", "asr_engine",
+            "live_transcript")
+SWITCHES = ("live_transcript",)    # the EDITABLE settings that are true or false
+LIVE_READ = 256 * 1024             # most of live.jsonl sent per poll
+BACKENDS = ("ollama", "anthropic", "openai", "none")
+API_KEYS = {"anthropic": "anthropic_api_key", "openai": "openai_api_key"}   # secrets.toml
 UPDATE_UNIT = "wirenote-update"
 MAX_SETTING = 500
 CALENDAR_LINK = re.compile(r"^(https|webcal)://\S{1,2000}$", re.IGNORECASE)
 
-CLOUD_DISCLOSURE = ("With Claude on, these go to Anthropic: the transcript of each call (in "
-                    "parts), the calendar title and invitees, your notes, your vocabulary, "
-                    "questions you ask with the transcript, and for Ask across meetings up to "
-                    "120,000 characters from all your calls.")
+CLOUD_DISCLOSURE = ("With Claude or an online API on, these go to Anthropic, or to the API you "
+                    "set (for OpenRouter: OpenRouter and the model's provider): the transcript "
+                    "of each call (in parts), the calendar title and invitees, your notes, your "
+                    "vocabulary, questions you ask with the transcript, and for Ask across "
+                    "meetings up to 120,000 characters from all your calls.")
 
 UPDATE_DISCLOSURE = ("Once a day, Wirenote asks pypi.org for the newest version and, when there "
                      "is one, fetches its release notes from github.com. Nothing about you or "
@@ -136,6 +144,17 @@ def poke_daemon(command: str) -> None:
 
 def _calendar_id(source: str) -> str:
     return hashlib.sha256(source.encode()).hexdigest()[:12]
+
+
+def _destination(s: Settings) -> str | None:
+    """Who gets call data with these settings: None while it stays on this computer."""
+    if s.summary_backend == "anthropic":
+        return "Claude"
+    if s.summary_backend == "openai" and not pin_local(s.openai_url):
+        from urllib.parse import urlsplit
+
+        return urlsplit(s.openai_url).hostname or s.openai_url
+    return None
 
 
 def _secrets() -> dict:
@@ -339,6 +358,33 @@ class Store:
         if note and note.exists():
             _tick_in_note(note, item, done)
 
+    def live(self, rec_id: str, after: int = 0) -> dict:
+        """Live transcript lines written since byte `after` of live.jsonl (process/live.py).
+        Starts over from 0 when the file is shorter than `after` (a new recording)."""
+        path = self.rec_dir(rec_id) / LIVE
+        out = {"enabled": self.settings.live_transcript, "status": None, "lines": [],
+               "after": 0}
+        try:
+            with path.open("rb") as f:
+                size = f.seek(0, 2)
+                after = after if 0 <= after <= size else 0
+                f.seek(after)
+                chunk = f.read(LIVE_READ)
+        except OSError:
+            return out
+        end = chunk.rfind(b"\n") + 1         # only whole lines; the rest comes next poll
+        for raw in chunk[:end].splitlines():
+            try:
+                item = json.loads(raw)
+            except ValueError:
+                continue
+            if "status" in item:
+                out["status"] = {k: item.get(k) for k in ("status", "engine", "reason")}
+            elif {"speaker", "start", "end", "text"} <= item.keys():
+                out["lines"].append({k: item[k] for k in ("speaker", "start", "end", "text")})
+        out["after"] = after + end
+        return out
+
     def save_my_notes(self, rec_id: str, text: str, base: str | None = None) -> None:
         """base: the notes the editor started from. If they changed since (another tab,
         e.g. the one opened when the recording stopped), nothing is overwritten."""
@@ -388,6 +434,51 @@ class Store:
         if read_manifest(d).get("note"):
             rewrite_note(d, self.settings)
 
+    # Import and export ---------------------------------------------------------
+
+    def import_upload(self, read, size: int, filename: str, modified_ms: str = "") -> dict:
+        """An uploaded file, read in pieces with read(n), becomes a recording and a job.
+        The upload is kept only until ffmpeg has converted it."""
+        import datetime as dt
+        import tempfile
+
+        from ..capture.importer import MAX_IMPORT_BYTES, ImportFailed, import_audio
+
+        if not 0 < size <= MAX_IMPORT_BYTES:
+            raise Invalid(f"files up to {MAX_IMPORT_BYTES // 1024 ** 3} GB can be imported")
+        name = Path(filename.replace("\\", "/")).name[:200] or "upload"
+        started = None
+        if modified_ms.isdigit():
+            try:
+                started = dt.datetime.fromtimestamp(int(modified_ms) / 1000).astimezone()
+            except (OverflowError, OSError, ValueError):
+                started = None
+        self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".import-", dir=self.root) as tmp:
+            src = Path(tmp) / name
+            left = size
+            with src.open("wb") as f:
+                while left:
+                    chunk = read(min(left, 1 << 20))
+                    if not chunk:
+                        raise Invalid("the upload stopped before the end")
+                    f.write(chunk)
+                    left -= len(chunk)
+            try:
+                rec = import_audio(src, self.root, started=started)
+            except ImportFailed as e:
+                raise Invalid(str(e)) from e
+        with self._jobs_lock:
+            job = self.jobs.add(rec)
+        poke_daemon("kick-jobs")
+        return {"id": rec.name, "job": job}
+
+    def export_docx(self, rec_id: str) -> tuple[bytes, str]:
+        from .export import docx_bytes, export_name
+
+        call = self.call(rec_id)
+        return docx_bytes(call), export_name(call, "docx")
+
     # Processing ------------------------------------------------------------
 
     def requeue(self, rec_id: str, summary_only: bool, choices: dict | None = None) -> int:
@@ -410,7 +501,9 @@ class Store:
             m["transcribe"] = {k: v for k, v in kept.items() if v != defaults[k]}
             write_manifest(d, m)
         with self._jobs_lock:
-            return self.jobs.add(d, summary_only=summary_only)
+            job = self.jobs.add(d, summary_only=summary_only)
+        poke_daemon("kick-jobs")
+        return job
 
     def _backend(self):
         try:
@@ -440,7 +533,7 @@ class Store:
             raise Invalid("no transcript yet")
         backend = self._backend()
         names = {l: display_name(l, tr.get("speakers", {})) for l in tr.get("speakers", {})}
-        limit = OLLAMA_ASK_CHARS if backend.name.startswith("ollama:") else None
+        limit = OLLAMA_ASK_CHARS if backend.name.startswith(LOCAL_BACKENDS) else None
         excerpt, partial = _relevant(lines, question, limit, names)
         head = "Transcript excerpts (most relevant parts):" if partial else "Transcript:"
         data = self._complete(backend, ASK_SYSTEM, f"{head}\n{excerpt}\n\nQuestion: {question}",
@@ -506,7 +599,7 @@ class Store:
         if not question:
             raise Invalid("empty question")
         backend = self._backend()
-        budget = OLLAMA_ASK_CHARS if backend.name.startswith("ollama:") else ALL_CALLS_CHARS_API
+        budget = OLLAMA_ASK_CHARS if backend.name.startswith(LOCAL_BACKENDS) else ALL_CALLS_CHARS_API
         q = _stems(question)
         calls, scored = [], []
         for d in self._rec_dirs():
@@ -580,18 +673,21 @@ class Store:
     def settings_info(self) -> dict:
         s = self.settings
         try:
-            key_set = bool(load_secrets().get("anthropic_api_key"))
+            secrets = load_secrets()
         except ValueError:
-            key_set = False
+            secrets = {}
+        models = {"ollama": s.ollama_model, "anthropic": s.anthropic_model, "openai": s.openai_model}
         return {"summary_backend": s.summary_backend,
-                "model": s.ollama_model if s.summary_backend == "ollama" else s.anthropic_model,
+                "model": models.get(s.summary_backend, ""),
                 "whisper_model": s.whisper_model, "diarize": s.diarize,
                 "audio_retention_days": s.audio_retention_days,
                 "notes_dir": str(s.notes_path()),
                 "vocabulary": load_vocabulary(), "voices": self.voices.names(),
                 "calendars": self.calendars(),
                 "editable": {k: getattr(s, k) for k in EDITABLE},
-                "anthropic_key_set": key_set or bool(os.environ.get("ANTHROPIC_API_KEY")),
+                "anthropic_key_set": bool(secrets.get("anthropic_api_key")
+                                          or os.environ.get("ANTHROPIC_API_KEY")),
+                "openai_key_set": bool(secrets.get("openai_api_key")),
                 "cloud_disclosure": CLOUD_DISCLOSURE}
 
     def update_settings(self, changes: dict, confirm_cloud: bool) -> dict:
@@ -602,6 +698,10 @@ class Store:
         if unknown:
             raise Invalid(f"cannot change {', '.join(unknown)} here")
         for k, v in changes.items():
+            if k in SWITCHES:
+                if not isinstance(v, bool):
+                    raise Invalid(f"{k}: true or false")
+                continue
             if not isinstance(v, str) or len(v) > MAX_SETTING:
                 raise Invalid(f"{k}: expected text of at most {MAX_SETTING} characters")
             if k != "consent_line" and not v.isprintable():
@@ -611,9 +711,15 @@ class Store:
         backend = changes.get("summary_backend")
         if backend is not None and backend not in BACKENDS:
             raise Invalid(f"summary_backend: one of {', '.join(BACKENDS)}")
-        if backend == "anthropic" and self.settings.summary_backend != "anthropic" \
-                and not confirm_cloud:
-            raise Invalid("confirm what is sent to Claude first")
+        url = changes.get("openai_url")
+        if url is not None and not (url.startswith("https://") or
+                                    (url.startswith("http://") and pin_local(url))):
+            raise Invalid("openai_url: https://…, or http://… on this computer")
+        before = _destination(self.settings)
+        after = _destination(dataclasses.replace(self.settings, **{
+            k: v for k, v in changes.items() if k in ("summary_backend", "openai_url")}))
+        if after and after != before and not confirm_cloud:
+            raise Invalid(f"confirm what is sent to {after} first")
         path = config_dir() / "config.toml"
         text = path.read_text() if path.exists() else DEFAULT_CONFIG_TOML
         for k, v in changes.items():
@@ -628,14 +734,14 @@ class Store:
         poke_daemon("reload-settings")
         return self.settings_info()
 
-    def set_api_key(self, key: str) -> dict:
-        """Store the Claude API key in secrets.toml; it is never sent back to the page."""
+    def set_api_key(self, key: str, backend: str = "anthropic") -> dict:
+        """Store an API key in secrets.toml; it is never sent back to the page."""
         key = str(key).strip()
-        if not 20 <= len(key) <= 300 or not key.isascii() or not key.isprintable() \
+        if not 8 <= len(key) <= 300 or not key.isascii() or not key.isprintable() \
                 or any(c.isspace() for c in key):
             raise Invalid("that does not look like an API key")
         secrets = _secrets()
-        secrets["anthropic_api_key"] = key
+        secrets[API_KEYS[backend]] = key
         save_secrets(secrets)
         return {"set": True}
 

@@ -93,15 +93,16 @@ def tokens_to_words(tokens: list[str], starts: list[float], ends: list[float],
 class WhisperEngine:
     name = "whisper"
 
-    def __init__(self, settings: Settings, vocabulary: list[str]) -> None:
+    def __init__(self, settings: Settings, vocabulary: list[str], threads: int | None = None,
+                 local_only: bool = False) -> None:
         from faster_whisper import WhisperModel
 
         from .models import whisper_path
 
         self.label = settings.whisper_model
         self.language = None if settings.whisper_language == "auto" else settings.whisper_language
-        self.model = WhisperModel(whisper_path(settings.whisper_model), device="cpu",
-                                  compute_type="int8")
+        self.model = WhisperModel(whisper_path(settings.whisper_model, local_only=local_only),
+                                  device="cpu", compute_type="int8", cpu_threads=threads or 0)
         # Each term as its own sentence: Whisper copies the prompt's style, and a bare
         # comma list made it drop sentence punctuation (docs/dev/features-2-design.md).
         self.hotwords = " ".join(f"{t.rstrip('.')}." for t in vocabulary)[:600] or None
@@ -119,12 +120,13 @@ class ParakeetEngine:
     name = "parakeet"
     label = "parakeet-tdt-0.6b-v3"
 
-    def __init__(self, settings: Settings, vocabulary: list[str], threads: int | None = None) -> None:
+    def __init__(self, settings: Settings, vocabulary: list[str], threads: int | None = None,
+                 local_only: bool = False) -> None:
         import sherpa_onnx
 
         from .models import hub_file
 
-        f = {n: hub_file(PARAKEET_REPO, n) for n in PARAKEET_FILES}
+        f = {n: hub_file(PARAKEET_REPO, n, local_only=local_only) for n in PARAKEET_FILES}
         self.recognizer = sherpa_onnx.OfflineRecognizer.from_transducer(
             encoder=f["encoder.int8.onnx"], decoder=f["decoder.int8.onnx"],
             joiner=f["joiner.int8.onnx"], tokens=f["tokens.txt"],

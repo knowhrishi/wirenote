@@ -50,20 +50,21 @@ def setup_claude() -> int:
     s = _settings()
     print("Summaries through the Claude API: transcripts are sent to Anthropic.")
     print("Check your employer's policy before using this for work calls.\n")
-    key = getpass.getpass("Anthropic API key (input hidden, empty to keep the current one): ")
+    print("Without a key, Wirenote uses ANTHROPIC_API_KEY or your `ant auth login` (Claude")
+    print("Console). A Claude Pro or Max subscription cannot be used: Anthropic does not allow")
+    print("other apps to use claude.ai logins.\n")
+    key = getpass.getpass("Anthropic API key (input hidden, empty to keep the current one or "
+                          "use your login): ")
     secrets = load_secrets()
     if key.strip():
         secrets["anthropic_api_key"] = key.strip()
-    if not secrets.get("anthropic_api_key") and not os.environ.get("ANTHROPIC_API_KEY"):
-        print("no key given")
-        return 1
     import anthropic
 
-    client = anthropic.Anthropic(api_key=secrets.get("anthropic_api_key"))
     try:
+        client = anthropic.Anthropic(api_key=secrets.get("anthropic_api_key"))
         client.models.retrieve(s.anthropic_model)      # free; checks key and model
     except anthropic.AuthenticationError:
-        print(f"{BAD} the key was rejected; nothing changed")
+        print(f"{BAD} the key or login was rejected; nothing changed")
         return 1
     except anthropic.NotFoundError:
         print(f"{BAD} model {s.anthropic_model} not available to this key; nothing changed")
@@ -71,10 +72,53 @@ def setup_claude() -> int:
     except anthropic.APIConnectionError as e:
         print(f"{BAD} cannot reach the API ({e}); nothing changed")
         return 1
+    except TypeError:
+        # The SDK found no key, token or login ("Could not resolve authentication method").
+        print(f"{BAD} no key, and no ANTHROPIC_API_KEY or `ant auth login` found; nothing changed")
+        return 1
     save_secrets(secrets)
     set_config_value(config_dir() / "config.toml", "summary_backend", '"anthropic"')
     print(f"{OK} key works with {s.anthropic_model}; saved to {secrets_path()} (mode 600)")
     print(f"{OK} summary_backend = \"anthropic\"; the next note uses it (no restart needed)")
+    return 0
+
+
+def setup_openai() -> int:
+    """OpenRouter, OpenAI, or an OpenAI-compatible server on this computer."""
+    from ..process.summarize import OpenAIBackend, SummaryError
+
+    s = _settings()
+    print("Summaries through an OpenAI-compatible API, such as OpenRouter (Claude, GPT,")
+    print("Gemini, Qwen and more with one key), OpenAI, or LM Studio or llama.cpp on this")
+    print("computer. Unless the server runs on this computer, transcripts are sent to it.\n")
+    url = input(f"API address [{s.openai_url}]: ").strip() or s.openai_url
+    model = input(f"Model [{s.openai_model}]: ").strip() or s.openai_model
+    if not url.startswith(("https://", "http://")):
+        print(f"{BAD} the address starts with https://; nothing changed")
+        return 1
+    key = getpass.getpass("API key (input hidden; empty to keep the current one, or for a "
+                          "server without keys): ").strip()
+    secrets = load_secrets()
+    if key:
+        secrets["openai_api_key"] = key
+    backend = OpenAIBackend(url, model, secrets.get("openai_api_key"), timeout_s=60)
+    if not backend.local:
+        print(f"Transcripts will be sent to {backend.host}. Check your employer's policy first.")
+    try:
+        # A one-word request checks address, key and model; it costs a tiny fraction of a cent.
+        backend.complete_json("Answer with JSON.", "Say ok.", {
+            "type": "object", "properties": {"ok": {"type": "string"}}, "required": ["ok"]})
+    except (SummaryError, ValueError) as e:
+        print(f"{BAD} {e}; nothing changed")
+        return 1
+    save_secrets(secrets)
+    cfg = config_dir() / "config.toml"
+    set_config_value(cfg, "openai_url", json.dumps(url))
+    set_config_value(cfg, "openai_model", json.dumps(model))
+    set_config_value(cfg, "summary_backend", '"openai"')
+    print(f"{OK} {model} at {backend.host} answers" + (f"; key saved to {secrets_path()} (mode 600)"
+                                                         if key else ""))
+    print(f"{OK} summary_backend = \"openai\"; the next note uses it (no restart needed)")
     return 0
 
 
@@ -296,7 +340,19 @@ def _summary_checks(s: Settings) -> list[Check]:
         has_key = bool(load_secrets().get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY"))
         return [_ok(has_key, f"Claude API ({s.anthropic_model}): key set; transcripts are "
                              "sent to Anthropic",
-                    f"Claude API ({s.anthropic_model}): no key", "wirenote setup claude")]
+                    f"Claude API ({s.anthropic_model}): no key saved; this works only if you "
+                    "are logged in with `ant auth login`", "wirenote setup claude", warn=True)]
+    if s.summary_backend == "openai":
+        from ..process.summarize import pin_local
+
+        has_key = bool(load_secrets().get("openai_api_key"))
+        where = f"{s.openai_model} at {s.openai_url}"
+        if pin_local(s.openai_url):
+            return [Check("ok", f"{where}: on this computer; nothing leaves it")]
+        return [_ok(has_key and s.openai_url.startswith("https://"),
+                    f"{where}: key set; transcripts are sent there",
+                    f"{where}: " + ("no key" if has_key is False else "needs https://"),
+                    "wirenote setup openai")]
     return [Check("warn", "summaries are off (summary_backend = \"none\")")]
 
 

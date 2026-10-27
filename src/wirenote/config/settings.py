@@ -66,6 +66,8 @@ class Settings:
     asr_engine: str = "auto"
     whispercpp_bin: str = "whisper-cli"
     whispercpp_model: str = "ggml-large-v3-turbo-q5_0.bin"   # a file, or one from ggerganov/whisper.cpp
+    # docs/dev/live-design.md: a live transcript during the call, on two CPU threads
+    live_transcript: bool = False
     # Consecutive lines of one speaker closer than this join into a paragraph
     merge_gap_s: float = 2.0
     # Echo dedupe (docs/dev/m2-m4-design.md › M3): overlap share and text similarity
@@ -84,10 +86,13 @@ class Settings:
     audio_retention_days: int = 30
 
     # Summary (M4) -----------------------------------------------------------
-    summary_backend: str = "ollama"    # ollama | anthropic | none
+    summary_backend: str = "ollama"    # ollama | anthropic | openai | none
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3:4b"
     anthropic_model: str = "claude-opus-5-5"
+    # docs/dev/PLAN.md › Defaults › OpenAI-compatible API
+    openai_url: str = "https://openrouter.ai/api/v1"
+    openai_model: str = "anthropic/claude-sonnet-5.5"
     # docs/dev/PLAN.md › Processing: long calls are summarized in chunks of about 15 min
     summary_chunk_s: float = 900.0
     summary_language: str = "auto"     # "auto": the transcript's language
@@ -141,6 +146,7 @@ DEFAULT_CONFIG_TOML = """# wirenote settings. Defaults come from docs/dev/PLAN.m
 # asr_engine = "auto"                # auto | whisper | parakeet (faster on a CPU) | whisper.cpp (GPU)
 # whispercpp_bin = "whisper-cli"     # for asr_engine = "whisper.cpp"
 # whispercpp_model = "ggml-large-v3-turbo-q5_0.bin"
+# live_transcript = false            # show what is said during the call (two CPU threads)
 # diarize = true                     # tell the other speakers apart
 # diarize_threshold = 0.9            # higher: fewer speakers; lower: more
 # voice_match = 0.55                 # how close a voice must be to a remembered one
@@ -151,10 +157,12 @@ DEFAULT_CONFIG_TOML = """# wirenote settings. Defaults come from docs/dev/PLAN.m
 # audio_retention_days = 30          # audio is deleted this long after the note
 
 # Summary
-# summary_backend = "ollama"         # ollama | anthropic | none
+# summary_backend = "ollama"         # ollama | anthropic | openai | none
 # ollama_url = "http://127.0.0.1:11434"
 # ollama_model = "qwen3:4b"
-# anthropic_model = "claude-opus-5-5"  # API key: ~/.config/wirenote/secrets.toml
+# anthropic_model = "claude-opus-5-5"  # API key: ~/.config/wirenote/secrets.toml, or `ant auth login`
+# openai_url = "https://openrouter.ai/api/v1"  # any OpenAI-compatible API; http:// only on this computer
+# openai_model = "anthropic/claude-sonnet-5.5"  # API key: ~/.config/wirenote/secrets.toml
 # summary_chunk_s = 900.0
 # summary_language = "auto"          # or "German", "English"
 

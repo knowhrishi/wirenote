@@ -25,6 +25,7 @@ Open **Wirenote** from the app menu, or run `wirenote open`. It is a local web p
 - **Follow-up email:** a recap from the notes, to copy or open in your mail app.
 - **Action items:** everything agreed across all meetings, yours first.
 - **Ask your meetings:** questions across all past calls, with links to the moments.
+- **Import:** make a note from a recording made elsewhere (a phone, Zoom's own recording, a video). See "Import and export" below.
 - **Settings:** summaries, transcription, the consent line, the Claude key, calendars, a vocabulary of names and terms, remembered voices, the setup check, and updates.
 - **Updates:** click the version number at the bottom of the sidebar for what changed in each release. After an update, the app shows what is new once.
 
@@ -49,13 +50,45 @@ wirenote setup claude     # asks for the key (hidden), checks it, switches the b
 wirenote setup ollama     # back to local
 ```
 
-The key is kept in `~/.config/wirenote/secrets.toml` (mode 600) and is never shown again. Every call shows a badge, "Local" or "Sent to Claude", so you can see where its summary was made.
+Instead of a key, you can log in to your Claude Console account with Anthropic's `ant` tool (`ant auth login`), or set `ANTHROPIC_API_KEY`; leave the key empty and Wirenote uses that. Usage is billed to your API account. A Claude Pro or Max subscription cannot be used: Anthropic does not allow other apps to use claude.ai logins.
+
+**OpenRouter, OpenAI or another compatible API (optional).** [OpenRouter](https://openrouter.ai) gives you Claude, GPT, Gemini, Qwen and many more models with one key. Call data is sent to OpenRouter and the model's provider, as with Claude. Choose "OpenRouter, OpenAI or another compatible API" in **Settings**, set the address and model, and paste your key, or:
+
+```sh
+wirenote setup openai     # asks for the address, model and key (hidden); checks them with a one-word request
+```
+
+| Service | API address | Model, for example |
+| --- | --- | --- |
+| OpenRouter (the default) | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-5.5`, `qwen/qwen3.8-flash` |
+| OpenAI | `https://api.openai.com/v1` | `gpt-5.4-mini` |
+| LM Studio on this computer | `http://127.0.0.1:1234/v1` | the model you loaded |
+| llama.cpp `llama-server` on this computer | `http://127.0.0.1:8080/v1` | any name |
+
+A server on your own computer counts as local, like Ollama: nothing leaves the computer, it needs no key, and Wirenote checks that it runs as your user. Any other address must start with `https://`.
+
+Keys are kept in `~/.config/wirenote/secrets.toml` (mode 600) and are never shown again. Every call shows a badge, "Local", "Sent to Claude" or "Sent to openrouter.ai", so you can see where its summary was made.
 
 A backend change applies to the next note. To redo an older note's summary:
 
 ```sh
 wirenote reprocess 20261027-100000-chrome --summary
 ```
+
+## Import and export
+
+**Import a recording.** Click **Import** in the meetings app, or drop an audio or video file on its window. On the command line:
+
+```sh
+wirenote import ~/Downloads/team-sync.m4a --title "Team sync" --date "2026-10-27 14:00"
+```
+
+Wirenote converts the file with ffmpeg (`sudo apt install ffmpeg` if it is missing) and makes a note from it like from a call. Every voice in the file is told apart as Speaker 1, 2, …; none is taken for you, because there is no separate mic track. Without `--date`, the call is dated by the file's time. Your file is not changed, and no copy of it is kept: Wirenote keeps only the converted audio, which is deleted with the other recordings after `audio_retention_days`. Files up to 4 GB can be imported; only the first 4 hours are used.
+
+**Export a call.** In the call page's menu (⋯):
+
+- **Download as Word (.docx):** the summary, decisions, action items, your notes and the transcript, for Word, LibreOffice or Google Docs. On the command line: `wirenote export <id>`, or `-o ~/Documents` to choose where it goes.
+- **Print or save as PDF:** opens your browser's print dialog with the notes and transcript. Choose "Save as PDF" as the printer to get a PDF.
 
 ## Speech engines
 
@@ -85,6 +118,8 @@ Wirenote picks the fastest engine that suits your computer and your calls, unles
   The model downloads from Hugging Face on the first note. `wirenote doctor` tells you whether `whisper-cli` and the model are found.
 
 Every engine runs on your computer. The note's footer says which one made the transcript, and `wirenote doctor` says which one Automatic picks.
+
+**Live transcript.** Turn on **Live transcript during calls** in **Settings › Setup** (or `live_transcript = true` in `config.toml`) to see what is said while you record, under your notes on the call page. Lines appear a few seconds after they are said, as "Me" and "Others"; the note's transcript afterwards is made from the whole call and names the speakers. It uses two CPU threads during the call. It never downloads a model during a call. It uses Parakeet's model, which is usually there already from your notes; if no model is there yet, the call page says "the live model downloads after your next note", and the calls after that show the transcript.
 
 **Transcribe one call again** with another engine, model or language: **Transcribe again…** in the call page's menu, or
 
@@ -120,7 +155,11 @@ wirenote record          # answer the open prompt with Record
 wirenote record --now    # record a meeting without a call app
 wirenote jobs            # recent notes and failures
 wirenote reprocess <id>  # transcribe again (--engine, --model, --language); --summary keeps the transcript
+wirenote import <file>   # make a note from an audio or video file (--title, --date)
+wirenote export <id>     # save a call as a Word file (-o file or folder)
 wirenote doctor          # check every part of the setup; --fix makes your files private again
+wirenote setup claude    # summaries with Claude (your key or `ant auth login`)
+wirenote setup openai    # summaries with OpenRouter, OpenAI or a compatible server
 wirenote setup install   # install or update the services and the app-menu entry
 wirenote setup uninstall # remove them; --purge also deletes recordings and settings
 wirenote update          # install the newest version and restart; --check only checks

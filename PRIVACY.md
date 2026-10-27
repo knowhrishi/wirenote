@@ -11,7 +11,7 @@ Wirenote records conversations, so it is built to keep them on your computer. Th
 | Markdown notes | `~/Meetings/YYYY/MM/` (kept until you delete the call) |
 | Voice prints of people you chose to recognize | `~/.local/share/wirenote/voices.json` |
 | Settings, vocabulary, app rules | `~/.config/wirenote/` |
-| Claude API key and calendar links | `~/.config/wirenote/secrets.toml` |
+| API keys (Claude, OpenRouter or another API) and calendar links | `~/.config/wirenote/secrets.toml` |
 | Event log, processing queue | `~/.local/state/wirenote/` |
 
 Everything Wirenote writes is readable only by your user (files mode 600, folders 700); `wirenote doctor --fix` repairs files that lost that. The event log does not contain room names, note paths or speaker names.
@@ -24,6 +24,7 @@ The meetings app is a web page served on 127.0.0.1, so other computers cannot re
 - **Ollama, on your computer.** Local summaries go to Ollama on 127.0.0.1. Wirenote checks that the Ollama there runs as your own user before sending anything.
 - **Your calendars, if you add any.** The ICS links you add are fetched over https every 5 minutes.
 - **Anthropic, only if you choose Claude.** See below.
+- **An online API such as OpenRouter or OpenAI, only if you choose one.** See below. An OpenAI-compatible server on your own computer (LM Studio, llama.cpp) is treated like Ollama: Wirenote checks that it runs as your user, and nothing leaves the computer.
 - **PyPI and GitHub, only if you turn on update checks.** See below.
 - **PyPI, when you update.** `wirenote update`, and Check now or Update in the app, ask pypi.org for the newest version and download it, even with update checks off.
 
@@ -37,13 +38,13 @@ Once a day, Wirenote asks pypi.org for the newest version and, when there is one
 
 The request carries no version number and no identifier. The answer is kept in `~/.local/state/wirenote/update-check.json`.
 
-## If you choose Claude
+## If you choose Claude or an online API
 
-Claude is off unless you choose it, in Settings or with `wirenote setup claude`. Before switching, the app shows this list and asks you to confirm:
+Both are off unless you choose one, in Settings, or with `wirenote setup claude` or `wirenote setup openai`. Before switching, the app shows this list and asks you to confirm:
 
-With Claude on, these go to Anthropic: the transcript of each call (in parts), the calendar title and invitees, your notes, your vocabulary, questions you ask with the transcript, and for Ask across meetings up to 120,000 characters from all your calls.
+With Claude or an online API on, these go to Anthropic, or to the API you set (for OpenRouter: OpenRouter and the model's provider): the transcript of each call (in parts), the calendar title and invitees, your notes, your vocabulary, questions you ask with the transcript, and for Ask across meetings up to 120,000 characters from all your calls.
 
-Anthropic's [commercial terms and privacy policy](https://www.anthropic.com/legal) apply to that data. Each call in the app is marked "Local" or "Sent to Claude", so you can see where its summary was made. Switching back to Ollama affects the next notes; it does not recall what was already sent.
+Anthropic's [commercial terms and privacy policy](https://www.anthropic.com/legal) apply to what goes to Claude. With OpenRouter, [OpenRouter's terms](https://openrouter.ai/terms) and those of the model's provider apply; OpenRouter's settings let you choose providers that do not keep or train on your data. Wirenote sends to an online API only over https. Each call in the app is marked "Local", "Sent to Claude" or "Sent to" the API's address, so you can see where its summary was made. Switching back to Ollama affects the next notes; it does not recall what was already sent.
 
 ## The people you record
 

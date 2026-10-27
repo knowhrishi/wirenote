@@ -385,3 +385,77 @@ def test_worker_log_has_no_names_or_paths(tmp_path, capsys):
     err = capsys.readouterr().err
     assert "Anna" not in err and "Release planning" not in err and str(tmp_path / "Meetings") not in err
     assert "note written" in err
+
+
+# OpenAI-compatible APIs: OpenRouter, OpenAI, LM Studio ---------------------------
+
+def fake_api(monkeypatch, answers):
+    """urlopen for /chat/completions; each answer is the reply's text or an HTTP error code."""
+    import urllib.error
+
+    from wirenote.process import summarize as summ
+
+    sent = []
+
+    def urlopen(req, timeout):
+        sent.append((req.full_url, dict(req.header_items()), json.loads(req.data)))
+        a = answers.pop(0)
+        if isinstance(a, int):
+            raise urllib.error.HTTPError(req.full_url, a, "x", {}, io.BytesIO(b'{"error": "no"}'))
+        return _Resp(json.dumps({"choices": [{"message": {"content": a}}]}).encode())
+
+    def no_dns(*a, **k):
+        raise OSError("offline")
+    monkeypatch.setattr(summ.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(summ.socket, "getaddrinfo", no_dns)
+    monkeypatch.setattr(summ, "listener_uid", lambda port, host="127.0.0.1": None)
+    return sent
+
+
+def test_openrouter_gets_the_schema_and_the_key(monkeypatch):
+    from wirenote.process.summarize import OpenAIBackend
+
+    sent = fake_api(monkeypatch, [json.dumps(GOOD)])
+    api = OpenAIBackend("https://openrouter.ai/api/v1/", "anthropic/claude-sonnet-5.5", "sk-or-test-key")
+    assert api.name == "openrouter.ai:anthropic/claude-sonnet-5.5"
+    assert summarize([Line("Me", 0, 1, "x")], api, 900, "auto").title == "Release planning"
+    url, headers, body = sent[0]
+    assert url == "https://openrouter.ai/api/v1/chat/completions"
+    assert headers["Authorization"] == "Bearer sk-or-test-key"
+    assert body["model"] == "anthropic/claude-sonnet-5.5"
+    assert body["response_format"]["json_schema"]["schema"] == FINAL_SCHEMA
+
+
+def test_a_server_without_json_schemas_gets_the_schema_in_the_prompt(monkeypatch):
+    from wirenote.process.summarize import OpenAIBackend
+
+    sent = fake_api(monkeypatch, [400, "```json\n" + json.dumps(GOOD) + "\n```"])
+    api = OpenAIBackend("http://127.0.0.1:1234/v1", "qwen3-8b")       # LM Studio, no key
+    assert api.name == "local:qwen3-8b"
+    assert api.complete_json("sys", "u", FINAL_SCHEMA)["title"] == "Release planning"
+    retry = sent[1][2]
+    assert "response_format" not in retry and '"required"' in retry["messages"][0]["content"]
+    assert "Authorization" not in sent[0][1]
+
+
+def test_api_addresses_and_keys_are_checked(monkeypatch):
+    import os
+
+    from wirenote.process import summarize as summ
+    from wirenote.process.summarize import OpenAIBackend, make_backend
+
+    sent = fake_api(monkeypatch, [401])
+    with pytest.raises(SummaryError, match="needs https"):          # the key and transcript in clear
+        OpenAIBackend("http://api.example.com/v1", "m", "key-123456").complete_json("s", "u", {})
+    with pytest.raises(SummaryError, match="rejected the API key"):
+        OpenAIBackend("https://api.example.com/v1", "m", "bad-key-1").complete_json("s", "u", {})
+    s = replace(Settings(), summary_backend="openai")
+    with pytest.raises(SummaryError, match="no API key for openrouter.ai"):
+        make_backend(s)
+    assert make_backend(replace(s, openai_url="http://localhost:1234/v1")).name.startswith("local:")
+    # Someone else's server on this computer never gets a transcript.
+    monkeypatch.setattr(summ, "listener_uid", lambda port, host="127.0.0.1": os.getuid() + 1)
+    monkeypatch.setattr(summ, "trusted_owner", lambda uid: uid == os.getuid())
+    with pytest.raises(SummaryError, match="another user"):
+        OpenAIBackend("http://127.0.0.1:1234/v1", "m").complete_json("s", "u", {})
+    assert len(sent) == 1

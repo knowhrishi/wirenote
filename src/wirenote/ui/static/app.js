@@ -166,15 +166,23 @@ function avatar(name, key) {
 
 function sourceLabel(c) {
   if (c.app === "manual") return "In person";
+  if (c.app === "import") return `Imported · ${c.name}`;
   return c.service ? `${c.service} · ${c.name}` : c.name || c.app;
 }
 
-// Where a summary or answer was made: on this laptop, or by Claude.
+// Where a summary or answer was made: on this laptop, by Claude, or by another API
+// (Backend.name is "<host>:<model>" for those).
 function cloudBadge(backend) {
   if (!backend) return null;
   if (backend.startsWith("anthropic:")) return h("span", { class: "pill cloud", title: "Sent to Anthropic's Claude API" }, "Sent to Claude");
-  if (backend.startsWith("ollama:")) return h("span", { class: "pill local", title: "Made on this laptop" }, "Local");
-  return null;
+  if (backend.startsWith("ollama:") || backend.startsWith("local:")) return h("span", { class: "pill local", title: "Made on this laptop" }, "Local");
+  const host = backend.split(":")[0];
+  return host.includes(".") ? h("span", { class: "pill cloud", title: `Sent to ${host}` }, `Sent to ${host}`) : null;
+}
+
+// Mirrors data.py's _destination: an API on this computer keeps call data here.
+function isLocalUrl(url) {
+  try { return ["127.0.0.1", "localhost", "[::1]"].includes(new URL(url).hostname); } catch { return false; }
 }
 
 function stateBadge(c) {
@@ -450,7 +458,58 @@ function recordingView(c) {
     h("div", { class: "live-head" }, h("span", { class: "dot rec" }), "Recording", clockEl,
       h("span", { class: "grow" }), h("button", { class: "btn btn-stop", onclick: stopRecording }, icon("stop"), "Stop")),
     myNotesEditor(c, true),
-    h("div", { class: "live-tip" }, "Jot what matters: decisions, who does what, names. A word or two is enough; the summary fills in the rest from the transcript."));
+    h("div", { class: "live-tip" }, "Jot what matters: decisions, who does what, names. A word or two is enough; the summary fills in the rest from the transcript."),
+    liveTranscript(c));
+}
+
+// What is said during the call (docs/dev/live-design.md). Each poll asks only for lines
+// after the last byte it has; the lines are kept per call, so a re-render keeps them.
+const live = { id: null, after: 0, lines: [], status: null, enabled: false, timer: null };
+
+function liveTranscript(c) {
+  if (live.id !== c.id) Object.assign(live, { id: c.id, after: 0, lines: [], status: null, enabled: false });
+  const head = h("div", { class: "live-transcript-head" });
+  const list = h("div", { class: "live-lines", "aria-live": "polite" });
+  const box = h("section", { class: "live-transcript" }, head, list);
+  const line = (l) => h("div", { class: "live-line" + (l.speaker === "Me" ? " me" : "") },
+    h("span", { class: "live-who" }, l.speaker === "Me" ? "Me" : "Others"),
+    h("span", { class: "live-time" }, clock(l.start)), h("span", { class: "live-text" }, l.text));
+  const show = () => {
+    box.hidden = !live.enabled && !live.status;
+    const st = live.status;
+    head.replaceChildren(icon("sparkle"), "Live transcript",
+      h("span", { class: "live-state" }, !st ? "starting…" : st.status === "listening" ? st.engine
+        : st.reason || st.status));
+    if (!live.lines.length) list.replaceChildren(h("div", { class: "live-empty" },
+      st && st.status === "unavailable" ? "Your notes and the recording are not affected." : "Lines appear here a few seconds after they are said."));
+  };
+  // Each track is cut at its own pauses, so a line can arrive after a later one: it goes
+  // in at its time, in the list and on the page alike.
+  const add = (l) => {
+    if (!live.lines.length) list.replaceChildren();
+    let i = live.lines.length;
+    while (i > 0 && live.lines[i - 1].start > l.start) i--;
+    live.lines.splice(i, 0, l);
+    list.insertBefore(line(l), list.children[i] || null);
+  };
+  const poll = async () => {
+    if (!box.isConnected) { clearInterval(live.timer); return; }
+    try {
+      const r = await api(`/api/calls/${encodeURIComponent(c.id)}/live?after=${live.after}`);
+      if (r.after < live.after) live.lines = [];
+      const nearEnd = list.scrollHeight - list.scrollTop - list.clientHeight < 60;
+      Object.assign(live, { after: r.after, enabled: r.enabled, status: r.status || live.status });
+      r.lines.forEach(add);
+      show();
+      if (nearEnd && r.lines.length) list.scrollTop = list.scrollHeight;
+    } catch { /* the next poll retries */ }
+  };
+  list.replaceChildren(...live.lines.map(line));
+  show();
+  clearInterval(live.timer);
+  live.timer = setInterval(poll, 2000);
+  setTimeout(poll, 0);           // once the panel is on the page; poll() stops when it is gone
+  return box;
 }
 
 function callView(c) {
@@ -497,7 +556,7 @@ function statusNotice(c) {
   const working = { queued: "Waiting to write the note…", transcribing: "Transcribing and telling the speakers apart…", summarizing: "Writing the summary…" }[c.state];
   if (working)
     return h("div", { class: "notice info" }, h("span", { class: "spinner" }), h("span", { class: "grow" }, working,
-      c.state === "transcribing" ? " This takes about half the call's length." : ""));
+      c.state === "transcribing" ? " A long call takes a few minutes." : ""));
   if (c.state === "failed")
     return h("div", { class: "notice bad" }, h("span", { class: "grow" }, `The note failed: ${c.error || "unknown error"}`),
       c.has_audio ? h("button", { class: "btn", onclick: () => requeue(false) }, icon("refresh"), "Try again") : null);
@@ -524,6 +583,8 @@ function moreMenu(c) {
       c.summary ? item("mail", "Draft follow-up email", () => followupDialog(c)) : null,
       c.summary ? item("copy", "Copy notes as Markdown", copyNotes) : null,
       c.note ? item("file", "Open Markdown file", () => post(`/api/calls/${c.id}/open`)) : null,
+      c.has_transcript ? item("download", "Download as Word (.docx)", () => { location.href = `/api/calls/${encodeURIComponent(c.id)}/docx`; }) : null,
+      c.has_transcript ? item("printer", "Print or save as PDF", () => printCall(c)) : null,
       item("folder", "Show recording folder", () => post(`/api/calls/${c.id}/folder`)),
       h("hr"),
       c.has_transcript ? item("sparkle", "Redo summary", () => requeue(true)) : null,
@@ -536,6 +597,75 @@ function moreMenu(c) {
   });
   wrap.append(btn);
   return wrap;
+}
+
+// Printing (and so "Save as PDF") shows only #print-view: the notes and the whole
+// transcript, whatever tab is open (app.css › @media print).
+function printCall(c) {
+  const s = c.summary || {};
+  const names = c.names || {};
+  const list = (head, xs) => (xs && xs.length ? [h("h2", {}, head), h("ul", {}, xs.map((x) => h("li", {}, x)))] : []);
+  const started = new Date(c.started);
+  const people = (c.people || []).filter((p) => p.label !== "Me").map((p) => p.name);
+  $("#print-view").replaceChildren(
+    h("h1", {}, c.title),
+    h("p", { class: "print-meta" }, [`${fmtDate(started)}, ${fmtTime(started)}`, c.duration_s ? fmtDuration(c.duration_s) : null, sourceLabel(c)].filter(Boolean).join(" · ")),
+    people.length ? h("p", {}, h("b", {}, "With: "), people.join(", ")) : null,
+    ...list("Summary", s.summary), ...list("Decisions", s.decisions),
+    ...(s.action_items && s.action_items.length ? [h("h2", {}, "Action items"), h("ul", { class: "print-actions" },
+      s.action_items.map((a) => h("li", {}, a.done ? "☑ " : "☐ ", h("b", {}, `${a.owner}: `), a.task + (a.due ? ` (due: ${a.due})` : ""))))] : []),
+    ...list("Open questions", s.open_questions),
+    ...(c.my_notes && c.my_notes.trim() ? [h("h2", {}, "My notes"), h("pre", { class: "print-notes" }, c.my_notes.trim())] : []),
+    h("h2", {}, "Transcript"),
+    ...(c.lines || []).map((l) => h("p", { class: "print-line" }, h("b", {}, names[l.speaker] || l.speaker), h("span", { class: "print-time" }, clock(l.start)), l.text)));
+  window.print();
+}
+
+// Import ---------------------------------------------------------------------
+
+function importFile(file) {
+  if (!file) return;
+  const xhr = new XMLHttpRequest();      // fetch() cannot report upload progress
+  xhr.open("POST", "/api/import");
+  xhr.setRequestHeader("X-Wirenote-Token", TOKEN);
+  xhr.setRequestHeader("Content-Type", "application/octet-stream");
+  xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+  if (file.lastModified) xhr.setRequestHeader("X-Last-Modified", String(file.lastModified));
+  let shown = -1;
+  xhr.upload.onprogress = (e) => {
+    const pct = e.lengthComputable ? Math.floor((e.loaded / e.total) * 100) : 0;
+    if (pct !== shown) { shown = pct; toast(pct < 100 ? `Uploading ${file.name}… ${pct}%` : "Converting the audio…"); }
+  };
+  xhr.onload = async () => {
+    let r = {};
+    try { r = JSON.parse(xhr.responseText); } catch { /* shown below */ }
+    if (xhr.status !== 200) { toast(r.error || `Import failed (HTTP ${xhr.status})`); return; }
+    toast("Imported. The note is being written.");
+    await refreshList();
+    location.hash = `#/call/${r.id}`;
+  };
+  xhr.onerror = () => toast("Import failed: the upload stopped.");
+  toast(`Uploading ${file.name}…`);
+  xhr.send(file);
+}
+
+function wireImport() {
+  const input = $("#import-file");
+  $("#import-btn").addEventListener("click", () => input.click());
+  input.addEventListener("change", () => { importFile(input.files[0]); input.value = ""; });
+  const hint = $("#drop-hint");
+  const hasFile = (e) => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+  let depth = 0;
+  window.addEventListener("dragenter", (e) => { if (hasFile(e)) { depth++; hint.hidden = false; } });
+  window.addEventListener("dragleave", (e) => { if (hasFile(e) && --depth <= 0) { depth = 0; hint.hidden = true; } });
+  window.addEventListener("dragover", (e) => { if (hasFile(e)) e.preventDefault(); });
+  window.addEventListener("drop", (e) => {
+    if (!hasFile(e)) return;
+    e.preventDefault();
+    depth = 0;
+    hint.hidden = true;
+    importFile(e.dataTransfer.files[0]);
+  });
 }
 
 async function post(path) {
@@ -1026,7 +1156,8 @@ async function renderSettings() {
   try { state.updates = await api("/api/updates"); page.append(updatesCard(state.updates)); } catch { /* shown on the Updates page */ }
 }
 
-const BACKENDS = [["ollama", "On this laptop (Ollama)"], ["anthropic", "Claude (sent to Anthropic)"], ["none", "Off"]];
+const BACKENDS = [["ollama", "On this laptop (Ollama)"], ["anthropic", "Claude (sent to Anthropic)"],
+  ["openai", "OpenRouter, OpenAI or another compatible API"], ["none", "Off"]];
 
 function field(label, control, hint) {
   return h("div", { class: "field" }, h("label", {}, label), control, hint ? h("div", { class: "hint" }, hint) : null);
@@ -1040,43 +1171,58 @@ function setupCard(s) {
   const inputs = {
     summary_backend: backend,
     ollama_model: text("ollama_model"), anthropic_model: text("anthropic_model"),
+    openai_url: text("openai_url", "https://openrouter.ai/api/v1"), openai_model: text("openai_model"),
     summary_language: text("summary_language", "auto"),
     whisper_model: text("whisper_model"), whisper_language: text("whisper_language", "auto"),
     asr_engine: h("select", {}, ENGINES.map(([v, label]) => h("option", { value: v, selected: v === e.asr_engine }, label))),
     consent_line: h("textarea", { class: "short", maxlength: "500", placeholder: "e.g. Is it OK if I record this call for my notes?" }),
+    live_transcript: h("input", { type: "checkbox", id: "live-transcript" }),
   };
   inputs.consent_line.value = e.consent_line;
+  inputs.live_transcript.checked = e.live_transcript;
+  const value = (el) => (el.type === "checkbox" ? el.checked : el.value);
   const ollamaRow = field("Ollama model", inputs.ollama_model);
   const claudeRow = field("Claude model", inputs.anthropic_model);
-  const keyBox = h("div", {});
+  const openaiRows = h("div", {},
+    field("API address", inputs.openai_url,
+      "OpenRouter: https://openrouter.ai/api/v1 · OpenAI: https://api.openai.com/v1 · LM Studio on this laptop: http://127.0.0.1:1234/v1"),
+    field("Model", inputs.openai_model, "As the API names it, e.g. anthropic/claude-sonnet-5.5 or qwen/qwen3.8-flash on OpenRouter."));
+  const saved = "A key is saved; paste a new one to replace it";
+  const keyField = (which, label, placeholder, isSet, hint) => {
+    const input = h("input", { type: "password", autocomplete: "off", placeholder: isSet ? saved : placeholder });
+    const btn = h("button", { class: "btn" }, "Save key");
+    btn.onclick = async () => {
+      try {
+        await api(`/api/settings/${which}-key`, { method: "POST", body: { key: input.value } });
+        input.value = "";
+        input.placeholder = saved;
+        toast("Key saved. It stays on this laptop, in secrets.toml.");
+      } catch (err) { toast(err.message); }
+    };
+    return field(label, h("div", { class: "inline" }, input, btn), hint);
+  };
+  const keyBox = keyField("anthropic", "Claude API key", "sk-ant-…", s.anthropic_key_set,
+    "Kept in secrets.toml on this laptop; never shown here again. No key? Run "ant auth login" in a terminal instead. A Claude Pro or Max subscription cannot be used here: Anthropic does not allow other apps to use claude.ai logins.");
+  const openaiKeyBox = keyField("openai", "API key", "sk-or-…", s.openai_key_set,
+    "Kept in secrets.toml on this laptop; never shown here again. Not needed for a server on this laptop.");
   const showFor = () => {
     ollamaRow.hidden = backend.value !== "ollama";
     claudeRow.hidden = keyBox.hidden = backend.value !== "anthropic";
+    openaiRows.hidden = openaiKeyBox.hidden = backend.value !== "openai";
   };
   backend.onchange = showFor;
-
-  const keyInput = h("input", { type: "password", autocomplete: "off", placeholder: s.anthropic_key_set ? "A key is saved; paste a new one to replace it" : "sk-ant-…" });
-  const saveKey = h("button", { class: "btn" }, "Save key");
-  saveKey.onclick = async () => {
-    try {
-      await api("/api/settings/anthropic-key", { method: "POST", body: { key: keyInput.value } });
-      keyInput.value = "";
-      keyInput.placeholder = "A key is saved; paste a new one to replace it";
-      toast("Key saved. It stays on this laptop, in secrets.toml.");
-    } catch (err) { toast(err.message); }
-  };
-  keyBox.append(field("Claude API key", h("div", { class: "inline" }, keyInput, saveKey),
-    "Kept in secrets.toml on this laptop; never shown here again."));
   showFor();
 
   const save = h("button", { class: "btn btn-primary" }, "Save");
   save.onclick = async () => {
     const changes = {};
-    for (const [k, el] of Object.entries(inputs)) if (el.value !== e[k]) changes[k] = el.value;
+    for (const [k, el] of Object.entries(inputs)) if (value(el) !== e[k]) changes[k] = value(el);
     if (!Object.keys(changes).length) { toast("Nothing changed."); return; }
     let confirm_cloud = false;
-    if (changes.summary_backend === "anthropic") {
-      if (!await confirmDialog("Send call data to Claude?", s.cloud_disclosure, "Use Claude")) return;
+    const where = (b, url) => (b === "anthropic" ? "Claude" : b === "openai" && !isLocalUrl(url) ? (() => { try { return new URL(url).hostname; } catch { return url; } })() : null);
+    const before = where(e.summary_backend, e.openai_url), after = where(value(backend), value(inputs.openai_url));
+    if (after && after !== before) {
+      if (!await confirmDialog(`Send call data to ${after}?`, s.cloud_disclosure, `Use ${after}`)) return;
       confirm_cloud = true;
     }
     try {
@@ -1092,12 +1238,14 @@ function setupCard(s) {
   return h("div", { class: "settings-card" },
     h("h2", {}, "Setup"),
     h("p", {}, "Summaries, transcription and the consent line. Everything else is in config.toml."),
-    field("Summaries and Ask", backend, "Ollama and Off keep everything on this laptop."),
-    ollamaRow, claudeRow, keyBox,
+    field("Summaries and Ask", backend, "Ollama, Off, and an API server on this laptop keep everything here."),
+    ollamaRow, claudeRow, keyBox, openaiRows, openaiKeyBox,
     field("Summary language", inputs.summary_language, "auto: the language of the call, or e.g. English, German."),
     field("Whisper model", inputs.whisper_model, "e.g. large-v3-turbo, medium, small."),
     field("Call language", inputs.whisper_language, "auto, or a code like en, de."),
     field("Speech engine", inputs.asr_engine, "Automatic uses Parakeet, several times faster on a CPU, when it knows your language and no vocabulary is set; otherwise Whisper. whisper.cpp uses a GPU if you installed a whisper-cli built for it."),
+    h("label", { class: "check-row tight", for: "live-transcript" }, inputs.live_transcript, "Live transcript during calls"),
+    h("div", { class: "hint below-check" }, "See what is said while you record, a few seconds behind. It uses two CPU threads during the call. If its model is not downloaded yet, it starts after your next note."),
     field("Consent line", inputs.consent_line, "Copied to the clipboard when you press Record, to paste into the call chat."),
     h("div", { class: "row-end" }, save),
     h("dl", { class: "kv" },
@@ -1465,6 +1613,7 @@ function wireKeys() {
 async function start() {
   wirePlayer();
   wireKeys();
+  wireImport();
   await Promise.all([refreshStatus(), refreshList()]);
   window.addEventListener("hashchange", route);
   route();

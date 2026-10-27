@@ -129,6 +129,16 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | Parakeet batch | 1 piece | Batches of 8 peaked at 3.0 GB on a 30-min call and were slower; one at a time stays at 1.4 GB |
 | whisper.cpp model | `ggml-large-v3-turbo-q5_0.bin` | Same model as the Whisper default, quantized for the GPU |
 | whisper.cpp time limit | 3 s per second of speech, at least 10 min | A `whisper-cli` stuck on a GPU driver must not hold up later notes; a slow CPU build stays inside |
+| Live transcript | off | It uses CPU during the call |
+| Live engine | Parakeet where it knows the language, else Whisper `small`; downloaded models only; 2 threads | Fast enough to keep up; never a download during a call |
+| Live pieces | read every 1.5 s; cut after 0.5 s of silence (at least 2 s) or at 15 s | Whole sentences, a few seconds behind |
+| Live echo check | a mic line waits at most 10 s for the system track | The far side's voice in the mic is dropped, as in the note |
+| Import size | up to 4 GB | Several hours of video; the upload is streamed to disk, never held in memory |
+| Import length | the first 4 h | The same cap as a recording |
+| Import conversion | ffmpeg, at most 30 min | A 4 h video converts in a few minutes; a stuck ffmpeg must not block the app |
+| OpenAI-compatible API | `https://openrouter.ai/api/v1`, model `anthropic/claude-sonnet-5.5` | One key reaches most models; Sonnet summarizes well at half the price of Opus |
+| API on another computer | https only; a confirmation per destination host | The key and transcript never travel in clear; a new host is a new place your calls go |
+| API on this computer | counts as local: owner check, no key, Ollama's Ask budget | Same as Ollama |
 
 ## Prompt, capture and processing
 
