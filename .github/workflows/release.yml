@@ -3,7 +3,10 @@ name: Release
 on:
   push:
     tags: ["v*"]
-  # A dry run from any branch: every check, the build and the wheel tests, no publishing.
+  # On a tag: started by tag-release.yml, since a tag pushed with GITHUB_TOKEN starts
+  # no push run, or again by hand after a failed release. On a branch: a dry run, with
+  # every check, the build and the wheel tests, and no publishing. Every step below
+  # that publishes is keyed on the ref being a tag, never on how the run started.
   workflow_dispatch:
 
 permissions:
@@ -38,27 +41,26 @@ jobs:
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
       - name: Tag matches the version in pyproject.toml
         id: version
-        env:
-          EVENT: ${{ github.event_name }}
         run: |
           version=$(uv run --no-project python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if [ "$EVENT" = "push" ]; then
-            test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != v$version"; exit 1; }
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            test "v$version" = "$GITHUB_REF_NAME" || { echo "::error::tag $GITHUB_REF_NAME != v$version"; exit 1; }
+          else
+            echo "::notice::dry run of $version on $GITHUB_REF_NAME; nothing is published"
           fi
       # Checked before anything is published, so a release never goes out with undated notes.
       # A dry run only warns: the section is dated just before tagging.
       - name: Release notes from CHANGELOG.md
         env:
           PRIVATE: ${{ github.event.repository.private }}
-          EVENT: ${{ github.event_name }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           attested=""
           if [ "$PRIVATE" = "false" ]; then attested="--attested"; fi
           mkdir notes
           if ! uv run --no-project python scripts/release_notes.py "$VERSION" $attested > notes/release-notes.md; then
-            if [ "$EVENT" = "push" ]; then exit 1; fi
+            if [ "$GITHUB_REF_TYPE" = tag ]; then exit 1; fi
             echo "::warning::CHANGELOG.md is not ready for $VERSION; a tag would stop here"
             echo "Dry run of $VERSION" > notes/release-notes.md
           fi
@@ -68,7 +70,7 @@ jobs:
       # Artifact attestations are only available for public repositories on personal accounts,
       # and only a tagged build is attested: a dry run's files are never published.
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
-        if: ${{ !github.event.repository.private && github.event_name == 'push' }}
+        if: ${{ !github.event.repository.private && github.ref_type == 'tag' }}
         with:
           subject-path: dist/*
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
@@ -108,7 +110,7 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: wheel
-    if: github.event_name == 'push'
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -127,7 +129,7 @@ jobs:
   github-release:
     name: GitHub release page
     needs: publish
-    if: github.event_name == 'push'
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

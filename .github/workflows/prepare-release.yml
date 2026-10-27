@@ -1,0 +1,84 @@
+name: Prepare release
+
+# Actions › Prepare release › Run workflow. Raises the version, turns the Unreleased
+# section of CHANGELOG.md into the release notes and opens a "Release X.Y.Z" pull
+# request. Merging it tags the release (tag-release.yml). See docs/dev/releasing.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version part to raise: patch (fixes), minor (features), major"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Open the release pull request
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write        # pushes the release/vX.Y.Z branch
+      pull-requests: write   # opens the release pull request
+      actions: write         # starts CI on it: a pull request opened with GITHUB_TOKEN starts none
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUMP: ${{ inputs.bump }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+      - name: Raise the version in pyproject.toml and uv.lock
+        run: |
+          uv version --bump "$BUMP" --no-sync
+          version=$(uv version --short)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          for ref in "tags/v$version" "heads/release/v$version"; do
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/$ref" --silent 2>/dev/null; then
+              echo "::error::$ref already exists"; exit 1
+            fi
+          done
+      - name: Date the changelog section and set __version__
+        run: uv run --no-project python scripts/prepare_release.py "$VERSION" "$(date -u +%F)"
+      - name: Release notes
+        run: uv run --no-project python scripts/release_notes.py "$VERSION" > "$RUNNER_TEMP/notes.md"
+      # tests/test_compat.py needs a snapshot for every dated release, so the release
+      # commit carries what this version stores (docs/dev/changes.md › Contracts).
+      - name: Save this version's stored data
+        run: |
+          uv sync --locked
+          WIRENOTE_E2E_KEEP="tests/compat/$VERSION" uv run pytest -q -p no:cacheprovider tests/e2e/test_call_to_note.py
+      - name: Push the release branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "release/v$VERSION"
+          git add "tests/compat/$VERSION"
+          git commit -a -s -m "Release $VERSION" \
+            -m "Prepared by the Prepare release workflow (bump: $BUMP)."
+          gh auth setup-git
+          git push origin "release/v$VERSION"
+      - name: Open the pull request and start CI on it
+        run: |
+          {
+            echo "Merging this tags \`v$VERSION\` and starts the release: PyPI (after approval in the \`pypi\` environment), then the GitHub release page."
+            echo
+            echo "To change the notes, edit CHANGELOG.md on this branch before merging."
+            echo
+            echo "## Release notes"
+            echo
+            cat "$RUNNER_TEMP/notes.md"
+          } > "$RUNNER_TEMP/body.md"
+          gh pr create --base main --head "release/v$VERSION" \
+            --title "Release $VERSION" --body-file "$RUNNER_TEMP/body.md"
+          gh workflow run ci.yml --ref "release/v$VERSION"

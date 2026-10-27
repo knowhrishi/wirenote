@@ -35,6 +35,7 @@ The design notes in [docs/dev/](docs/dev/) explain why the detector, the capture
   # Copyright (c) 2026 Hrishikesh Jadhav
   ```
   If you add a file, use the same header; you keep the copyright in your changes (see the CLA below).
+- If people using Wirenote would notice the change, add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md). It becomes the release notes.
 - Anything that sends data off the computer must be opt-in and listed in [PRIVACY.md](PRIVACY.md) and in the app's disclosure text.
 - To add a call app, add a rule to the defaults in `src/wirenote/config/apps.py` and say how you verified it (`wirenote dump-streams` during a call shows what the detector sees).
 
