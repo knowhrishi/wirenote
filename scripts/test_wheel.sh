@@ -17,7 +17,7 @@ if [ $# -gt 0 ]; then python=$1; shift; fi
 
 env_dir=$(mktemp -d)/env
 uv venv --quiet --python "$python" "$env_dir"
-uv pip install --quiet --python "$env_dir/bin/python" "$dist"/wirenote-*.whl pytest
+uv pip install --quiet --python "$env_dir/bin/python" "$dist"/wirenote-*.whl pytest quickjs
 "$env_dir/bin/python" -c '
 import wirenote, sys
 assert "site-packages" in wirenote.__file__, f"testing {wirenote.__file__}, not the wheel"

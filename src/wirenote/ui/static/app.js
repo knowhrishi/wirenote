@@ -1202,7 +1202,7 @@ function setupCard(s) {
     return field(label, h("div", { class: "inline" }, input, btn), hint);
   };
   const keyBox = keyField("anthropic", "Claude API key", "sk-ant-…", s.anthropic_key_set,
-    "Kept in secrets.toml on this laptop; never shown here again. No key? Run "ant auth login" in a terminal instead. A Claude Pro or Max subscription cannot be used here: Anthropic does not allow other apps to use claude.ai logins.");
+    "Kept in secrets.toml on this laptop; never shown here again. No key? Run 'ant auth login' in a terminal instead. A Claude Pro or Max subscription cannot be used here: Anthropic does not allow other apps to use claude.ai logins.");
   const openaiKeyBox = keyField("openai", "API key", "sk-or-…", s.openai_key_set,
     "Kept in secrets.toml on this laptop; never shown here again. Not needed for a server on this laptop.");
   const showFor = () => {
