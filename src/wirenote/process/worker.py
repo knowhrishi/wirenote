@@ -17,6 +17,8 @@ import gc
 import json
 import sys
 import traceback
+from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 from ..capture.recorder import read_flags, read_manifest, write_manifest
@@ -25,7 +27,7 @@ from ..config.vocabulary import load_vocabulary
 from .engines import engine_label, with_overrides
 from .jobs import MAX_ATTEMPTS, Job, Jobs
 from .live import LIVE, prefetch
-from .merge import Line, as_text, dedupe_echo, flagged_lines, paragraphs
+from .merge import Line, around, as_text, dedupe_echo, distance, flagged_lines, paragraphs
 from .note import action_line, note_path, own_note, render, segment_file, title_for
 from .speakers import Voices, display_name, guess_names
 from .summarize import (ActionItem, Summary, SummaryError, SummaryUnavailable, make_backend,
@@ -121,9 +123,9 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
         log(f"job {job.id}: summarizing with {backend_name}, template {template.id}")
         try:
             summary = summarize(lines, backend, settings.summary_chunk_s, settings.summary_language,
-                                context=_context(manifest, vocabulary, my_notes,
-                                                 _flagged(lines, read_flags(rec), settings, names)),
-                                names=names, template=template)
+                                context=_context(manifest, vocabulary, my_notes), names=names,
+                                template=template,
+                                flagged=partial(_flagged, lines, read_flags(rec), settings, names))
         except SummaryError as e:
             error = str(e)
             log(f"job {job.id}: no summary: {error}")
@@ -204,7 +206,8 @@ def _write_note(rec: Path, manifest: dict, lines: list[Line], summary: Summary |
     tmp.write_text(render(manifest, lines, summary, title=title, duration_min=duration,
                           audio=audio, transcript_model=transcript_model,
                           summary_backend=backend_name, summary_error=error, names=names,
-                          my_notes=my_notes, template=template, flags=flags))
+                          my_notes=my_notes, template=template, flags=flags,
+                          flag_window=(settings.flag_before_s, settings.flag_after_s)))
     tmp.replace(path)
     return path
 
@@ -245,17 +248,37 @@ def rewrite_note(rec: Path, settings: Settings) -> Path | None:
     return path
 
 
-FLAGGED_CAP = 3000
+FLAGGED_CAP = 3000   # docs/dev/PLAN.md › Defaults › Flag window
 
 
-def _flagged(lines: list[Line], flags: list[float], settings: Settings,
-             names: dict[str, str]) -> str:
-    """What was said around the moments Me flagged, for the summary prompt."""
-    near = flagged_lines(lines, flags, settings.flag_before_s, settings.flag_after_s)
-    return as_text([l for _, l in near], names)[:FLAGGED_CAP]
+def _flagged(lines: list[Line], flags: list[float], settings: Settings, names: dict[str, str],
+             lo: float = float("-inf"), hi: float = float("inf")) -> str:
+    """What was said around the moments Me flagged from lo up to hi, for the summary
+    prompt. Each flag gets an equal share of FLAGGED_CAP, the words nearest it first, so
+    every flag is heard however many there are and however long a paragraph runs."""
+    flags = sorted(t for t in flags if lo <= t < hi)
+    if not flags:
+        return ""
+    before, after = settings.flag_before_s, settings.flag_after_s
+    share = FLAGGED_CAP // len(flags)
+    picked: list[Line] = []
+    for t in flags:
+        room = share
+        near = sorted((l for _, l in flagged_lines(lines, [t], before, after)),
+                      key=lambda l: (distance(l, t), l.start))
+        for line in near:
+            prefix = len(as_text([replace(line, text="")], names)) + 1      # and the newline
+            line = around(line, t, before, after, room - prefix)
+            if prefix + len(line.text) > room:
+                break
+            if line not in picked:
+                picked.append(line)
+                room -= prefix + len(line.text)
+    text = as_text(sorted(picked, key=lambda l: (l.start, l.speaker)), names)
+    return "Moments Me flagged as important. Make sure the summary covers them:\n" + text if text else ""
 
 
-def _context(manifest: dict, vocabulary: list[str], my_notes: str, flagged: str = "") -> str:
+def _context(manifest: dict, vocabulary: list[str], my_notes: str) -> str:
     bits = [f"Call started {manifest['started']} in {manifest.get('name') or manifest.get('app')}"]
     if manifest.get("service"):
         room = f", room {manifest['room']}" if manifest.get("room") else ""
@@ -272,6 +295,4 @@ def _context(manifest: dict, vocabulary: list[str], my_notes: str, flagged: str 
         bits.append("Notes the recording person (Me) took during the call. They show what "
                     "mattered to them: keep their points, add the details from the transcript, "
                     "and correct them where the transcript says otherwise:\n" + my_notes[:4000])
-    if flagged:
-        bits.append("Moments Me flagged as important. Make sure the summary covers them:\n" + flagged)
     return "\n".join(bits)

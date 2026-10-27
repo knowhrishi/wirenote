@@ -31,7 +31,7 @@ from ..config.vocabulary import load_vocabulary, save_vocabulary
 from ..process.engines import ENGINES, OVERRIDES, check_overrides
 from ..process.jobs import Jobs
 from ..process.live import LIVE
-from ..process.merge import Line, as_text, nearest_line, paragraphs, stamp
+from ..process.merge import Line, as_text, flag_excerpt, paragraphs, stamp
 from ..process.note import action_line, own_note, segment_file, title_for
 from ..process.speakers import Voices, display_name
 from ..process.summarize import Summary, SummaryError, make_backend, pin_local
@@ -352,11 +352,12 @@ class Store:
                 "known_voices": [v["name"] for v in self.voices.names()]}
 
     def _flags(self, d: Path, lines: list[dict], speakers: dict) -> list[dict]:
-        """Each flag with the transcript line closest to it (None before there is one)."""
+        """Each flag with what was said at it, as in the note (process/merge.py
+        flag_excerpt; None before there is a transcript)."""
         found = [Line(**l) for l in lines]
         out = []
         for t in read_flags(d):
-            line = nearest_line(found, t)
+            line = flag_excerpt(found, t, self.settings.flag_before_s, self.settings.flag_after_s)
             out.append({"t": t, "start": line.start if line else t,
                         "speaker": line.speaker if line else None,
                         "name": display_name(line.speaker, speakers) if line else None,

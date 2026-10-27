@@ -15,6 +15,7 @@ from dataclasses import asdict, dataclass
 from difflib import SequenceMatcher
 
 _WORD = re.compile(r"\w+", re.UNICODE)
+_TOKEN = re.compile(r"\S+")
 
 
 @dataclass(frozen=True)
@@ -75,24 +76,74 @@ def paragraphs(lines: list[Line], max_gap: float) -> list[Line]:
     return out
 
 
+def clip(line: Line, lo: float, hi: float) -> Line:
+    """The part of line said between lo and hi. Speech is taken to run at an even pace, so
+    time maps to characters in proportion. The cuts fall between words and are marked
+    with "…", and the part is stamped with its own start."""
+    span, n = line.end - line.start, len(line.text)
+    if (lo <= line.start and hi >= line.end) or span <= 0 or not n:
+        return line
+    i, j = (lo - line.start) / span * n, (hi - line.start) / span * n
+    words = [m.span() for m in _TOKEN.finditer(line.text)]
+    inside = [w for w in words if w[0] >= i and w[1] <= j]
+    if not inside and words:     # the window falls within one word: keep that word
+        inside = [min(words, key=lambda w: abs((w[0] + w[1]) / 2 - (i + j) / 2))]
+    if not inside:
+        return line
+    a, b = inside[0][0], inside[-1][1]
+    text = ("…" if a > words[0][0] else "") + line.text[a:b] + ("…" if b < words[-1][1] else "")
+    return Line(line.speaker, line.start + a / n * span, line.start + b / n * span, text)
+
+
+def around(line: Line, t: float, before_s: float, after_s: float,
+           max_chars: int | None = None) -> Line:
+    """The part of line said around t: from before_s before it to after_s after, and at
+    most about max_chars of text. A line that fits is kept whole. A paragraph can run for
+    minutes (one speaker with short pauses), and a flag is about a moment of it."""
+    span, n = line.end - line.start, len(line.text)
+    width = max(before_s + after_s, 0.0)
+    if max_chars is not None and n > max_chars and span > 0:
+        width = min(width, span * max(max_chars - 2, 0) / n)     # 2: the "…" at each cut
+    if span <= width or not n:
+        return line
+    back = before_s / (before_s + after_s) if before_s + after_s > 0 else 0.5
+    lo = t - width * back
+    if lo + width < line.start:      # the window misses the line: take its nearest end
+        lo = line.start
+    elif lo > line.end:
+        lo = line.end - width
+    return clip(line, lo, lo + width)
+
+
 def flagged_lines(lines: list[Line], flags: list[float], before_s: float, after_s: float
                   ) -> list[tuple[float, Line]]:
-    """The lines that overlap [t - before_s, t + after_s] for each flag t, as (t, line) in
-    time order. A line several flags reach is listed once, with the first of them.
-    People flag just after hearing something, so the window reaches further back."""
-    picked: dict[int, tuple[float, Line]] = {}
+    """The lines that overlap [t - before_s, t + after_s] for each flag t, as (t, part) in
+    time order, each cut to that window when it is longer (around()). A part several flags
+    reach is listed once, with the first of them. People flag just after hearing
+    something, so the window reaches further back."""
+    picked: dict[Line, float] = {}
     for t in sorted(flags):
-        for i, line in enumerate(lines):
-            if i not in picked and line.end >= t - before_s and line.start <= t + after_s:
-                picked[i] = (t, line)
-    return sorted(picked.values(), key=lambda p: (p[1].start, p[1].speaker))
+        for line in lines:
+            if line.end >= t - before_s and line.start <= t + after_s:
+                picked.setdefault(around(line, t, before_s, after_s), t)
+    return sorted(((t, l) for l, t in picked.items()), key=lambda p: (p[1].start, p[1].speaker))
+
+
+def distance(line: Line, t: float) -> float:
+    """Seconds from t to the nearest moment of line; 0 while it is being said."""
+    return 0.0 if line.start <= t <= line.end else min(abs(t - line.start), abs(t - line.end))
 
 
 def nearest_line(lines: list[Line], t: float) -> Line | None:
     """The line being said at t, else the one closest in time (the earlier on a tie)."""
-    def gap(l: Line) -> float:
-        return 0.0 if l.start <= t <= l.end else min(abs(t - l.start), abs(t - l.end))
-    return min(lines, key=lambda l: (gap(l), l.start), default=None)
+    return min(lines, key=lambda l: (distance(l, t), l.start), default=None)
+
+
+def flag_excerpt(lines: list[Line], t: float, before_s: float, after_s: float) -> Line | None:
+    """What was said at flag t, for the note and the app: the line closest to it, cut to
+    the flag window when it is longer, and stamped with the start of that part."""
+    line = nearest_line(lines, t)
+    return around(line, t, before_s, after_s) if line is not None else None
 
 
 def stamp(seconds: float) -> str:

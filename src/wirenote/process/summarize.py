@@ -24,7 +24,7 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from dataclasses import asdict, dataclass, field
-from typing import Protocol
+from typing import Callable, Protocol
 
 from ..config.secrets import load_secrets, secrets_path
 from ..config.settings import Settings
@@ -419,22 +419,32 @@ def system_prompt(language: str, t: Template) -> str:
 
 def summarize(lines: list[Line], backend: Backend, chunk_s: float, language: str,
               context: str = "", names: dict[str, str] | None = None,
-              template: Template = BUILTIN["general"]) -> Summary:
+              template: Template = BUILTIN["general"],
+              flagged: Callable[[float, float], str] | None = None) -> Summary:
+    """flagged(lo, hi) gives the context about moments flagged from lo up to hi: each part
+    of a long call gets the flags in its own time span, the final request all of them."""
     if not lines:
         raise SummaryError("empty transcript")
     system = system_prompt(language, template)
-    head = f"{context}\n\n" if context else ""
+    inf = float("inf")
+
+    def head(lo: float, hi: float) -> str:
+        bits = [b for b in (context, flagged(lo, hi) if flagged else "") if b]
+        return "\n".join(bits) + "\n\n" if bits else ""
+
     parts = chunks(lines, chunk_s)
     if len(parts) == 1:
         data = _ask(backend, system + TITLE_FIELD,
-                    f"{head}Transcript:\n{as_text(lines, names)}", final_schema(template))
+                    f"{head(-inf, inf)}Transcript:\n{as_text(lines, names)}", final_schema(template))
         return _to_summary(data, template)
     notes = []
     for i, part in enumerate(parts, 1):
-        user = f"{head}Transcript, part {i} of {len(parts)}:\n{as_text(part, names)}"
+        lo = part[0].start if i > 1 else -inf
+        hi = parts[i][0].start if i < len(parts) else inf
+        user = f"{head(lo, hi)}Transcript, part {i} of {len(parts)}:\n{as_text(part, names)}"
         notes.append(_ask(backend, system, user, chunk_schema(template)))
     combine = COMBINE + (COMBINE_SECTIONS if template.sections else "")
-    user = f"{head}{combine}\n\n" + "\n\n".join(
+    user = f"{head(-inf, inf)}{combine}\n\n" + "\n\n".join(
         f"Part {i}:\n{json.dumps(n, ensure_ascii=False)}" for i, n in enumerate(notes, 1))
     return _to_summary(_ask(backend, system + TITLE_FIELD, user, final_schema(template)), template)
 

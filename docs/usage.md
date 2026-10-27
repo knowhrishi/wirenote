@@ -38,8 +38,8 @@ Keys: `Ctrl K` or `/` to search, `Space` to play or pause, `←` / `→` to skip
 
 Something important was just said? While a call records, press `F` in the meetings app, click **Flag this moment**, or run `wirenote flag`. Wirenote remembers the time. Pressing it twice within 2 seconds counts once.
 
-- The summary gets the lines said from 30 seconds before to 10 seconds after each flag, with a request to cover them.
-- The note gets a "Flagged moments" list: the line closest to each flag. The call page shows the same list with links to the transcript.
+- The summary gets the lines said from 30 seconds before to 10 seconds after each flag, with a request to cover them. Each flag gets its own share of the room, the words closest to it first, so every flag counts however many you set. In a call cut into parts, each part hears about the flags in it.
+- The note gets a "Flagged moments" list: the line closest to each flag. When one person talks for a long time, the line is cut to those 40 seconds and stamped with the time they start. The call page shows the same list with links to the transcript.
 - After the call, hover a line in the Transcript tab and click its flag to add one. This works for imported recordings too. "Update summary" then takes it into account.
 
 `wirenote toggle` does one thing for the whole flow: it stops the recording; or, with a call prompt showing, records it; or else records a meeting without a call app. It fails if several prompts are showing: use `wirenote record`.

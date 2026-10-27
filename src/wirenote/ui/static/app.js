@@ -1088,7 +1088,8 @@ function transcriptView(c) {
       const who = me ? h("div", { class: "t-speaker me" }, "Me")
         : h("button", { class: "t-speaker others", title: "Name this speaker", onclick: () => speakerDialog(c, l.speaker) }, name);
       if (!me) who.style.setProperty("color", colorFor(l.speaker));
-      const flagged = (c.flags || []).some((f) => f.start === l.start);
+      // A flag's start is where its part of the line begins (a long paragraph is cut around it).
+      const flagged = (c.flags || []).some((f) => f.speaker === l.speaker && f.start >= l.start && f.start <= l.end);
       return h("div", { class: "t-line" + (flagged ? " flagged" : ""), "data-start": String(l.start) },
         h("button", { class: "t-time", title: "Play from here", onclick: () => { seekAudio(l.start); playAudio(); } }, clock(l.start)),
         h("div", {}, who, h("div", { class: "t-text" }, highlighted(l.text, q))),

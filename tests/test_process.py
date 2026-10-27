@@ -302,7 +302,7 @@ def test_flagged_moments_reach_prompt_and_note(tmp_path):
     # Renaming a speaker or editing notes re-renders the note; the flags stay.
     write_flags(rec, [1.5, 4.4])
     (rec / "my_notes.md").write_text("- more")
-    rewrite_note(rec, s)
+    rewrite_note(rec, replace(s, flag_before_s=2.0))     # a window the 2 s line fits in whole
     text = note.read_text()
     assert "## Flagged moments\n\n- [00:00:01] **Speaker 1** Shall we ship on Friday?\n" in text
     assert "- [00:00:04] **Me** Yes, Friday works." in text and "## My notes" in text
@@ -316,6 +316,72 @@ def test_a_call_without_flags_has_no_flagged_section(tmp_path):
                   voices=no_voices(tmp_path))
     assert "Flagged" not in Path(job.note).read_text()
     assert "flagged" not in [c for c in backend.calls if c[2] is FINAL_SCHEMA][0][1]
+
+
+class MonologueTranscriber:
+    """Ten minutes of one speaker with short pauses: one paragraph of 9,599 characters."""
+
+    def recording(self, rec_dir, manifest):
+        return ([Line("S1", float(i), i + 0.9, f"Point {i:03d} here.") for i in range(600)],
+                [{"file": "mic-000.wav", "language": "en"}], None)
+
+
+def _seconds_of(stamp: str) -> int:
+    h, m, s = (int(x) for x in stamp.split(":"))
+    return h * 3600 + m * 60 + s
+
+
+def test_flags_in_a_long_paragraph_keep_their_own_moment(tmp_path):
+    from wirenote.capture.recorder import write_flags
+    from wirenote.ui.data import Store
+
+    rec = make_recording(tmp_path)
+    flags = [100.0, 300.0, 500.0, 520.0, 540.0, 560.0, 580.0]
+    write_flags(rec, flags)
+    s = replace(settings_for(tmp_path), recordings_dir=str(tmp_path / "recordings"))
+    jobs = Jobs(tmp_path / "state" / "jobs.db")
+    backend = FakeBackend()
+    job = run_job(jobs.add(rec), s, jobs, MonologueTranscriber(), lambda _s: backend,
+                  voices=no_voices(tmp_path))
+    assert len(json.loads((rec / TRANSCRIPT).read_text())["lines"]) == 1     # one paragraph
+
+    # The prompt: every flag brings the words around it, within one shared cap.
+    user = [c for c in backend.calls if c[2] is FINAL_SCHEMA][0][1]
+    block = user.split("Make sure the summary covers them:\n")[1].split("\n\nTranscript:")[0]
+    assert len(block) <= 3000 and "Point 000" not in block
+    for t in flags:
+        assert f"Point {int(t):03d}" in block
+    assert all(not l.startswith("[00:00:00]") for l in block.splitlines())
+
+    # The note: one bullet per flag, each the part of the paragraph around it.
+    text = Path(job.note).read_text()
+    bullets = text.split("## Flagged moments\n\n")[1].split("\n\n## ")[0].splitlines()
+    assert len(bullets) == len(flags)
+    for t, b in zip(flags, bullets):
+        assert f"Point {int(t):03d}" in b and len(b) < 1000
+        assert abs(_seconds_of(b[3:11]) - (t - 30)) <= 2
+
+    # The app: the same excerpt, and its own start to jump to.
+    got = Store(s, tmp_path / "state", voices=no_voices(tmp_path)).call(rec.name)["flags"]
+    assert [round(f["start"]) for f in got] == [round(t - 30) for t in flags]
+    for f, b in zip(got, bullets):
+        assert f"Point {int(f['t']):03d}" in f["text"] and b.endswith(f["text"])
+
+
+def test_each_summary_part_gets_only_its_own_flags(tmp_path):
+    from wirenote.capture.recorder import write_flags
+
+    rec = make_recording(tmp_path)
+    write_flags(rec, [4.4])
+    s = replace(settings_for(tmp_path), flag_before_s=1.0, flag_after_s=0.5, summary_chunk_s=2.0)
+    jobs = Jobs(tmp_path / "jobs.db")
+    backend = FakeBackend()
+    run_job(jobs.add(rec), s, jobs, FakeTranscriber(), lambda _s: backend, voices=no_voices(tmp_path))
+    first, second = [c[1] for c in backend.calls if c[2] is CHUNK_SCHEMA]
+    combine = [c[1] for c in backend.calls if c[2] is FINAL_SCHEMA][0]
+    assert "flagged" not in first and "Yes, Friday works." not in first
+    assert "Moments Me flagged" in second and second.count("Yes, Friday works.") == 2
+    assert "Moments Me flagged as important" in combine and "Yes, Friday works." in combine
 
 
 def test_names_are_guessed_only_with_evidence_in_the_transcript():

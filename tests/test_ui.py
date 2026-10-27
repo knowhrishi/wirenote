@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from wirenote.capture.recorder import read_manifest
+from wirenote.capture.recorder import read_manifest, write_manifest
 from wirenote.process.merge import Line
 from wirenote.ui import data as data_mod
 from wirenote.ui.data import Invalid, NotFound, Store, _relevant
@@ -242,6 +242,13 @@ def test_add_flag_after_the_call_and_refused_while_recording(store, tmp_path):
     assert st.call(rec_id)["state"] == "recording"                 # the file is the daemon's now
     with pytest.raises(NotFound):
         st.add_flag("../x", 1.0)
+
+    # An imported call still waiting for its transcript can be flagged; the flag waits too.
+    imp = make_recording(tmp_path / "import")
+    imp = imp.rename(st.rec_dir(rec_id).parent / "20261027-120000-import")
+    write_manifest(imp, {**read_manifest(imp), "id": imp.name, "app": "import"})
+    assert st.add_flag(imp.name, 7.0) == [7.0] and st.call(imp.name)["flags"] == [
+        {"t": 7.0, "start": 7.0, "speaker": None, "name": None, "text": ""}]
 
 
 def test_flag_control_reaches_the_daemon_or_says_it_is_not_running(store, monkeypatch, tmp_path):
