@@ -2,7 +2,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Install Debian packages on a CI runner without letting a stalled mirror hang the job.
 #
-# Usage: scripts/ci_apt_install.sh PACKAGE...
+# Usage: [CI_APT_CACHE=DIR] scripts/ci_apt_install.sh PACKAGE...
+#
+# With CI_APT_CACHE, the packages come from that folder when it holds them, which takes
+# seconds and needs no mirror; .github/actions/apt-install keeps it in the Actions cache.
+# A stalled mirror then delays only the run that fills the cache. When the folder is
+# empty, apt downloads into it.
 #
 # A plain apt-get install has sat silent for 20 minutes on GitHub's runners until the
 # job was cancelled. Each attempt here is capped at 5 minutes, with network retries
@@ -19,6 +24,8 @@ set -eu
 
 mirrors=${CI_APT_MIRRORS:-/etc/apt/apt-mirrors.txt}
 mirror_skipped=
+cache=${CI_APT_CACHE:-}
+fix=
 
 # Rebuilding the man page index after an install can take minutes on the runners, and
 # CI never reads a man page.
@@ -45,6 +52,27 @@ skip_first_mirror() {
   fi
 }
 
+installed() {
+  for p in "$@"; do
+    dpkg-query -W -f '${Status}' "$p" 2>/dev/null | grep -q 'ok installed' || return 1
+  done
+}
+
+if [ -n "$cache" ] && ls "$cache"/*.deb > /dev/null 2>&1; then
+  # -G keeps a newer version the runner image already has.
+  if sudo timeout 300 dpkg -i -G "$cache"/*.deb && installed "$@"; then
+    exit 0
+  fi
+  # Cached packages that no longer fit the image are left half installed; apt finishes
+  # them. The folder is not refilled: a cache that was found is never saved again.
+  echo "the cached packages did not install; downloading them instead" >&2
+  fix=--fix-broken
+elif [ -n "$cache" ]; then
+  mkdir -p "$cache/partial"
+  # _apt cannot write to the runner's folders, so root downloads.
+  opts="$opts -o Dir::Cache::archives=$cache/ -o APT::Sandbox::User=root"
+fi
+
 apt_get() {
   # shellcheck disable=SC2086  # $opts is a list of options
   sudo timeout 300 apt-get $opts "$@" && return 0
@@ -57,7 +85,13 @@ apt_get() {
 }
 
 for attempt in 1 2 3; do
-  if apt_get update && apt_get install -y --no-install-recommends "$@"; then
+  # shellcheck disable=SC2086  # $fix is empty or one option
+  if apt_get update && apt_get install -y --no-install-recommends $fix "$@"; then
+    if [ -n "$cache" ] && [ -z "$fix" ]; then
+      # apt's lock and partial folder stay root's; the cache action could not read them.
+      sudo rm -rf "$cache/partial" "$cache/lock"
+      sudo chown -R "$(id -u):$(id -g)" "$cache"
+    fi
     exit 0
   fi
   echo "apt attempt $attempt failed" >&2

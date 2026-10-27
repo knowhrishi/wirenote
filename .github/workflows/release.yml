@@ -103,7 +103,9 @@ jobs:
           name: dist
           path: dist/
       - if: matrix.python == '3.13'      # the audio test; see ci.yml
-        run: scripts/ci_apt_install.sh ffmpeg
+        uses: ./.github/actions/apt-install
+        with:
+          packages: ffmpeg
       # The exact file that goes to PyPI, installed as a user would, against every test.
       - run: scripts/test_wheel.sh dist ${{ matrix.python }}
 
