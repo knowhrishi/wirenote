@@ -51,3 +51,4 @@ On an existing install that kept the defaults, the next note uses Parakeet: a 67
 | Speech pieces for Parakeet and whisper.cpp | at most 30 s, 0.2 s padding |
 | Parakeet batch | 1 piece |
 | whisper.cpp model | `ggml-large-v3-turbo-q5_0.bin` |
+| whisper.cpp time limit | 3 s per second of speech, at least 10 min; then the job fails and is retried |

@@ -66,6 +66,8 @@ a = sys.argv[1:]
 out = a[a.index("-of") + 1]
 if os.environ.get("FAKE_WHISPER_FAIL"):
     sys.stderr.write("ggml_vulkan: no device\\n"); sys.exit(3)
+if os.environ.get("FAKE_WHISPER_HANG"):
+    import time; time.sleep(60)
 json.dump({{"result": {{"language": "en"}}, "transcription": [{{"tokens": [
     {{"text": " Hello", "offsets": {{"from": 100, "to": 400}}}},
     {{"text": " team", "offsets": {{"from": 1100, "to": 1400}}}}]}}]}}, open(out + ".json", "w"))
@@ -109,6 +111,15 @@ def test_whispercpp_hears_only_speech_and_maps_times_back(fake_cli, monkeypatch)
 def test_whispercpp_failure_names_the_last_error_line(fake_cli, monkeypatch):
     monkeypatch.setenv("FAKE_WHISPER_FAIL", "1")
     with pytest.raises(EngineError, match=r"failed \(3\): ggml_vulkan: no device"):
+        make_engine(fake_cli, []).hear(np.zeros(16000 * 8, dtype=np.float32))
+
+
+def test_a_hung_whispercpp_is_stopped(fake_cli, monkeypatch):
+    """A whisper-cli stuck on a broken GPU driver must not hold up every later note."""
+    monkeypatch.setenv("FAKE_WHISPER_HANG", "1")
+    monkeypatch.setattr(engines, "WHISPERCPP_TIMEOUT_MIN_S", 1.0)
+    monkeypatch.setattr(engines, "WHISPERCPP_TIMEOUT_PER_SPEECH_S", 0.1)
+    with pytest.raises(EngineError, match="took longer than 1 s"):
         make_engine(fake_cli, []).hear(np.zeros(16000 * 8, dtype=np.float32))
 
 

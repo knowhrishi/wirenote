@@ -128,6 +128,7 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | Speech pieces for Parakeet and whisper.cpp | at most 30 s, 0.2 s padding | Parakeet is trained on short audio; padding keeps word edges |
 | Parakeet batch | 1 piece | Batches of 8 peaked at 3.0 GB on a 30-min call and were slower; one at a time stays at 1.4 GB |
 | whisper.cpp model | `ggml-large-v3-turbo-q5_0.bin` | Same model as the Whisper default, quantized for the GPU |
+| whisper.cpp time limit | 3 s per second of speech, at least 10 min | A `whisper-cli` stuck on a GPU driver must not hold up later notes; a slow CPU build stays inside |
 
 ## Prompt, capture and processing
 

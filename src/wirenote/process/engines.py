@@ -40,6 +40,10 @@ WHISPERCPP_REPO = "ggerganov/whisper.cpp"
 # windowing (Parakeet), and silence is left out so no engine hears it.
 MAX_CHUNK_S = 30.0
 PAD_S = 0.2
+# whisper-cli stuck on a broken GPU driver would hold up every later note: stop it after
+# 3 s per second of speech, at least 10 min. A slow CPU-only build stays well inside.
+WHISPERCPP_TIMEOUT_MIN_S = 600.0
+WHISPERCPP_TIMEOUT_PER_SPEECH_S = 3.0
 
 
 class EngineError(Exception):
@@ -185,7 +189,13 @@ class WhisperCppEngine:
                     "-ojf", "-of", str(Path(tmp) / "out"), "-np"]
             if self.prompt:
                 argv += ["--prompt", self.prompt]
-            r = subprocess.run(argv, capture_output=True, text=True, check=False)
+            timeout = max(WHISPERCPP_TIMEOUT_MIN_S,
+                          WHISPERCPP_TIMEOUT_PER_SPEECH_S * len(joined) / SR)
+            try:
+                r = subprocess.run(argv, capture_output=True, text=True, check=False,
+                                   timeout=timeout)
+            except subprocess.TimeoutExpired as e:
+                raise EngineError(f"whisper-cli took longer than {timeout:.0f} s; stopped it") from e
             if r.returncode != 0:
                 tail = (r.stderr.strip().splitlines() or ["no output"])[-1]
                 raise EngineError(f"whisper-cli failed ({r.returncode}): {tail[:200]}")
