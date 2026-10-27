@@ -35,6 +35,18 @@ def test_tokens_join_into_words_with_punctuation_and_offset():
     assert tokens_to_words(["Hallo"], [0.0], [0.3])[0].text == " Hallo"
 
 
+def test_speech_pieces_are_padded_but_never_overlap(monkeypatch):
+    """The VAD cuts speech longer than 30 s into pieces that touch; padding them must not
+    make two pieces share audio, or the words there are heard twice."""
+    import faster_whisper.vad
+
+    found = [{"start": 16000, "end": 480000}, {"start": 480000, "end": 960000},
+             {"start": 1000000, "end": 1100000}]
+    monkeypatch.setattr(faster_whisper.vad, "get_speech_timestamps", lambda audio, opts: found)
+    spans = engines.speech_spans(np.zeros(1102000, dtype=np.float32))
+    assert spans == [(12800, 480000), (480000, 963200), (996800, 1102000)]
+
+
 def test_whispercpp_json_skips_special_tokens():
     data = {"result": {"language": "de"}, "transcription": [
         {"tokens": [{"text": "[_BEG_]", "offsets": {"from": 0, "to": 0}},
@@ -123,11 +135,10 @@ def test_parakeet_decodes_speech_pieces_with_their_offsets(monkeypatch):
         def create_stream(self):
             return Stream()
 
-        def decode_streams(self, streams):
-            made.setdefault("batches", []).append(len(streams))
-            for st in streams:
-                st.result = SimpleNamespace(tokens=[" Ja", "."], timestamps=[0.1, 0.4],
-                                            durations=[0.2, 0.1])
+        def decode_stream(self, st):
+            made.setdefault("decoded", []).append(st.n)
+            st.result = SimpleNamespace(tokens=[" Ja", "."], timestamps=[0.1, 0.4],
+                                        durations=[0.2, 0.1])
 
     def from_transducer(**kw):
         made["kw"] = kw
@@ -141,7 +152,7 @@ def test_parakeet_decodes_speech_pieces_with_their_offsets(monkeypatch):
         np.zeros(16000 * 20, dtype=np.float32))
     assert made["kw"]["model_type"] == "nemo_transducer"
     assert made["kw"]["encoder"] == "/models/encoder.int8.onnx"
-    assert made["batches"] == [8, 2]
+    assert made["decoded"] == [16000] * 10       # one piece at a time: batches cost GBs
     assert len(heard.words) == 10 and heard.words[0].text == " Ja."
     assert heard.words[1].start == pytest.approx(2.1) and heard.words[1].end == pytest.approx(2.5)
     assert heard.speech_s == 10.0 and heard.language is None
@@ -205,6 +216,33 @@ def test_worker_names_the_engine_that_ran(tmp_path):
             lambda _s: FakeBackend(), voices=no_voices(tmp_path))
     assert json.loads((rec / TRANSCRIPT).read_text())["model"] == "parakeet-tdt-0.6b-v3"
     assert "parakeet-tdt-0.6b-v3" in open(read_manifest(rec)["note"]).read()
+
+
+def test_worker_lets_the_speech_models_go_before_the_summary(tmp_path, monkeypatch):
+    import gc
+    import weakref
+
+    from wirenote.process import transcribe
+
+    made = []
+
+    class Transcriber(FakeTranscriber):
+        def __init__(self, settings, vocabulary):
+            super().__init__()
+            made.append(weakref.ref(self))
+
+    class Backend(FakeBackend):
+        def complete_json(self, system, user, schema):
+            gc.collect()
+            assert made and made[0]() is None, "the speech models are still loaded"
+            return super().complete_json(system, user, schema)
+
+    monkeypatch.setattr(transcribe, "Transcriber", Transcriber)
+    rec = make_recording(tmp_path)
+    jobs = Jobs(tmp_path / "jobs.db")
+    job = run_job(jobs.add(rec), settings_for(tmp_path), jobs, None, lambda _s: Backend(),
+                  voices=no_voices(tmp_path))
+    assert job.state == "done"
 
 
 def test_requeue_with_choices_keeps_only_what_differs(tmp_path):

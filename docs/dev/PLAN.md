@@ -126,7 +126,7 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | Waiting for a call before updating | at most 4 h, the recording cap | An update must not end a recording |
 | Speech engine | `auto`: Parakeet when it knows the language (setting or locale), no vocabulary is set and the Whisper model is the default; else Whisper | Parakeet is several times faster on a CPU; Whisper covers every other case |
 | Speech pieces for Parakeet and whisper.cpp | at most 30 s, 0.2 s padding | Parakeet is trained on short audio; padding keeps word edges |
-| Parakeet batch | 8 pieces | Bounded memory on long calls |
+| Parakeet batch | 1 piece | Batches of 8 peaked at 3.0 GB on a 30-min call and were slower; one at a time stays at 1.4 GB |
 | whisper.cpp model | `ggml-large-v3-turbo-q5_0.bin` | Same model as the Whisper default, quantized for the GPU |
 | Live transcript | off | It uses CPU during the call |
 | Live engine | Parakeet where it knows the language, else Whisper `small`; downloaded models only; 2 threads | Fast enough to keep up; never a download during a call |
