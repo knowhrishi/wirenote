@@ -24,6 +24,7 @@ import time
 import traceback
 from pathlib import Path
 
+from .. import updates
 from ..calendar import ics
 from ..capture.recorder import (Recording, RecordingMeta, read_manifest, recover,
                                 spawn_pw_record, write_manifest)
@@ -43,6 +44,7 @@ PW_DUMP = ("pw-dump", "--monitor", "--no-colors")
 STATUS_EVERY_S = 5.0
 HOUSEKEEPING_EVERY_S = 6 * 3600.0
 JOB_RETRY_DELAY_S = 60.0
+UPDATE_LOOP_S = 3600.0   # how often to see whether the daily update check is due
 STOPPED_IN_APP = "stopped in the app"   # the web UI is already showing the call
 
 
@@ -108,7 +110,7 @@ class PersistentState:
 @dataclasses.dataclass
 class Shown:
     """A notification we put up: what it is for, and whether it was answered."""
-    kind: str        # "prompt", "recording", "nudge" or "note"
+    kind: str        # "prompt", "recording", "nudge", "note" or "update"
     key: str
     handled: bool = False
     path: str | None = None
@@ -140,6 +142,7 @@ class Daemon:
         self._worker: asyncio.subprocess.Process | None = None
         self._worker_kick = asyncio.Event()
         self._calendar_kick = asyncio.Event()
+        self._update_kick = asyncio.Event()
         self._last_status = 0.0
         self._stopping = asyncio.Event()
 
@@ -177,7 +180,7 @@ class Daemon:
 
         loops = [self._pw_loop(), self._tick_loop(), self._op_loop(), self._rec_loop(),
                  self._worker_loop(), self._housekeeping_loop(), self._control_loop(),
-                 self._calendar_loop()]
+                 self._calendar_loop(), self._update_loop()]
         tasks = [asyncio.create_task(c) for c in loops]
         stop = asyncio.create_task(self._stopping.wait())
         done, _ = await asyncio.wait([*tasks, stop], return_when=asyncio.FIRST_COMPLETED)
@@ -279,6 +282,10 @@ class Daemon:
             shown.handled = True
             self._open_note(shown.key, shown.path)
             return
+        if shown.kind == "update" and action in ("open", "default"):
+            shown.handled = True
+            self._open_ui("#/updates")
+            return
         shown.handled = True
         now = time.monotonic()
         self.log.write("click", notification=shown.kind, app=shown.key, action=action)
@@ -306,7 +313,7 @@ class Daemon:
             self._prompt_ids.pop(shown.key, None)
         if shown.kind == "recording" and self._recording_id == nid:
             self._recording_id = None
-        if shown.handled or reason == CLOSED_BY_CALL or shown.kind == "note":
+        if shown.handled or reason == CLOSED_BY_CALL or shown.kind in ("note", "update"):
             return
         self.log.write("notification_closed", notification=shown.kind, app=shown.key,
                        reason=reason)
@@ -431,6 +438,21 @@ class Daemon:
             await self.notifier.close(nid)
         except Exception:  # noqa: BLE001 - already gone
             pass
+
+    async def _show_update(self, version: str) -> None:
+        nid = await self.notifier.notify(f"Wirenote {version} is available",
+                                         "See what's new and update from the Wirenote window.",
+                                         [("open", "See what's new")], timeout_ms=0)
+        self._shown[nid] = Shown("update", version)
+
+    def _open_ui(self, route: str) -> None:
+        from ..ui.launch import open_ui
+
+        try:
+            if not open_ui(self.settings.ui_port, route):
+                self.log.write("warning", message="web UI not running (or not ours)")
+        except OSError as e:
+            self.log.write("error", message=f"cannot open the web UI: {e!r}")
 
     def _open_note(self, rec_id: str, path: str | None) -> None:
         """The call in the web UI if this user's UI runs (docs/dev/ui-design.md), else the
@@ -620,6 +642,35 @@ class Daemon:
 
     # Calendar --------------------------------------------------------------
 
+    async def _update_loop(self) -> None:
+        """docs/dev/updates-design.md: when update_check is on, ask PyPI once a day, and
+        say once per new version that it exists, never during a recording."""
+        while True:
+            self._update_kick.clear()
+            try:
+                if self.settings.update_check:
+                    if updates.check_due(self.state_dir):
+                        found = await asyncio.to_thread(updates.check, self.state_dir)
+                        self.log.write("update_check", latest=found["latest"],
+                                       error=bool(found["error"]))
+                    self._offer_update()
+            except Exception as e:  # noqa: BLE001 - never stop detection over this
+                self.log.write("error", message=f"update check failed: {e!r}")
+            try:
+                await asyncio.wait_for(self._update_kick.wait(), UPDATE_LOOP_S)
+            except asyncio.TimeoutError:
+                pass
+
+    def _offer_update(self) -> None:
+        avail = updates.available(self.state_dir)
+        if not avail or not self.notify_ok or self.detector.tracker.recording_key is not None:
+            return
+        if updates.last_check(self.state_dir).get("notified") == avail["version"]:
+            return
+        updates.mark_notified(self.state_dir, avail["version"])
+        self.log.write("update_available", version=avail["version"])
+        self._ops.put_nowait((self._show_update, avail["version"]))
+
     async def _calendar_loop(self) -> None:
         """Sources are re-read every round, so `wirenote calendar add` needs no restart."""
         while True:
@@ -723,6 +774,7 @@ class Daemon:
                 self.log.write("error", message=f"config.toml not reloaded: {type(e).__name__}")
                 return {"ok": False, "error": "config.toml could not be read; kept the old settings"}
             self.log.write("control", command="reload-settings")
+            self._update_kick.set()      # update_check may have been turned on
             return {"ok": True, "app": None}
         return {"ok": False, "error": f"unknown command {cmd!r}"}
 

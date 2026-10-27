@@ -88,3 +88,20 @@ def test_cli_setup_install_dry_run(home, capsys):
     assert cli.main(["setup", "install", "--dry-run"]) == 0
     assert "wirenote.service" in capsys.readouterr().out
     assert cli.main(["setup", "uninstall", "--dry-run"]) == 0
+
+
+def test_install_asks_once_about_update_checks(home, monkeypatch):
+    from wirenote.config.settings import config_dir, load_settings
+
+    asked = []
+    install.ask_update_check(confirm=lambda q: asked.append(q) or "y", interactive=lambda: True)
+    assert load_settings(config_dir() / "config.toml").update_check is True
+    install.ask_update_check(confirm=lambda q: asked.append(q) or "n", interactive=lambda: True)
+    assert len(asked) == 1 and "pypi.org" in asked[0]
+
+
+def test_install_without_a_terminal_leaves_update_checks_off(home):
+    from wirenote.config.settings import config_dir, load_settings
+
+    install.ask_update_check(confirm=lambda q: pytest.fail("asked"), interactive=lambda: False)
+    assert load_settings(config_dir() / "config.toml").update_check is False

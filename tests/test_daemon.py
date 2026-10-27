@@ -219,6 +219,7 @@ def _fake_daemon(notifier):
             lines.append((event, data))
     d = type("D", (), {})()
     d.notifier, d.log, d._shown, d._prompt_ids = notifier, Log(), {}, {}
+    d._update_kick = asyncio.Event()
     return d, lines
 
 
@@ -301,3 +302,52 @@ def test_open_call_after_recording_can_be_turned_off(tmp_path, monkeypatch):
     d.settings = replace(d.settings, open_call_after_recording=False)
     _record_and_stop(d)
     assert opened == []
+
+
+def test_new_version_is_offered_once_and_never_during_a_call(tmp_path, monkeypatch):
+    import wirenote.ui.launch as launch
+    from wirenote import updates
+
+    (tmp_path / updates.CHECK).write_text(json.dumps({"checked": 1.0, "latest": "99.0.0"}))
+    d = make(tmp_path)
+    prompt(d)
+    assert d._control("record")["ok"]
+    asyncio.run(drain(d))
+    d._offer_update()
+    asyncio.run(drain(d))
+    assert not [v for v in d.notifier.shown.values() if "99.0.0" in v[0]]     # recording
+    assert d._control("stop")["ok"]
+    asyncio.run(drain(d))
+    d._offer_update()
+    d._offer_update()
+    asyncio.run(drain(d))
+    offers = [(k, v) for k, v in d.notifier.shown.items() if v[0] == "Wirenote 99.0.0 is available"]
+    assert len(offers) == 1 and offers[0][1][2] == ["open"]
+    opened = []
+    monkeypatch.setattr(launch, "open_ui", lambda port, route, fallback=None: opened.append(route) or True)
+    d._on_action(offers[0][0], "open")
+    assert opened == ["#/updates"]
+    d2 = make(tmp_path)                    # a restart does not offer it again
+    d2._offer_update()
+    asyncio.run(drain(d2))
+    assert not [v for v in d2.notifier.shown.values() if "99.0.0" in v[0]]
+
+
+def test_update_loop_checks_only_when_turned_on(tmp_path, monkeypatch):
+    from wirenote import updates
+
+    checked = []
+    monkeypatch.setattr(updates, "check", lambda state_dir: checked.append(state_dir) or
+                        {"latest": None, "error": None})
+
+    async def one_round(d):
+        task = asyncio.create_task(d._update_loop())
+        await asyncio.sleep(0.05)
+        task.cancel()
+
+    d = make(tmp_path)
+    asyncio.run(one_round(d))
+    assert checked == []
+    d.settings = replace(d.settings, update_check=True)
+    asyncio.run(one_round(d))
+    assert checked == [tmp_path]

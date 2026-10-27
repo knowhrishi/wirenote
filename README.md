@@ -57,6 +57,14 @@ Everything else, from calendars to commands to files, is in [docs/usage.md](http
 
 Details: [PRIVACY.md](https://github.com/knowhrishi/wirenote/blob/main/PRIVACY.md). Security reports: [SECURITY.md](https://github.com/knowhrishi/wirenote/blob/main/SECURITY.md).
 
+## Update
+
+```sh
+wirenote update            # newest version from PyPI; restarts Wirenote, never during a call
+```
+
+After an update, the meetings app shows what is new. To hear about new versions, turn on update checks in Settings (off by default; see [PRIVACY.md](PRIVACY.md)).
+
 ## Uninstall
 
 ```sh

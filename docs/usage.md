@@ -25,7 +25,8 @@ Open **Wirenote** from the app menu, or run `wirenote open`. It is a local web p
 - **Follow-up email:** a recap from the notes, to copy or open in your mail app.
 - **Action items:** everything agreed across all meetings, yours first.
 - **Ask your meetings:** questions across all past calls, with links to the moments.
-- **Settings:** summaries, transcription, the consent line, the Claude key, calendars, a vocabulary of names and terms, remembered voices, and the setup check.
+- **Settings:** summaries, transcription, the consent line, the Claude key, calendars, a vocabulary of names and terms, remembered voices, the setup check, and updates.
+- **Updates:** click the version number at the bottom of the sidebar for what changed in each release. After an update, the app shows what is new once.
 
 Keys: `Ctrl K` or `/` to search, `Space` to play or pause, `←` / `→` to skip 15 s.
 
@@ -84,6 +85,8 @@ wirenote reprocess <id>  # transcribe again; add --summary to keep the transcrip
 wirenote doctor          # check every part of the setup; --fix makes your files private again
 wirenote setup install   # install or update the services and the app-menu entry
 wirenote setup uninstall # remove them; --purge also deletes recordings and settings
+wirenote update          # install the newest version and restart; --check only checks
+wirenote changelog       # what changed in this version; --since 0.1.0 for more
 ```
 
 ## Files
@@ -111,8 +114,14 @@ Everything Wirenote writes is private to your user (mode 600, folders 700).
 ## Updating
 
 ```sh
-uv tool upgrade wirenote
-wirenote setup install    # refreshes the services and restarts them
+wirenote update
 ```
 
-From a git checkout: `uv tool install --force .` in the repository, then `wirenote setup install`. Restarting during a call ends that recording; it is closed and queued like any other.
+This finds the newest version on PyPI, installs it the way you installed Wirenote (uv or pipx), restarts the background services, runs the setup check and shows what is new. In the meetings app, **Update** in the banner or on the Updates page does the same.
+
+- **During a call** it refuses, because a restart would end the recording. `wirenote update --wait` updates as soon as the call ends; the app's Update button always waits.
+- **Only check:** `wirenote update --check`.
+- **Go back** to an earlier version: `wirenote update --to 0.2.0`. An older version may not know settings that a newer one added.
+- **Know when a version is out:** turn on **Settings › Updates › Check for new versions once a day** (`update_check = true` in `config.toml`). Wirenote then asks pypi.org once a day, sends one notification per new version, never during a call, and shows a banner in the app. It is off by default; see [PRIVACY.md](../PRIVACY.md).
+
+By hand, the same as `wirenote update`: `uv tool install --upgrade wirenote`, then `wirenote setup install`. From a git checkout: `git pull` and `uv tool install --force .` in the repository, then `wirenote setup install`; `wirenote update` refuses checkouts.

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import subprocess
 import threading
 from dataclasses import replace
 from http.server import ThreadingHTTPServer
@@ -567,3 +568,72 @@ def test_write_token_survives_a_restart(tmp_path, store):
     b = App(st.settings, tmp_path / "s", 1)
     assert a.token == b.token and a.token != a.session_key
     assert App(st.settings, tmp_path / "other", 1).token != a.token
+
+
+# Updates (docs/dev/updates-design.md) ---------------------------------------------
+
+def test_updates_info_offers_a_newer_version_once_checked(store, monkeypatch):
+    from wirenote import updates
+
+    st, _ = store
+    monkeypatch.setattr(updates, "install_kind", lambda: updates.Install("uv", Path("/x")))
+    info = st.updates_info()
+    assert info["available"] is None and info["check"] is False and info["can_update"]
+    assert info["whats_new"] is not None          # recordings exist: an upgrade, not a new install
+    (st.state_dir / updates.CHECK).write_text(json.dumps({"checked": 1.0, "latest": "99.0.0"}))
+    assert st.updates_info()["available"]["version"] == "99.0.0"
+    st.mark_seen()
+    assert st.updates_info()["whats_new"] is None
+
+
+def test_update_check_switch_writes_config_and_tells_the_daemon(store, monkeypatch):
+    from wirenote.config.settings import config_dir, load_settings
+
+    st, _ = store
+    poked = []
+    monkeypatch.setattr(data_mod, "poke_daemon", poked.append)
+    assert st.set_update_check(True)["check"] is True
+    assert load_settings(config_dir() / "config.toml").update_check is True
+    assert st.set_update_check(False)["check"] is False and poked == ["reload-settings"] * 2
+
+
+def test_update_runs_as_its_own_systemd_unit(store, monkeypatch):
+    from wirenote import updates
+
+    st, _ = store
+    monkeypatch.setattr(updates, "install_kind", lambda: updates.Install("uv", Path("/x")))
+    monkeypatch.setattr(updates, "wirenote_exe", lambda: "/bin/wirenote")
+    monkeypatch.setattr(data_mod.shutil, "which", lambda n: f"/bin/{n}")
+    ran = []
+    monkeypatch.setattr(data_mod.subprocess, "run",
+                        lambda argv, **kw: ran.append(argv) or subprocess.CompletedProcess(argv, 0, "", ""))
+    st.start_update()
+    assert ran == [["/bin/systemd-run", "--user", "--collect", "--quiet", "--unit", "wirenote-update",
+                    "/bin/wirenote", "update", "--yes", "--wait"]]
+    with pytest.raises(Invalid, match="already running"):
+        st.start_update()
+
+
+def test_update_is_refused_for_a_source_checkout(store, monkeypatch):
+    from wirenote import updates
+
+    st, _ = store
+    monkeypatch.setattr(updates, "install_kind", lambda: updates.Install("source", Path("/x")))
+    with pytest.raises(Invalid, match="git pull"):
+        st.start_update()
+
+
+def test_update_routes(server, monkeypatch):
+    from wirenote import updates
+
+    app, port, _ = server
+    monkeypatch.setattr(updates, "check", lambda state_dir: {})
+    status, body = request(port, "GET", "/api/updates")
+    assert status == 200 and json.loads(body)["current"]
+    status, body = request(port, "GET", "/api/changelog")
+    assert status == 200 and json.loads(body)["releases"][0]["groups"]
+    write = {"X-Wirenote-Token": app.token}
+    assert request(port, "POST", "/api/updates/seen", headers=write, body={})[0] == 200
+    assert request(port, "POST", "/api/updates/check", headers=write, body={})[0] == 200
+    assert request(port, "POST", "/api/updates/seen", body={})[0] == 403       # no token
+    assert request(port, "GET", "/api/updates", session=False)[0] == 401

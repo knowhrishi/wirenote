@@ -100,6 +100,10 @@ class Settings:
     # Open the call in the web UI by itself when its recording stops
     open_call_after_recording: bool = True
 
+    # Updates (docs/dev/updates-design.md) -----------------------------------
+    # docs/dev/PLAN.md › Defaults › Update check: off; when on, ask PyPI once a day
+    update_check: bool = False
+
     def recordings_path(self) -> Path:
         return Path(self.recordings_dir).expanduser() if self.recordings_dir \
             else data_dir() / "recordings"
@@ -155,6 +159,9 @@ DEFAULT_CONFIG_TOML = """# wirenote settings. Defaults come from docs/dev/PLAN.m
 # UI
 # ui_port = 8765                     # wirenote ui serves http://127.0.0.1:<port>/
 # open_call_after_recording = true   # open the call in the browser when its recording stops
+
+# Updates
+# update_check = false               # once a day, ask pypi.org whether a newer Wirenote exists
 """
 
 
