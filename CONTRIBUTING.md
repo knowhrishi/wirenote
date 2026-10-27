@@ -15,8 +15,10 @@ git clone https://github.com/knowhrishi/wirenote
 cd wirenote
 uv sync
 uv run pytest -q
-uv run pyflakes src tests
+uv run pyflakes src tests scripts
 ```
+
+On macOS, run the tests in a Linux container instead: `scripts/test_in_linux.sh`. Which tests exist, and which one a change needs, is in [docs/dev/testing.md](docs/dev/testing.md).
 
 Run your checkout as the real thing with `uv tool install --editable --force .` and `wirenote setup install`.
 
@@ -25,6 +27,8 @@ The design notes in [docs/dev/](docs/dev/) explain why the detector, the capture
 ## Pull requests
 
 - Keep each pull request to one change, with a test that fails without it. The tests run without PipeWire, a GPU or network access; keep it that way (see the fakes in `tests/`).
+- Read [docs/dev/changes.md](docs/dev/changes.md) before changing anything stored on disk, a setting, a command, or what Wirenote does on its own. Old configs, recordings and notes must keep working after an upgrade; `tests/test_compat.py` checks that.
+- Add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) for anything a user would notice.
 - Every Python file starts with the license header:
   ```python
   # SPDX-License-Identifier: AGPL-3.0-or-later

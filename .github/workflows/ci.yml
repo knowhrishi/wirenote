@@ -5,12 +5,15 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:        # the release runs every check again on the tagged commit
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # github.workflow is the caller's name when the release calls this, so a release
+  # never cancels, or is cancelled by, CI on the same ref.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -30,9 +33,27 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           enable-cache: true
+      # ffmpeg: the end-to-end test plays a recording back through the web app. That path
+      # does not depend on the Python version, so one job is enough; the others skip it.
+      - if: matrix.python == '3.13'
+        run: scripts/ci_apt_install.sh ffmpeg
       - run: uv sync --locked
       - run: uv run pytest -q
       - run: uv run pyflakes src tests scripts
+
+  wheel:
+    name: Tests against the built wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+      - run: scripts/ci_apt_install.sh ffmpeg
+      - run: uv build
+      # A file left out of the wheel, or a dependency not declared, fails here.
+      - run: scripts/test_wheel.sh dist 3.13
 
   audit:
     name: Dependency audit

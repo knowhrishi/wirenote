@@ -17,7 +17,10 @@ from pathlib import Path
 MAX_ATTEMPTS = 3
 ACTIVE = ("transcribing", "summarizing")
 
-SCHEMA = """
+# One entry per schema version; PRAGMA user_version counts the ones applied.
+# Append a step to change the schema; never edit one that has shipped. 0.1.0
+# wrote version 1's table without setting user_version, which IF NOT EXISTS covers.
+MIGRATIONS = ["""
 CREATE TABLE IF NOT EXISTS jobs (
     id INTEGER PRIMARY KEY,
     recording TEXT NOT NULL UNIQUE,
@@ -29,7 +32,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     created TEXT NOT NULL,
     updated TEXT NOT NULL
 )
-"""
+"""]
+
+# Named, not *, so a database with more or reordered columns still reads.
+COLUMNS = "id, recording, state, attempts, summary_only, error, note, created, updated"
 
 
 def _now() -> str:
@@ -55,7 +61,23 @@ class Jobs:
         # The UI server shares one connection across threads behind its own lock.
         self.db = sqlite3.connect(path, timeout=10, isolation_level=None, check_same_thread=False)
         self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.execute(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Bring the schema up to date. The daemon, the UI and the CLI may open the
+        file at once, so each upgrade runs in a write transaction. A database from
+        a newer version is left as it is; it still reads while columns are only added."""
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            (version,) = self.db.execute("PRAGMA user_version").fetchone()
+            for step in MIGRATIONS[version:]:
+                self.db.execute(step)
+            if version < len(MIGRATIONS):
+                self.db.execute(f"PRAGMA user_version = {len(MIGRATIONS)}")
+            self.db.execute("COMMIT")
+        except BaseException:
+            self.db.execute("ROLLBACK")
+            raise
 
     def close(self) -> None:
         self.db.close()
@@ -72,22 +94,22 @@ class Jobs:
         return self.by_recording(recording).id
 
     def get(self, job_id: int) -> Job | None:
-        row = self.db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+        row = self.db.execute(f"SELECT {COLUMNS} FROM jobs WHERE id=?", (job_id,)).fetchone()
         return _job(row)
 
     def by_recording(self, recording: Path) -> Job | None:
-        row = self.db.execute("SELECT * FROM jobs WHERE recording=?",
+        row = self.db.execute(f"SELECT {COLUMNS} FROM jobs WHERE recording=?",
                               (str(recording),)).fetchone()
         return _job(row)
 
     def next_queued(self) -> Job | None:
-        row = self.db.execute("SELECT * FROM jobs WHERE state='queued' "
+        row = self.db.execute(f"SELECT {COLUMNS} FROM jobs WHERE state='queued' "
                               "ORDER BY id LIMIT 1").fetchone()
         return _job(row)
 
     def recent(self, n: int = 10) -> list[Job]:
         return [_job(r) for r in self.db.execute(
-            "SELECT * FROM jobs ORDER BY id DESC LIMIT ?", (n,))]
+            f"SELECT {COLUMNS} FROM jobs ORDER BY id DESC LIMIT ?", (n,))]
 
     def counts(self) -> dict[str, int]:
         return dict(self.db.execute("SELECT state, COUNT(*) FROM jobs GROUP BY state"))
@@ -111,7 +133,7 @@ class Jobs:
     def requeue_interrupted(self) -> list[Job]:
         """Jobs a dead worker left mid-way count one failed attempt."""
         stuck = [_job(r) for r in self.db.execute(
-            f"SELECT * FROM jobs WHERE state IN {ACTIVE}")]
+            f"SELECT {COLUMNS} FROM jobs WHERE state IN {ACTIVE}")]
         return [self.fail(j.id, f"interrupted while {j.state}") for j in stuck]
 
 

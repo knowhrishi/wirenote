@@ -1,0 +1,39 @@
+# wirenote app rules. Exact matches only; see docs/dev/PLAN.md › Matching rules.
+# Fields: key, name, kind (meeting | browser | ignore), and any of
+# flatpak, snap, exe, binary, app_name (lists of exact values).
+# [[app.title]] entries match the stream's media.name with a regex; a match
+# makes the stream a meeting. A named group "room" is shown in the prompt.
+
+[[app]]
+key = "chrome"
+name = "Chrome"
+kind = "browser"
+exe = ["chrome"]        # verified: jitsi-chrome (audio service process)
+
+[[app]]
+key = "brave"
+name = "Brave"
+kind = "browser"
+exe = ["brave"]         # verified: live log 2026-10-26 (audio service process, pid ok)
+
+[[app]]
+key = "firefox"
+name = "Firefox"
+kind = "browser"
+exe = ["firefox-bin"]   # verified: jitsi-firefox (main process)
+
+  [[app.title]]
+  service = "Jitsi"
+  pattern = '^(?:(?P<room>.+) \| )?Jitsi Meet$'
+
+[[app]]
+key = "discord"
+name = "Discord"
+kind = "meeting"
+flatpak = ["com.discordapp.Discord"]   # unverified: confirm from detector log
+
+[[app]]
+key = "rocketchat"
+name = "Rocket.Chat"
+kind = "meeting"
+flatpak = ["chat.rocket.RocketChat"]   # unverified: confirm from detector log

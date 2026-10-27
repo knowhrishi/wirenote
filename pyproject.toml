@@ -63,3 +63,10 @@ include = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# docs/dev/testing.md: `models` downloads real speech models, so it runs only when asked
+# for (`pytest -m models`): nightly and before a release.
+addopts = "-m 'not models'"
+markers = [
+    "e2e: runs the real wirenote commands as processes, with PipeWire and Ollama faked",
+    "models: end to end with the real speech models; needs network or a model cache",
+]

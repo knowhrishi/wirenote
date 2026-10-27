@@ -1,0 +1,30 @@
+name: Real models
+
+# End to end with the real speech models (tests/e2e/test_real_models.py). CI fakes
+# the model; this catches a faster-whisper, CTranslate2, onnxruntime or sherpa-onnx
+# release that breaks transcription. Nightly, on demand, and before every release.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  models:
+    name: End to end with real models
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+        with:
+          python-version: "3.13"
+      - run: scripts/ci_apt_install.sh espeak-ng
+      - run: uv sync --locked
+      # About 100 MB of models from Hugging Face, downloaded fresh on every run.
+      - run: uv run pytest -q -m models

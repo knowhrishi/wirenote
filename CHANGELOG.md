@@ -4,6 +4,15 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+
+- End-to-end tests: a recorded Jitsi call runs through the real daemon, worker and web app, with PipeWire and Ollama faked; a nightly run uses the real speech models.
+- Releases test the built wheel on Python 3.11 to 3.14 before publishing, and data written by every earlier release is checked to still read.
+
+### Changed
+
+- The job queue (`jobs.db`) records its schema version, so later releases can change it without breaking existing queues. Nothing to do on upgrade.
+
 ## [0.2.0] - 2026-10-27
 
 ### Added
