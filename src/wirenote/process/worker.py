@@ -5,7 +5,9 @@
 Runs as its own process (`wirenote process <job id>`, started by the daemon at
 nice 10), so a slow or crashing transcription never stalls detection. A
 summary failure still writes the note with the transcript; only a failure
-before the note exists counts as a failed attempt.
+before the note exists counts as a failed attempt. A summary that failed for a
+passing reason (SummaryUnavailable: no memory for the model, the server
+restarting) is queued again on its own, up to MAX_ATTEMPTS.
 """
 
 from __future__ import annotations
@@ -21,12 +23,12 @@ from ..capture.recorder import read_manifest, write_manifest
 from ..config.settings import Settings
 from ..config.vocabulary import load_vocabulary
 from .engines import engine_label, with_overrides
-from .jobs import Job, Jobs
+from .jobs import MAX_ATTEMPTS, Job, Jobs
 from .live import LIVE, prefetch
 from .merge import Line, as_text, dedupe_echo, paragraphs
 from .note import action_line, note_path, own_note, render, segment_file, title_for
 from .speakers import Voices, display_name, guess_names
-from .summarize import Summary, SummaryError, make_backend, summarize
+from .summarize import Summary, SummaryError, SummaryUnavailable, make_backend, summarize
 
 TRANSCRIPT = "transcript.json"
 SUMMARY = "summary.json"
@@ -109,7 +111,7 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
     jobs.set_state(job.id, "summarizing")
     names = speaker_names(speakers)
     my_notes = read_my_notes(rec)
-    summary, error, backend_name = None, backend_error, None
+    summary, error, backend_name, retry = None, backend_error, None, False
     if backend is not None and lines:
         backend_name = backend.name
         log(f"job {job.id}: summarizing with {backend_name}")
@@ -119,6 +121,9 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
         except SummaryError as e:
             error = str(e)
             log(f"job {job.id}: no summary: {error}")
+            retry = isinstance(e, SummaryUnavailable) and job.attempts + 1 < MAX_ATTEMPTS
+            if retry:
+                error += "; Wirenote tries again in a few minutes"
     if summary:
         (rec / SUMMARY).write_text(json.dumps(summary.as_dict(), indent=2, ensure_ascii=False))
 
@@ -127,6 +132,10 @@ def _run(job: Job, settings: Settings, jobs: Jobs, transcriber, backend_factory,
     manifest.update(note=str(path), summary_error=error, summary_backend=backend_name,
                     note_written=dt.datetime.now().astimezone().isoformat(timespec="seconds"))
     write_manifest(rec, manifest)
+    if retry:
+        jobs.retry_summary(job.id, error, note=str(path))
+        log(f"job {job.id}: note written; summary queued again")
+        return
     jobs.set_state(job.id, "done", note=str(path))
     log(f"job {job.id}: note written")   # no path: it carries the title
     if settings.live_transcript:

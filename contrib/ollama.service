@@ -5,6 +5,11 @@ Description=Ollama (local LLM server for wirenote)
 [Service]
 ExecStart=%h/.local/opt/ollama/bin/ollama serve
 Environment=OLLAMA_HOST=127.0.0.1:11434
+# Less memory per model: an 8-bit context cache (about half the size) needs flash
+# attention; and one model in memory at a time.
+Environment=OLLAMA_FLASH_ATTENTION=1
+Environment=OLLAMA_KV_CACHE_TYPE=q8_0
+Environment=OLLAMA_MAX_LOADED_MODELS=1
 Restart=on-failure
 RestartSec=5
 

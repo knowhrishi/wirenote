@@ -127,6 +127,14 @@ class Jobs:
                         (state, attempts, error[-2000:], _now(), job_id))
         return self.get(job_id)
 
+    def retry_summary(self, job_id: int, error: str, note: str) -> Job:
+        """The note is written, but its summary failed for a passing reason: queue the
+        summary alone again. The worker checks attempts first (MAX_ATTEMPTS)."""
+        self.db.execute("UPDATE jobs SET state='queued', summary_only=1, attempts=attempts+1, "
+                        "error=?, note=?, updated=? WHERE id=?",
+                        (error[-2000:], note, _now(), job_id))
+        return self.get(job_id)
+
     def delete(self, recording: Path) -> None:
         self.db.execute("DELETE FROM jobs WHERE recording=?", (str(recording),))
 
