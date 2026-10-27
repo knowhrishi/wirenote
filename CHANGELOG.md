@@ -29,6 +29,7 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ### Fixed
 
+- Fewer phantom speakers. A laugh, a cough or a word through a bad line was sometimes counted as a new person, so a call with three people could show seven. Someone with less than about 8 seconds of speech in the whole call now counts with the person who spoke just before or after.
 - A summary no longer fails because memory is short. Wirenote waits for enough free memory before Ollama loads its model, instead of the kernel stopping Ollama or another program. If the summary still fails, because Ollama restarts or an online API is busy or out of reach, the note is written with the transcript and the summary is tried again a few minutes later, up to three times.
 - `contrib/ollama.service` halves the memory Ollama needs to hold the transcript while it reads it. What you need to do: if you use it, copy it to `~/.config/systemd/user/` again and run `systemctl --user daemon-reload && systemctl --user restart ollama`.
 
