@@ -493,3 +493,53 @@ def test_tray_setup_failure_is_not_called_a_missing_tray(tmp_path):
         d.make_tray = make_tray
         start_tray(d)
         assert json.loads((state / "status.json").read_text())["tray"] == "failed"
+
+
+def test_a_refused_registration_is_a_failure_not_a_missing_tray(tmp_path):
+    """A tray host exists but refuses the icon: the doctor must not give the GNOME hint."""
+    bus = FakeBus(fail_register=True)               # the watcher is there and says no
+    d = make(tmp_path)
+    d.make_tray = with_bus(bus)
+    start_tray(d)
+    assert d.indicator.registered is False and d.indicator.register_failed is True
+    assert json.loads((tmp_path / "status.json").read_text())["tray"] == "failed"
+
+    later = tmp_path / "later"                      # the panel restarts and then refuses
+    later.mkdir()
+    bus = FakeBus()
+    d = make(later)
+    d.make_tray = with_bus(bus)
+    start_tray(d)
+    assert json.loads((later / "status.json").read_text())["tray"] == "shown"
+
+    async def panel_restarts_and_refuses():
+        bus.set_watcher(False)
+        await settle()
+        bus.fail_register = True
+        bus.set_watcher(True)
+        await settle()
+    asyncio.run(panel_restarts_and_refuses())
+    assert json.loads((later / "status.json").read_text())["tray"] == "failed"
+
+    async def panel_accepts_again():
+        bus.fail_register = False
+        bus.set_watcher(True)
+        await settle()
+    asyncio.run(panel_accepts_again())
+    assert d.indicator.register_failed is False
+    assert json.loads((later / "status.json").read_text())["tray"] == "shown"
+
+
+def test_tray_creation_error_leaves_the_daemon_running(tmp_path):
+    def broken():
+        raise RuntimeError("dbus-fast missing a piece")
+    d = make(tmp_path)
+    d.make_tray = broken
+    assert d._start_indicator() is None             # no exception reaches run()
+    assert isinstance(d.indicator, NullIndicator)
+    d._write_status(force=True)
+    assert json.loads((tmp_path / "status.json").read_text())["tray"] == "failed"
+    log = [json.loads(line) for line in (tmp_path / "detector.jsonl").open()]
+    assert any(e["event"] == "warning" and "RuntimeError" in e["message"] for e in log)
+    prompt(d)
+    assert d._control("record")["ok"]               # detection and recording carry on

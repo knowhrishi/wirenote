@@ -97,7 +97,9 @@ class TrayIndicator:
         # Called with True when a watcher lists the icon, False when that watcher goes away
         self.on_host: Callable[[bool], None] = lambda shown: None
         self.registered = False
-        self.name = f"org.freedesktop.StatusNotifierItem-{os.getpid()}-1"
+        # A tray host exists but refused the icon: a failure, not a desktop without a tray
+        self.register_failed = False
+        self.name =f"org.freedesktop.StatusNotifierItem-{os.getpid()}-1"
         self.state = IndicatorState()
         self.revision = 1
         self._bus_factory = bus_factory
@@ -196,9 +198,21 @@ class TrayIndicator:
             await self._call(self._bus, WATCHER, WATCHER_PATH, WATCHER,
                              "RegisterStatusNotifierItem", "s", [self.name])
         except Exception as e:  # noqa: BLE001
+            self.register_failed = True
             self._fail("register", e)
             return
+        self.register_failed = False
         self._set_registered(True)
+
+    async def _register_again(self) -> None:
+        """A watcher appeared. A refusal is reported through on_host(False), which reads
+        register_failed; at start, start()'s False reports it."""
+        await self._register()
+        if self.register_failed:
+            try:
+                self.on_host(False)
+            except Exception as e:  # noqa: BLE001
+                self._fail("host", e)
 
     def _set_registered(self, on: bool) -> None:
         if on == self.registered:
@@ -215,7 +229,7 @@ class TrayIndicator:
                 and msg.member == "NameOwnerChanged" and len(msg.body) == 3
                 and msg.body[0] == WATCHER and self._bus is not None):
             if msg.body[2]:            # a watcher appeared: the panel started or restarted
-                task = asyncio.ensure_future(self._register())
+                task = asyncio.ensure_future(self._register_again())
                 self._tasks.add(task)
                 task.add_done_callback(self._tasks.discard)
             else:                      # it went away, and with it our listing

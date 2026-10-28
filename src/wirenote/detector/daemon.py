@@ -149,6 +149,7 @@ class Daemon:
         self.indicator: Indicator = NullIndicator()
         self.tray_status: str | None = None         # notify.indicator SHOWN, ...; None: off
         self._tray_task: asyncio.Task | None = None
+        self._tray: TrayIndicator | None = None     # kept to close it at shutdown
         self.make_tray = TrayIndicator              # tests swap in a fake session bus
         self.shortcuts_status: str | None = None    # notify.shortcuts BOUND, ...; None: off
         self.shortcut_keys: dict[str, str] | None = None   # id -> the desktop's key, "" for none
@@ -269,17 +270,30 @@ class Daemon:
         the daemon, and the icon shows once it does."""
         if not self.settings.tray_icon:
             return None
-        tray = self.make_tray()
-        tray.on_menu = self._on_menu
-        tray.on_error = lambda message: self.log.write("warning", message=message)
-        tray.on_host = lambda shown: self._set_tray(indicator.SHOWN if shown else indicator.NO_HOST)
+        try:
+            tray = self.make_tray()
+            tray.on_menu = self._on_menu
+            tray.on_error = lambda message: self.log.write("warning", message=message)
+            tray.on_host = lambda shown: self._set_tray(indicator.SHOWN if shown else self._no_icon(tray))
+        except Exception as e:  # noqa: BLE001 - the tray must never stop the daemon
+            self.log.write("warning", message=f"tray icon: setup failed ({type(e).__name__})")
+            self.indicator = NullIndicator()
+            self.tray_status = indicator.FAILED
+            self.log.write("tray", status=indicator.FAILED)
+            return None
         self.indicator = tray
+        self._tray = tray
         self._tray_task = asyncio.create_task(self._start_tray(tray))
         return self._tray_task
 
+    @staticmethod
+    def _no_icon(tray: TrayIndicator) -> str:
+        """No tray host, or one that refused the icon: only the first is the GNOME hint."""
+        return indicator.FAILED if tray.register_failed or not tray.connected else indicator.NO_HOST
+
     async def _start_tray(self, tray: TrayIndicator) -> None:
         if not await tray.start():
-            self._set_tray(indicator.NO_HOST if tray.connected else indicator.FAILED)
+            self._set_tray(self._no_icon(tray))
 
     def _set_tray(self, status: str) -> None:
         if isinstance(self.indicator, NullIndicator):
