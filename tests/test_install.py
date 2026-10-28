@@ -38,7 +38,7 @@ def test_install_writes_files_and_runs_systemctl(home):
     units = tmp / "xdg_config_home" / "systemd" / "user"
     ui = (units / "wirenote-ui.service").read_text()
     assert "ExecStart=/x/bin/wirenote ui" in ui and "UMask=0077" in ui
-    desktop = (tmp / "xdg_data_home" / "applications" / "wirenote.desktop").read_text()
+    desktop = (tmp / "xdg_data_home" / "applications" / "io.github.knowhrishi.wirenote.desktop").read_text()
     assert "Exec=/x/bin/wirenote open" in desktop and "Name=Wirenote" in desktop
     assert (tmp / "xdg_data_home" / "icons/hicolor/scalable/apps/wirenote.svg").read_text().startswith("<svg")
     assert ran == [["systemctl", "--user", "daemon-reload"],
@@ -78,8 +78,26 @@ def test_package_ships_templates():
     from importlib.resources import files
 
     data = files("wirenote") / "data"
-    for name in ("wirenote.service", "wirenote-ui.service", "wirenote.desktop"):
+    for name in ("wirenote.service", "wirenote-ui.service", "io.github.knowhrishi.wirenote.desktop"):
         assert "@EXEC@" in (data / name).read_text()
+    assert not (data / "wirenote.desktop").is_file()
+
+
+def test_desktop_entry_is_named_for_the_app_id(home):
+    """The shortcuts portal finds Wirenote by its app id: the entry's name must match it,
+    and an entry under the old name would show Wirenote twice in the app menu."""
+    from wirenote import APP_ID
+
+    tmp, ran = home
+    apps = tmp / "xdg_data_home" / "applications"
+    apps.mkdir(parents=True)
+    (apps / "wirenote.desktop").write_text("[Desktop Entry]\n")
+    install.install(dry_run=False)
+    assert (apps / f"{APP_ID}.desktop").is_file() and not (apps / "wirenote.desktop").exists()
+
+    (apps / "wirenote.desktop").write_text("[Desktop Entry]\n")
+    assert install.uninstall(dry_run=False) == 0
+    assert not (apps / f"{APP_ID}.desktop").exists() and not (apps / "wirenote.desktop").exists()
 
 
 def test_cli_setup_install_dry_run(home, capsys):

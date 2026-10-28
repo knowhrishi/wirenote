@@ -251,6 +251,8 @@ def cmd_setup(args) -> int:
         return setup.setup_openai()
     if args.what == "ollama":
         return setup.setup_ollama()
+    if args.what == "shortcuts":
+        return setup.setup_shortcuts()
     return setup.setup_consent(args.text)
 
 
@@ -392,8 +394,9 @@ def main(argv: list[str] | None = None) -> int:
     rep.set_defaults(fn=cmd_reprocess)
     sub.add_parser("templates", help="list the summary templates").set_defaults(fn=cmd_templates)
     st = sub.add_parser("setup", help="install the services, choose the summary backend, "
-                                      "or set the consent line")
-    st.add_argument("what", choices=["install", "uninstall", "ollama", "claude", "openai", "consent"])
+                                      "set the consent line, or turn on global shortcuts")
+    st.add_argument("what", choices=["install", "uninstall", "ollama", "claude", "openai", "consent",
+                                     "shortcuts"])
     st.add_argument("text", nargs="?", help="consent line (for `setup consent`)")
     st.add_argument("--dry-run", action="store_true",
                     help="install/uninstall: show the files and commands, change nothing")

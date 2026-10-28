@@ -82,8 +82,8 @@ subject: a short subject line."""
 EDITABLE = ("consent_line", "summary_backend", "ollama_model", "anthropic_model",
             "openai_url", "openai_model",
             "whisper_model", "whisper_language", "summary_language", "asr_engine",
-            "live_transcript", "default_template")
-SWITCHES = ("live_transcript",)    # the EDITABLE settings that are true or false
+            "live_transcript", "default_template", "global_shortcuts")
+SWITCHES = ("live_transcript", "global_shortcuts")    # the EDITABLE settings that are true or false
 LIVE_READ = 256 * 1024             # most of live.jsonl sent per poll
 BACKENDS = ("ollama", "anthropic", "openai", "none")
 API_KEYS = {"anthropic": "anthropic_api_key", "openai": "openai_api_key"}   # secrets.toml

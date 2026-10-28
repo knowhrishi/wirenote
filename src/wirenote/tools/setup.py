@@ -14,6 +14,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -147,6 +148,42 @@ def setup_consent(text: str | None) -> int:
     return 0
 
 
+SHORTCUTS_WAIT_S = 120.0      # time to answer the desktop's dialog before we stop waiting
+
+
+def _status() -> dict:
+    try:
+        return json.loads((state_dir() / "status.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def setup_shortcuts(sleep=time.sleep, clock=time.monotonic, wait_s: float = SHORTCUTS_WAIT_S) -> int:
+    """docs/usage.md › Keyboard shortcuts: turn global_shortcuts on and have the daemon bind
+    them now, asking the desktop again if it refused before."""
+    set_config_value(config_dir() / "config.toml", "global_shortcuts", "true")
+    print(f"{OK} global_shortcuts = true")
+    reply = control("bind-shortcuts")
+    if not reply.get("ok"):
+        if reply.get("error") == "daemon not running":
+            print(f"{WARN} the background service is not running; it sets up the shortcuts when "
+                  "it starts: systemctl --user start wirenote")
+        else:
+            print(f"{BAD} {reply.get('error')}")
+        return 1
+    print("If your desktop asks, allow the shortcuts. Waiting for its answer…")
+    deadline = clock() + wait_s
+    while (value := _status().get("shortcuts")) is None:
+        if clock() >= deadline:
+            print(f"{WARN} no answer from the desktop yet; `wirenote doctor` shows the result later")
+            return 1
+        sleep(0.5)
+    check = _shortcuts_check(value, True)
+    mark = {"ok": OK, "warn": WARN, "bad": BAD}[check.status]
+    print(f"{mark} {check.message}" + (f": {check.fix}" if check.fix else ""))
+    return 0 if check.status == "ok" else 1
+
+
 # calendar ----------------------------------------------------------------------
 
 def calendar_list() -> int:
@@ -249,7 +286,34 @@ def _ok(cond: bool, ok_msg: str, bad_msg: str, fix: str | None = None,
     return Check("warn" if warn else "bad", bad_msg, fix)
 
 
-def _daemon_checks() -> list[Check]:
+CUSTOM_KEYS = ("bind `wirenote toggle` and `wirenote flag` to keys yourself, as custom "
+               "shortcuts in your desktop's keyboard settings")
+
+
+def _shortcuts_check(value: str | None, on: bool) -> Check | None:
+    """status.json "shortcuts" (notify/shortcuts.py BOUND, ...); recording works without them."""
+    if value == "bound":
+        return Check("ok", "global shortcuts: Ctrl+Alt+R starts or stops recording, Ctrl+Alt+F flags "
+                           "the moment (change the keys in your desktop's keyboard settings)")
+    if value == "denied":
+        return Check("warn", "global shortcuts: the desktop refused them, or they were declined in "
+                             "its dialog", f"{CUSTOM_KEYS}; or ask again: wirenote setup shortcuts")
+    if value == "no portal":
+        # No org.freedesktop.portal.GlobalShortcuts: GNOME before 48, or no xdg-desktop-portal
+        return Check("warn", "global shortcuts: this desktop has no shortcuts portal (KDE Plasma and "
+                             "GNOME 48 or newer have one)", CUSTOM_KEYS)
+    if value == "failed":
+        return Check("warn", "global shortcuts could not be set up",
+                     "see journalctl --user -u wirenote; run wirenote setup install so your desktop "
+                     "knows Wirenote, then wirenote setup shortcuts")
+    if on:
+        return Check("warn", "global shortcuts are on, but the desktop has not answered yet",
+                     "answer its dialog, or see journalctl --user -u wirenote")
+    return None
+
+
+def _daemon_checks(s: Settings | None = None) -> list[Check]:
+    s = s or _settings()
     try:
         status = json.loads((state_dir() / "status.json").read_text())
     except (OSError, ValueError):
@@ -274,6 +338,8 @@ def _daemon_checks() -> list[Check]:
     elif status.get("tray") == "failed":
         out.append(Check("warn", "the tray icon could not start or stopped working",
                          "see journalctl --user -u wirenote; or set tray_icon = false"))
+    if alive and (keys := _shortcuts_check(status.get("shortcuts"), s.global_shortcuts)):
+        out.append(keys)
     failed = (status.get("jobs") or {}).get("failed", 0)
     out.append(_ok(not failed, "no failed note jobs", f"{failed} failed note job(s)",
                    "wirenote jobs", warn=True))
@@ -452,7 +518,7 @@ def _update_checks(s: Settings) -> list[Check]:
 
 
 def checks(s: Settings) -> list[Check]:
-    return [*_daemon_checks(), *_pipewire_checks(), *_model_checks(s), *_summary_checks(s),
+    return [*_daemon_checks(s), *_pipewire_checks(), *_model_checks(s), *_summary_checks(s),
             *_template_checks(s), *_calendar_checks(s), *_desktop_checks(s), *_file_checks(s),
             *_update_checks(s)]
 

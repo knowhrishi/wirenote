@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 
+from .. import APP_ID
 from ..config.secrets import set_config_value
 from ..config.settings import config_dir, data_dir, load_settings, state_dir
 
@@ -40,6 +41,12 @@ def _xdg_data() -> Path:
 
 
 def _desktop_path() -> Path:
+    # Named for the app id: the shortcuts portal finds Wirenote's desktop entry by it
+    return _xdg_data() / "applications" / f"{APP_ID}.desktop"
+
+
+def _old_desktop_path() -> Path:
+    """Its earlier name; left in place it would list Wirenote twice in the app menu."""
     return _xdg_data() / "applications" / "wirenote.desktop"
 
 
@@ -69,7 +76,9 @@ def _systemctl(*args: str) -> Action:
 def plan_install(exe: str) -> list[Action]:
     units = _units_dir()
     actions = [Action("write", str(units / u), _template(u, exe)) for u in UNITS]
-    actions.append(Action("write", str(_desktop_path()), _template("wirenote.desktop", exe)))
+    actions.append(Action("write", str(_desktop_path()), _template(f"{APP_ID}.desktop", exe)))
+    if _old_desktop_path().exists():
+        actions.append(Action("remove", str(_old_desktop_path()), None))
     actions.append(Action("write", str(_icon_path()),
                           (files("wirenote") / "ui" / "static" / "icon.svg").read_text()))
     actions.append(_systemctl("daemon-reload"))
@@ -142,6 +151,7 @@ def uninstall(purge: bool = False, dry_run: bool = False,
     actions = [_systemctl("disable", "--now", *UNITS)]
     actions += [Action("remove", str(_units_dir() / u), None) for u in UNITS]
     actions += [Action("remove", str(_desktop_path()), None),
+                Action("remove", str(_old_desktop_path()), None),
                 Action("remove", str(_icon_path()), None), _systemctl("daemon-reload")]
     folders: list[Path] = []
     if purge:

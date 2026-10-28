@@ -1243,6 +1243,7 @@ async function renderSettings() {
   drawChecks(false);
 
   page.append(setupCard(s));
+  page.append(desktopCard(s));
   page.append(calendarsCard(s));
   try { state.updates = await api("/api/updates"); page.append(updatesCard(state.updates)); } catch { /* shown on the Updates page */ }
 }
@@ -1346,6 +1347,25 @@ function setupCard(s) {
       kv("Speakers", s.diarize ? "told apart" : "not told apart"),
       kv("Audio kept for", `${s.audio_retention_days} days after the note`),
       kv("Notes folder", s.notes_dir)));
+}
+
+// Global shortcuts (docs/usage.md › Keyboard shortcuts). Saved at once: turning them on makes
+// the desktop ask whether to allow them, and that should follow the click.
+function desktopCard(s) {
+  const box = h("input", { type: "checkbox", id: "global-shortcuts" });
+  box.checked = s.editable.global_shortcuts;
+  box.onchange = async () => {
+    try {
+      const r = await api("/api/settings", { method: "PUT", body: { changes: { global_shortcuts: box.checked }, confirm_cloud: false } });
+      Object.assign(s.editable, r.editable);
+      state.doctor = null;
+      toast(box.checked ? "Shortcuts on. If your desktop asks, allow them." : "Shortcuts off.");
+    } catch (e) { box.checked = !box.checked; toast(e.message); }
+  };
+  return h("div", { class: "settings-card" },
+    h("h2", {}, "Desktop"),
+    h("label", { class: "check-row tight", for: "global-shortcuts" }, box, "Global shortcuts"),
+    h("div", { class: "hint below-check" }, "Ctrl+Alt+R starts or stops recording and Ctrl+Alt+F flags the moment, in any app. Your desktop asks once whether to allow them; change the keys in its keyboard settings. KDE Plasma and GNOME 48 or newer have them; elsewhere, Setup check says what to do instead."));
 }
 
 // Calendar links are secret: the page only ever sees an id and the host name.

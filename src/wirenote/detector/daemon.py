@@ -33,7 +33,7 @@ from ..config.secrets import calendar_sources
 from ..config.settings import Settings, config_dir, load_settings
 from ..notify import clipboard
 from ..notify.dbus import CLOSED_BY_CALL, Notifier, watch_sleep
-from ..notify import indicator
+from ..notify import indicator, shortcuts
 from ..notify.indicator import Indicator, IndicatorState, NullIndicator
 from ..notify.tray import TrayIndicator
 from ..process.jobs import ACTIVE, Job, Jobs
@@ -150,6 +150,10 @@ class Daemon:
         self.tray_status: str | None = None         # notify.indicator SHOWN, ...; None: off
         self._tray_task: asyncio.Task | None = None
         self.make_tray = TrayIndicator              # tests swap in a fake session bus
+        self.shortcuts_status: str | None = None    # notify.shortcuts BOUND, ...; None: off
+        self._shortcuts_task: asyncio.Task | None = None
+        self._shortcuts_bus = None
+        self.make_shortcuts_bus = shortcuts.session_bus   # a connection of its own per attempt
         self.jobs = Jobs(state_dir / "jobs.db")
         self.recording: Recording | None = None
         self.spawn = spawn_pw_record                # tests swap in fake pw-record children
@@ -196,6 +200,7 @@ class Daemon:
         except Exception as e:  # noqa: BLE001
             self.log.write("warning", message=f"sleep/wake signals unavailable: {e!r}")
         self._start_indicator()
+        self._start_shortcuts()
         self._recover()
 
         loop = asyncio.get_running_loop()
@@ -219,9 +224,12 @@ class Daemon:
         self.log.write("stop", reason="crash" if crashed else "signal")
         if self._tray_task is not None:
             tasks.append(self._tray_task)
+        if self._shortcuts_task is not None:
+            tasks.append(self._shortcuts_task)
         for task in [*tasks, stop]:
             task.cancel()
         await asyncio.gather(*tasks, stop, return_exceptions=True)
+        self._close_shortcuts_bus()
         if self.recording is not None:
             await self._finish_recording("wirenote stopped")
         for nid in list(self._shown):
@@ -278,6 +286,72 @@ class Daemon:
         self.tray_status = status
         self.log.write("tray", status=status)
         self._write_status(force=True)      # for `wirenote doctor`
+
+    def _start_shortcuts(self) -> asyncio.Task | None:
+        """docs/usage.md › Keyboard shortcuts. Off by default: binding can show a dialog, which
+        should follow something you did. In the background, like the tray: a portal that never
+        answers, or a dialog left open, never delays detection."""
+        if not self.settings.global_shortcuts:
+            return None
+        self._stop_shortcuts()
+        self._shortcuts_task = asyncio.create_task(self._bind_shortcuts())
+        return self._shortcuts_task
+
+    async def _bind_shortcuts(self) -> None:
+        try:
+            bus = await self.make_shortcuts_bus()
+        except Exception as e:  # noqa: BLE001 - no session bus: no shortcuts, nothing else changes
+            self.log.write("warning", message=f"global shortcuts: no session bus ({type(e).__name__})")
+            self._set_shortcuts(shortcuts.FAILED)
+            return
+        self._shortcuts_bus = bus
+
+        def later(status: str) -> None:            # the portal restarted; ignored once replaced
+            if self._shortcuts_bus is bus:
+                self._set_shortcuts(status)
+        reason = await shortcuts.start_shortcuts(
+            bus, self._on_shortcut, on_error=lambda message: self.log.write("warning", message=message),
+            on_status=later)
+        if reason is not None:
+            self._close_shortcuts_bus()            # a refusal leaves no session open
+        self._set_shortcuts(reason or shortcuts.BOUND)
+
+    def _stop_shortcuts(self) -> None:
+        if self._shortcuts_task is not None and not self._shortcuts_task.done():
+            self._shortcuts_task.cancel()
+        self._shortcuts_task = None
+        self._close_shortcuts_bus()
+        if self.shortcuts_status is not None:
+            self._set_shortcuts(None)
+
+    def _close_shortcuts_bus(self) -> None:
+        bus, self._shortcuts_bus = self._shortcuts_bus, None
+        if bus is not None:
+            try:
+                bus.disconnect()                   # ends the portal session and its shortcuts
+            except Exception:  # noqa: BLE001 - already gone
+                pass
+
+    def _apply_shortcuts(self, again: bool = False) -> None:
+        """After a settings reload. `again` (from `wirenote setup shortcuts`) asks the desktop
+        once more after a refusal; a plain reload never repeats a question already answered."""
+        if not self.settings.global_shortcuts:
+            self._stop_shortcuts()
+            return
+        task = self._shortcuts_task
+        if task is None or (again and task.done() and self.shortcuts_status != shortcuts.BOUND):
+            self._start_shortcuts()
+
+    def _set_shortcuts(self, status: str | None) -> None:
+        self.shortcuts_status = status
+        self.log.write("shortcuts", status=status)
+        self._write_status(force=True)      # for `wirenote doctor` and `wirenote setup shortcuts`
+
+    def _on_shortcut(self, shortcut_id: str) -> None:
+        """A global shortcut was pressed (notify/shortcuts.py SHORTCUTS)."""
+        reply = self._control(shortcuts.COMMANDS[shortcut_id])
+        if not reply["ok"]:
+            self.log.write("note", message=f"shortcut {shortcut_id}: {reply['error']}")
 
     # Inputs ----------------------------------------------------------------
 
@@ -867,7 +941,7 @@ class Daemon:
         if cmd == "kick-jobs":           # a job was queued elsewhere: start it now, not in 30 s
             self._worker_kick.set()
             return {"ok": True, "app": None}
-        if cmd == "reload-settings":
+        if cmd in ("reload-settings", "bind-shortcuts"):
             # The UI's Settings page changed config.toml; keep running on the old
             # settings if the file cannot be read.
             try:
@@ -875,8 +949,9 @@ class Daemon:
             except (OSError, ValueError) as e:
                 self.log.write("error", message=f"config.toml not reloaded: {type(e).__name__}")
                 return {"ok": False, "error": "config.toml could not be read; kept the old settings"}
-            self.log.write("control", command="reload-settings")
+            self.log.write("control", command=cmd)
             self._update_kick.set()      # update_check may have been turned on
+            self._apply_shortcuts(again=cmd == "bind-shortcuts")
             return {"ok": True, "app": None}
         return {"ok": False, "error": f"unknown command {cmd!r}"}
 
@@ -895,6 +970,7 @@ class Daemon:
                   "notifications": self.notify_ok,
                   "notification_buttons": self.notifier.has_actions if self.notify_ok else None,
                   "tray": self.tray_status,
+                  "shortcuts": self.shortcuts_status,
                   "recording": self.detector.tracker.recording_key,
                   "recording_id": self.recording.id if self.recording else None,
                   "flags": len(self.recording.flags) if self.recording else 0,

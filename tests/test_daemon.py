@@ -266,6 +266,7 @@ def test_reload_settings_control(tmp_path, monkeypatch):
     d, lines = _fake_daemon(_FakeNotifier())
     d.settings = replace(Settings(), consent_line="old")
     d.detector = type("Det", (), {"tracker": None})()
+    d._apply_shortcuts = lambda again=False: None      # tests/test_shortcuts.py
     assert Daemon._control(d, "reload-settings")["ok"] is True
     assert d.settings.consent_line == "new line"
     cfg.write_text("nonsense = = =\n")

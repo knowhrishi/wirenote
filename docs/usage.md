@@ -27,7 +27,7 @@ Open **Wirenote** from the app menu, or run `wirenote open`. It is a local web p
 - **Action items:** everything agreed across all meetings, yours first.
 - **Ask your meetings:** questions across all past calls, with links to the moments.
 - **Import:** make a note from a recording made elsewhere (a phone, Zoom's own recording, a video). See "Import and export" below.
-- **Settings:** summaries, transcription, the consent line, the Claude key, calendars, a vocabulary of names and terms, remembered voices, the setup check, and updates.
+- **Settings:** summaries, transcription, the consent line, the Claude key, global shortcuts (Desktop), calendars, a vocabulary of names and terms, remembered voices, the setup check, and updates.
 - **Updates:** click the version number at the bottom of the sidebar for what changed in each release. After an update, the app shows what is new once.
 
 Keys: `Ctrl K` or `/` to search, `Space` to play or pause, `←` / `→` to skip 15 s, `F` to flag a moment while recording.
@@ -44,7 +44,7 @@ Something important was just said? While a call records, press `F` in the meetin
 
 `wirenote toggle` does one thing for the whole flow: it stops the recording; or, with a call prompt showing, records it; or else records a meeting without a call app. It fails if several prompts are showing: use `wirenote record`.
 
-**Tip:** bind `wirenote flag` and `wirenote toggle` to a keyboard shortcut in your desktop's settings (System Settings › Keyboard › Shortcuts › Custom, in GNOME and KDE) to flag from any window, even while a call app has the focus.
+**From any window:** turn on the global shortcuts, `Ctrl+Alt+R` and `Ctrl+Alt+F`, to start, stop and flag even while a call app has the focus. See "Keyboard shortcuts" below.
 
 Change the window with `flag_before_s` and `flag_after_s` in `config.toml`.
 
@@ -59,6 +59,29 @@ Wirenote puts a microphone icon in your panel's tray. It turns into a record ico
 KDE Plasma shows the icon as it is. GNOME has no tray of its own: install and turn on the AppIndicator extension (on Ubuntu it is already there; elsewhere the package is usually `gnome-shell-extension-appindicator`). The icon appears as soon as the panel is ready, also when you turn the extension on later or the panel restarts. Without a tray, Wirenote works as before, and `wirenote doctor` says why there is no icon.
 
 To hide the icon, set `tray_icon = false` in `config.toml` and run `systemctl --user restart wirenote`.
+
+## Keyboard shortcuts
+
+Two shortcuts work in any app, even while a call app has the focus:
+
+- `Ctrl+Alt+R` starts or stops recording, like `wirenote toggle`: it stops the recording; or, with a call prompt showing, records it; or else records a meeting without a call app.
+- `Ctrl+Alt+F` flags this moment of the recording, like `wirenote flag`.
+
+They are off until you turn them on, because your desktop asks whether to allow them. Turn them on in **Settings › Desktop**, or run:
+
+```sh
+wirenote setup shortcuts
+```
+
+Your desktop shows a dialog: allow the shortcuts there, or pick other keys. The command waits for your answer and tells you the result. Change the keys later in your desktop's keyboard settings. Wirenote asks for the same shortcuts every time it starts, and your desktop does not ask again once you answered.
+
+They work through the desktop's shortcuts portal (xdg-desktop-portal), which KDE Plasma and GNOME 48 or newer have. `wirenote doctor` says whether they are set up and, if not, why.
+
+**No portal, or you declined?** Bind the commands yourself. Open your desktop's keyboard settings (KDE: System Settings › Keyboard › Shortcuts › Add New › Command or Script; GNOME: Settings › Keyboard › View and Customize Shortcuts › Custom Shortcuts), and add two shortcuts with the commands `wirenote toggle` and `wirenote flag`. This works on any desktop.
+
+**The app-menu entry has a new file name.** `wirenote setup install` now installs it as `io.github.knowhrishi.wirenote.desktop`, the id your desktop knows Wirenote by, and removes the old `wirenote.desktop`. If you pinned Wirenote to a dock or a favorites bar, pin it again.
+
+To turn the shortcuts off, untick them in **Settings › Desktop**, or set `global_shortcuts = false` in `config.toml`.
 
 ## Summaries
 
@@ -239,6 +262,7 @@ wirenote export <id>     # save a call as a Word file (-o file or folder)
 wirenote doctor          # check every part of the setup; --fix makes your files private again
 wirenote setup claude    # summaries with Claude (your key or `ant auth login`)
 wirenote setup openai    # summaries with OpenRouter, OpenAI or a compatible server
+wirenote setup shortcuts # turn on Ctrl+Alt+R and Ctrl+Alt+F in any app
 wirenote setup install   # install or update the services and the app-menu entry
 wirenote setup uninstall # remove them; --purge also deletes recordings and settings
 wirenote update          # install the newest version and restart; --check only checks
