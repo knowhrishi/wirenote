@@ -86,3 +86,39 @@ def test_daemon_open_note_falls_back_to_markdown(runtime, monkeypatch):
     fake = type("D", (), {"settings": type("S", (), {"ui_port": 8765})(), "log": Log()})()
     Daemon._open_note(fake, "20261027-100000-chrome", "/notes/x.md")
     assert opened == ["/notes/x.md"]
+
+
+@pytest.mark.parametrize("unit, systemctl, spawned", [
+    (True, 0, False),                    # the installed service starts it: it outlives a launcher
+    (True, 5, True),                     # systemctl failed: a process of its own instead
+    (True, FileNotFoundError, True),     # no systemctl at all
+    (False, None, True),                 # no unit installed: as before
+])
+def test_ensure_ui_starts_the_installed_service(runtime, monkeypatch, unit, systemctl, spawned):
+    from wirenote.config.settings import config_dir
+
+    if unit:
+        units = config_dir().parent / "systemd" / "user"
+        units.mkdir(parents=True)
+        (units / "wirenote-ui.service").write_text("[Service]\n")
+    started = []
+    answers = iter([None, os.getuid(), os.getuid()])      # nothing yet, then ours
+    monkeypatch.setattr(launch, "listener_uid", lambda port: next(answers))
+    monkeypatch.setattr(launch, "_spawn_ui", lambda: started.append("spawn"))
+
+    def fake_systemctl(argv):
+        started.append(argv)
+        if isinstance(systemctl, type):
+            raise systemctl("systemctl")
+        return systemctl
+    monkeypatch.setattr(launch, "_systemctl", fake_systemctl)
+    assert launch.ensure_ui(8765) is True
+    assert (["systemctl", "--user", "start", "wirenote-ui.service"] in started) is unit
+    assert ("spawn" in started) is spawned
+
+
+def test_ensure_ui_starts_nothing_when_a_server_answers(runtime, monkeypatch):
+    monkeypatch.setattr(launch, "listener_uid", lambda port: os.getuid() + 1)
+    monkeypatch.setattr(launch, "_spawn_ui", lambda: pytest.fail("spawned"))
+    monkeypatch.setattr(launch, "_systemctl", lambda argv: pytest.fail("started"))
+    assert launch.ensure_ui(8765) is False

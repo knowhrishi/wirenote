@@ -27,10 +27,10 @@ from ..capture.recorder import add_flag, read_flags, read_manifest, write_flags,
 from ..config.secrets import (calendar_sources, load_secrets, save_secrets, with_config_value,
                               write_config_atomic)
 from ..config.settings import DEFAULT_CONFIG_TOML, Settings, config_dir, parse_settings
-from ..meetings.catalog import load_calls
+from ..meetings.catalog import attendee_pairs, load_calls
 from ..meetings.people import (MAX_NAME, build_people, is_person, link, load_aliases, person_key, resolve,
                                save_aliases)
-from ..meetings.me import infer_addresses, my_addresses
+from ..meetings.me import infer_addresses, my_addresses, my_names, without_me
 from ..meetings.related import event_key, prep_brief, related_calls
 from ..config.vocabulary import load_vocabulary, save_vocabulary
 from ..process.engines import ENGINES, OVERRIDES, check_overrides
@@ -89,9 +89,11 @@ subject: a short subject line."""
 EDITABLE = ("consent_line", "summary_backend", "ollama_model", "anthropic_model",
             "openai_url", "openai_model",
             "whisper_model", "whisper_language", "summary_language", "asr_engine",
-            "live_transcript", "default_template", "my_emails")
+            "live_transcript", "default_template", "my_emails", "global_shortcuts",
+            "launcher_search")
 LISTS = ("my_emails",)             # the EDITABLE settings that are lists of text
-SWITCHES = ("live_transcript",)    # the EDITABLE settings that are true or false
+# The EDITABLE settings that are true or false
+SWITCHES = ("live_transcript", "global_shortcuts", "launcher_search")
 LIVE_READ = 256 * 1024             # most of live.jsonl sent per poll
 BACKENDS = ("ollama", "anthropic", "openai", "none")
 API_KEYS = {"anthropic": "anthropic_api_key", "openai": "openai_api_key"}   # secrets.toml
@@ -192,6 +194,9 @@ class Store:
         self._mix_locks: dict[str, threading.Lock] = {}
         self._upcoming: tuple[float, list] = (0.0, [])
         self._calls_cache: tuple[float, int, list | None] = (0.0, 0, None)
+        # The launcher's quick search: per call, what it matches, keyed by file times
+        self._quick: dict[str, tuple[tuple, dict]] = {}
+        self._quick_speakers: dict[str, tuple[int | None, list[str]]] = {}
 
     # Paths -----------------------------------------------------------------
 
@@ -267,22 +272,125 @@ class Store:
                                        if not a.get("done") and a.get("owner") == "Me"),
                 "preview": ((s or {}).get("summary") or [""])[0]}
 
-    def calls(self, query: str = "") -> list[dict]:
+    def calls(self, query: str = "", deep: bool = True, limit: int | None = None) -> list[dict]:
+        """Every call, newest first; with a query, those that match it.
+
+        deep=False is the launcher's search: title, people and summary only, never your notes
+        or the transcript, stopping after limit hits. Its results are short ({id, title,
+        started, attendees, speakers, match}), and what it reads is kept until the files
+        change, so the next key press costs a few stat calls per meeting."""
+        q = query.strip().lower()
+        if q and not deep:
+            return self._quick_calls(q, limit)
         recording_id = self.status().get("recording_id")
         q = query.strip().lower()
         out = []
         for d in self._rec_dirs():
             try:
                 brief = self._brief(d, recording_id)
-            except (OSError, ValueError, KeyError):
-                continue
-            if q:
-                hit = self._search(d, brief, q)
+                if q:
+                    hit = self._search(d, brief, q)
+                    if hit is None:
+                        continue
+                    brief["match"] = hit
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                continue        # a broken call folder hides that call, not the list
+            out.append(brief)
+            if limit is not None and len(out) >= limit:
+                break
+        return out
+
+    def quick_brief(self, rec_id: str) -> dict:
+        """One call as the launcher shows it; NotFound for an id that is not a call."""
+        d = self.rec_dir(rec_id)
+        try:
+            entry = self._quick_entry(d)
+            found = {k: entry[k] for k in ("id", "title", "started")}
+            found["attendees"] = self._quick_invitees(entry, {})
+            found["speakers"] = self._quick_people(d)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+            raise NotFound(rec_id) from e
+        return found
+
+    def _quick_calls(self, q: str, limit: int | None) -> list[dict]:
+        out = []
+        me: dict = {}           # your addresses, worked out once per search when a hit has invitees
+        for d in self._rec_dirs():
+            try:
+                entry = self._quick_entry(d)
+                hit = _quick_hit(entry, q)
+                if hit is None:
+                    # Speaker names come from transcript.json: the dearest file, read last
+                    hit = next(({"where": "people", "text": n} for n in self._quick_people(d)
+                                if q in n.lower()), None)
                 if hit is None:
                     continue
-                brief["match"] = hit
-            out.append(brief)
+                found = {k: entry[k] for k in ("id", "title", "started")}
+                found["attendees"] = self._quick_invitees(entry, me)
+                found["speakers"] = [] if found["attendees"] else self._quick_people(d)
+                found["match"] = hit
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                continue        # a broken call folder hides that call, not the list
+            out.append(found)
+            if limit is not None and len(out) >= limit:
+                break
         return out
+
+    def _quick_entry(self, d: Path) -> dict:
+        """Title, start, invitees and summary text of one call, read once per change."""
+        key = tuple(_mtime_ns(d / name) for name in ("manifest.json", SUMMARY))
+        cached = self._quick.get(d.name)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        m = _read_json(d / "manifest.json")
+        if not isinstance(m, dict):
+            raise ValueError("bad manifest")
+        s = _read_json(d / SUMMARY)
+        s = s if isinstance(s, dict) else None
+        cal = m.get("calendar") or {}
+        texts = [item for key_ in ("summary", "decisions", "open_questions")
+                 for item in (s or {}).get(key_) or []]
+        texts += [item for items in ((s or {}).get("sections") or {}).values() for item in items or []]
+        texts += [a.get("task") for a in (s or {}).get("action_items") or [] if isinstance(a, dict)]
+        entry = {"id": m["id"], "title": self._title(m, s), "started": m.get("started"),
+                 "attendees": [a for a in cal.get("attendees") or [] if isinstance(a, str)],
+                 "invited": attendee_pairs(cal),
+                 "texts": [t for t in texts if isinstance(t, str)]}
+        self._quick[d.name] = (key, entry)
+        return entry
+
+    def _quick_invitees(self, entry: dict, me: dict) -> list[str]:
+        """The invitees the launcher shows: you left out, as on the People page. me holds
+        your addresses and names once worked out; a call without invitees needs neither."""
+        if not entry["invited"]:
+            return []
+        if not me:
+            me.update(zip(("mine", "names"), self._quick_me()))
+        return [n for n, _ in without_me(entry["invited"], me["mine"], me["names"])]
+
+    def _quick_me(self) -> tuple[set[str], set[str]]:
+        """Your addresses (meetings/me.py) and the names they go by, from every call's
+        invitation: the guess needs all of them. Read once per change, like the rest."""
+        invited = []
+        for d in self._rec_dirs():
+            try:
+                invited.append(self._quick_entry(d)["invited"])
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                continue
+        mine = my_addresses([_Invitation(pairs) for pairs in invited], self.settings)
+        return mine, (my_names(invited, mine) if mine else set())
+
+    def _quick_people(self, d: Path) -> list[str]:
+        key = _mtime_ns(d / TRANSCRIPT)
+        cached = self._quick_speakers.get(d.name)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        tr = _read_json(d / TRANSCRIPT, {}) if key is not None else {}
+        speakers = tr.get("speakers") if isinstance(tr, dict) else None
+        names = [display_name(l, speakers) for l in sorted(speakers)] if isinstance(speakers, dict) else []
+        names = [n for n in names if isinstance(n, str)]
+        self._quick_speakers[d.name] = (key, names)
+        return names
 
     def _search(self, d: Path, brief: dict, q: str) -> dict | None:
         if q in brief["title"].lower():
@@ -842,7 +950,17 @@ class Store:
                 "anthropic_key_set": bool(secrets.get("anthropic_api_key")
                                           or os.environ.get("ANTHROPIC_API_KEY")),
                 "openai_key_set": bool(secrets.get("openai_api_key")),
+                "shortcut_keys": self._shortcut_keys(),
                 "cloud_disclosure": CLOUD_DISCLOSURE}
+
+    def _shortcut_keys(self) -> dict[str, str] | None:
+        """The keys the desktop really set for the global shortcuts (status.json), or None
+        until it allowed them; Settings › Desktop shows these instead of the ones asked for."""
+        st = self.status()
+        keys = st.get("shortcut_keys")
+        if st.get("shortcuts") != "bound" or not isinstance(keys, dict):
+            return None
+        return {str(k): v for k, v in keys.items() if isinstance(v, str)}
 
     def update_settings(self, changes: dict, confirm_cloud: bool) -> dict:
         """Change some of EDITABLE in config.toml; the file is untouched unless all are valid."""
@@ -1135,6 +1253,31 @@ class Store:
         calls = load_calls(self.root)
         self._calls_cache = (time.monotonic(), stamp, calls)
         return calls
+
+
+@dataclasses.dataclass(frozen=True)
+class _Invitation:
+    """What meetings/me.py reads of a call: its invitees as (name, email) pairs."""
+    attendees: tuple[tuple[str, str], ...]
+
+
+def _mtime_ns(path: Path) -> int | None:
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return None
+
+
+def _quick_hit(entry: dict, q: str) -> dict | None:
+    if isinstance(entry["title"], str) and q in entry["title"].lower():
+        return {"where": "title", "text": entry["title"]}
+    for name in entry["attendees"]:
+        if q in name.lower():
+            return {"where": "people", "text": name}
+    for text in entry["texts"]:
+        if q in text.lower():
+            return {"where": "summary", "text": text}
+    return None
 
 
 def _seconds(hhmmss: str) -> float:

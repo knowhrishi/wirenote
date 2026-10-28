@@ -27,7 +27,7 @@ Open **Wirenote** from the app menu, or run `wirenote open`. It is a local web p
 - **Action items:** everything agreed across all meetings, yours first.
 - **Ask your meetings:** questions across all past calls, with links to the moments.
 - **Import:** make a note from a recording made elsewhere (a phone, Zoom's own recording, a video). See "Import and export" below.
-- **Settings:** summaries, transcription, the consent line, the Claude key, calendars, a vocabulary of names and terms, remembered voices, the setup check, and updates.
+- **Settings:** summaries, transcription, the consent line, the Claude key, global shortcuts (Desktop), calendars, a vocabulary of names and terms, remembered voices, the setup check, and updates.
 - **Updates:** click the version number at the bottom of the sidebar for what changed in each release. After an update, the app shows what is new once.
 
 Keys: `Ctrl K` or `/` to search, `Space` to play or pause, `←` / `→` to skip 15 s, `F` to flag a moment while recording.
@@ -44,9 +44,78 @@ Something important was just said? While a call records, press `F` in the meetin
 
 `wirenote toggle` does one thing for the whole flow: it stops the recording; or, with a call prompt showing, records it; or else records a meeting without a call app. It fails if several prompts are showing: use `wirenote record`.
 
-**Tip:** bind `wirenote flag` and `wirenote toggle` to a keyboard shortcut in your desktop's settings (System Settings › Keyboard › Shortcuts › Custom, in GNOME and KDE) to flag from any window, even while a call app has the focus.
+**From any window:** turn on the global shortcuts, `Ctrl+Alt+R` and `Ctrl+Alt+F`, to start, stop and flag even while a call app has the focus. See "Keyboard shortcuts" below.
 
 Change the window with `flag_before_s` and `flag_after_s` in `config.toml`.
+
+## Tray icon
+
+Wirenote puts a microphone icon in your panel's tray. It turns into a record icon while a call records, and asks for your attention while a call prompt is showing. Hover it to see what records and since when. On KDE Plasma, click it for a short menu. On GNOME's AppIndicator extension, a click opens Wirenote and a right click opens the menu:
+
+- **While recording:** what records and since when, then **Flag this moment**, **Stop** and **Open Wirenote**.
+- **While a call prompt shows:** **Record** the call, or **Ignore** it, like the notification's buttons.
+- **Otherwise:** **Record a meeting** (one without a call app, like `wirenote record --now`) and **Open Wirenote**.
+
+KDE Plasma shows the icon as it is. GNOME has no tray of its own: install and turn on the AppIndicator extension (on Ubuntu it is already there; elsewhere the package is usually `gnome-shell-extension-appindicator`). The icon appears as soon as the panel is ready, also when you turn the extension on later or the panel restarts. Without a tray, Wirenote works as before, and `wirenote doctor` says why there is no icon.
+
+To hide the icon, set `tray_icon = false` in `config.toml` and run `systemctl --user restart wirenote`.
+
+## Keyboard shortcuts
+
+Two shortcuts work in any app, even while a call app has the focus:
+
+- `Ctrl+Alt+R` starts or stops recording, like `wirenote toggle`: it stops the recording; or, with a call prompt showing, records it; or else records a meeting without a call app.
+- `Ctrl+Alt+F` flags this moment of the recording, like `wirenote flag`.
+
+A second `Ctrl+Alt+R` within 1.5 seconds counts as the same press, so one press never starts and stops a recording at once.
+
+They are off until you turn them on, because your desktop asks whether to allow them. Turn them on in **Settings › Desktop**, or run:
+
+```sh
+wirenote setup shortcuts
+```
+
+Your desktop shows a dialog: allow the shortcuts there, or pick other keys. The command waits for your answer and shows the keys your desktop set. If the desktop allowed the shortcuts but set no keys, it says so; set them in your desktop's keyboard settings, or use the commands below. Change the keys later in your desktop's keyboard settings; **Settings › Desktop** then shows the keys your desktop set. Wirenote asks for the same shortcuts every time it starts, and your desktop does not ask again once you answered.
+
+They work through the desktop's shortcuts portal (xdg-desktop-portal), which KDE Plasma and GNOME 48 or newer have. `wirenote doctor` says whether they are set up and, if not, why.
+
+**No portal, or you declined?** Bind the commands yourself. Open your desktop's keyboard settings (KDE: System Settings › Keyboard › Shortcuts › Add New › Command or Script; GNOME: Settings › Keyboard › View and Customize Shortcuts › Custom Shortcuts), and add two shortcuts with the commands `wirenote toggle` and `wirenote flag`. This works on any desktop.
+
+**The app-menu entry has a new file name.** `wirenote setup install` now installs it as `io.github.knowhrishi.wirenote.desktop`, the id your desktop knows Wirenote by, and removes the old `wirenote.desktop`. If you pinned Wirenote to a dock or a favorites bar, pin it again.
+
+To turn the shortcuts off, untick them in **Settings › Desktop**, or set `global_shortcuts = false` in `config.toml`. Wirenote does not watch `config.toml`, so after you change it there yourself, run `systemctl --user restart wirenote`.
+
+## Find a meeting from the launcher
+
+Type a few letters of a meeting in your desktop's launcher, KRunner on KDE Plasma (`Alt+Space`) or the search in GNOME's Activities overview, and pick the meeting to open it in the meetings app.
+
+- The launcher matches the meeting's title, its people and its summary, not the transcript. Search the transcript in the meetings app.
+- It starts after 3 characters and shows at most 8 meetings, newest first, each with its date and people. You are left out of the people, as on the People page (see "People").
+- On GNOME, press Enter on Wirenote's icon to open the meetings app with your search in its search box.
+
+What you type stays on your computer and is never written to a log. The search runs only while you use it: it starts with your first search and stops a minute after your last.
+
+**It is off until you turn it on.** The launcher shows meeting titles and the names of the people in them as you type, so anyone who sees your screen, for example while you share it, sees them too. Turn it on with:
+
+```sh
+wirenote setup search
+```
+
+This sets `launcher_search = true` in `config.toml` and installs the two files the launcher needs. The switch "Find meetings from the launcher" in **Settings › Desktop** turns the setting on or off too, but the first time you still run `wirenote setup search` once, so the files are there.
+
+**KDE Plasma:** it works after `wirenote setup search`. If KRunner does not show meetings at once, run `kquitapp6 krunner`, or log out and in.
+
+**GNOME:** GNOME reads search providers only from system folders, so this needs one step with `sudo`. After `wirenote setup search`, run:
+
+```sh
+sudo install -Dm644 "$(wirenote search-provider --gnome-ini)" /usr/local/share/gnome-shell/search-providers/io.github.knowhrishi.wirenote.search-provider.ini
+```
+
+Then log out and in.
+
+**To turn it off,** run `wirenote setup search --off`, or untick "Find meetings from the launcher" in **Settings › Desktop**. Either way the launcher finds no meetings from that moment. `setup search --off` also removes the files; after the Settings switch, `wirenote setup install` removes them the next time it runs (`wirenote update` runs it for you). Your desktop has its own switch as well: on KDE Plasma, untick Wirenote in System Settings › Search › Plasma Search; on GNOME, in Settings › Search. On GNOME, `wirenote setup search --off` and `wirenote setup uninstall` leave the system file in place and show the `sudo rm` command that removes it.
+
+`wirenote doctor` says whether the launcher search is on and whether its files match the setting. If the session bus could not be told about the change, `wirenote setup search` says so; the launcher then follows after your next login.
 
 ## Summaries
 
@@ -246,6 +315,8 @@ wirenote export <id>     # save a call as a Word file (-o file or folder)
 wirenote doctor          # check every part of the setup; --fix makes your files private again
 wirenote setup claude    # summaries with Claude (your key or `ant auth login`)
 wirenote setup openai    # summaries with OpenRouter, OpenAI or a compatible server
+wirenote setup shortcuts # turn on Ctrl+Alt+R and Ctrl+Alt+F in any app
+wirenote setup search    # find meetings from KRunner or GNOME search; --off turns it off
 wirenote setup install   # install or update the services and the app-menu entry
 wirenote setup uninstall # remove them; --purge also deletes recordings and settings
 wirenote update          # install the newest version and restart; --check only checks

@@ -12,8 +12,10 @@ import datetime as dt
 import getpass
 import json
 import os
+import shlex
 import shutil
 import subprocess
+import time
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -147,6 +149,43 @@ def setup_consent(text: str | None) -> int:
     return 0
 
 
+# docs/dev/PLAN.md › Defaults › Shortcut setup wait: time to answer the desktop's dialog
+SHORTCUTS_WAIT_S = 120.0
+
+
+def _status() -> dict:
+    try:
+        return json.loads((state_dir() / "status.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def setup_shortcuts(sleep=time.sleep, clock=time.monotonic, wait_s: float = SHORTCUTS_WAIT_S) -> int:
+    """docs/usage.md › Keyboard shortcuts: turn global_shortcuts on and have the daemon bind
+    them now, asking the desktop again if it refused before."""
+    set_config_value(config_dir() / "config.toml", "global_shortcuts", "true")
+    print(f"{OK} global_shortcuts = true")
+    reply = control("bind-shortcuts")
+    if not reply.get("ok"):
+        if reply.get("error") == "daemon not running":
+            print(f"{WARN} the background service is not running; it sets up the shortcuts when "
+                  "it starts: systemctl --user start wirenote")
+        else:
+            print(f"{BAD} {reply.get('error')}")
+        return 1
+    print("If your desktop asks, allow the shortcuts. Waiting for its answer…")
+    deadline = clock() + wait_s
+    while (value := _status().get("shortcuts")) is None:
+        if clock() >= deadline:
+            print(f"{WARN} no answer from the desktop yet; `wirenote doctor` shows the result later")
+            return 1
+        sleep(0.5)
+    check = _shortcuts_check(value, True, _status().get("shortcut_keys"))
+    mark = {"ok": OK, "warn": WARN, "bad": BAD}[check.status]
+    print(f"{mark} {check.message}" + (f": {check.fix}" if check.fix else ""))
+    return 0 if check.status == "ok" else 1
+
+
 # calendar ----------------------------------------------------------------------
 
 def calendar_list() -> int:
@@ -249,7 +288,49 @@ def _ok(cond: bool, ok_msg: str, bad_msg: str, fix: str | None = None,
     return Check("warn" if warn else "bad", bad_msg, fix)
 
 
-def _daemon_checks() -> list[Check]:
+CUSTOM_KEYS = ("bind `wirenote toggle` and `wirenote flag` to keys yourself, as custom "
+               "shortcuts in your desktop's keyboard settings")
+
+
+SHORTCUT_ACTS = {"toggle-recording": "starts or stops recording", "flag-moment": "flags the moment"}
+SHORTCUT_NAMES = {"toggle-recording": "starting and stopping", "flag-moment": "flagging"}
+
+
+def _shortcuts_check(value: str | None, on: bool, keys: dict | None = None) -> Check | None:
+    """status.json "shortcuts" (notify/shortcuts.py BOUND, ...) and "shortcut_keys", the keys
+    the desktop really set; recording works without them."""
+    if value == "bound":
+        keys = keys if isinstance(keys, dict) else {}
+        have = [f"{keys[sid]} {act}" for sid, act in SHORTCUT_ACTS.items() if keys.get(sid)]
+        if not have:
+            return Check("warn", "global shortcuts are allowed, but no keys are set",
+                         f"set them in your desktop's keyboard settings; or {CUSTOM_KEYS}")
+        missing = [name for sid, name in SHORTCUT_NAMES.items() if not keys.get(sid)]
+        if missing:
+            return Check("warn", f"global shortcuts: {', '.join(have)}; no key for "
+                                 f"{' or '.join(missing)}",
+                         "set it in your desktop's keyboard settings")
+        return Check("ok", f"global shortcuts: {', '.join(have)} (change them in your desktop's "
+                           "keyboard settings)")
+    if value == "denied":
+        return Check("warn", "global shortcuts: the desktop refused them, or they were declined in "
+                             "its dialog", f"{CUSTOM_KEYS}; or ask again: wirenote setup shortcuts")
+    if value == "no portal":
+        # No org.freedesktop.portal.GlobalShortcuts: GNOME before 48, or no xdg-desktop-portal
+        return Check("warn", "global shortcuts: this desktop has no shortcuts portal (KDE Plasma and "
+                             "GNOME 48 or newer have one)", CUSTOM_KEYS)
+    if value == "failed":
+        return Check("warn", "global shortcuts could not be set up",
+                     "see journalctl --user -u wirenote; run wirenote setup install so your desktop "
+                     "knows Wirenote, then wirenote setup shortcuts")
+    if on:
+        return Check("warn", "global shortcuts are on, but the desktop has not answered yet",
+                     "answer its dialog, or see journalctl --user -u wirenote")
+    return None
+
+
+def _daemon_checks(s: Settings | None = None) -> list[Check]:
+    s = s or _settings()
     try:
         status = json.loads((state_dir() / "status.json").read_text())
     except (OSError, ValueError):
@@ -263,6 +344,22 @@ def _daemon_checks() -> list[Check]:
     if status.get("notifications") and status.get("notification_buttons") is False:
         out.append(Check("warn", "notifications here have no buttons: record from the Wirenote "
                                  "window or with `wirenote record`"))
+    # notify/indicator.py SHOWN, NO_HOST, FAILED; recording works without the icon. Only while
+    # the daemon runs: a stopped one shows no icon, whatever it wrote last.
+    tray = status.get("tray") if alive else None
+    if tray == "shown":
+        out.append(Check("ok", "tray icon shown"))
+    elif tray == "no host":
+        # No org.kde.StatusNotifierWatcher on the session bus
+        out.append(Check("warn", "no tray icon: this desktop has no tray for it",
+                         "on GNOME, install and turn on the AppIndicator extension; the icon "
+                         "appears then. Or set tray_icon = false"))
+    elif tray == "failed":
+        out.append(Check("warn", "the tray icon could not start or stopped working",
+                         "see journalctl --user -u wirenote; or set tray_icon = false"))
+    found = _shortcuts_check(status.get("shortcuts"), s.global_shortcuts, status.get("shortcut_keys"))
+    if alive and found:
+        out.append(found)
     failed = (status.get("jobs") or {}).get("failed", 0)
     out.append(_ok(not failed, "no failed note jobs", f"{failed} failed note job(s)",
                    "wirenote jobs", warn=True))
@@ -392,7 +489,39 @@ def _desktop_checks(s: Settings) -> list[Check]:
     if s.consent_line and "KDE" not in desktop.upper() and not available_tools():
         out.append(Check("warn", "no clipboard tool for the consent line",
                          "install wl-clipboard (Wayland) or xclip (X11)"))
-    return out
+    return out + _search_checks(desktop.upper(), s.launcher_search)
+
+
+def _search_checks(desktop: str, on: bool) -> list[Check]:
+    """docs/usage.md › Find a meeting from the launcher: off unless launcher_search is on.
+    KRunner reads the plugin from your data folder; GNOME reads its provider file only from a
+    system folder."""
+    from ..notify import search_provider as sp
+    from . import install
+
+    started_by_bus = install._dbus_service_path().is_file()
+    if not on:
+        if started_by_bus or install._krunner_path().is_file():
+            return [Check("warn", "the launcher search is off, but its files are still installed",
+                          "wirenote setup search --off")]
+        if "KDE" in desktop or "GNOME" in desktop:
+            return [Check("ok", "launcher search off (turn it on: wirenote setup search)")]
+        return []
+    if "KDE" in desktop:
+        if install._krunner_path().is_file() and started_by_bus:
+            return [Check("ok", "KRunner finds your meetings")]
+        return [Check("warn", "KRunner does not search your meetings yet", "wirenote setup search")]
+    if "GNOME" not in desktop:
+        return []
+    found = next((d / sp.GNOME_INI for d in sp.GNOME_PROVIDER_DIRS if (d / sp.GNOME_INI).is_file()), None)
+    if found is None:
+        target = sp.GNOME_PROVIDER_DIRS[0] / sp.GNOME_INI
+        return [Check("warn", "GNOME's search does not list your meetings yet; run this, then log out and in",
+                      f"sudo install -Dm644 {shlex.quote(str(sp.gnome_ini_path()))} {shlex.quote(str(target))}")]
+    if not started_by_bus:
+        return [Check("warn", f"GNOME's search knows Wirenote ({found}), but cannot start it",
+                      "wirenote setup search")]
+    return [Check("ok", f"GNOME's search finds your meetings ({found})")]
 
 
 def _file_checks(s: Settings) -> list[Check]:
@@ -441,7 +570,7 @@ def _update_checks(s: Settings) -> list[Check]:
 
 
 def checks(s: Settings) -> list[Check]:
-    return [*_daemon_checks(), *_pipewire_checks(), *_model_checks(s), *_summary_checks(s),
+    return [*_daemon_checks(s), *_pipewire_checks(), *_model_checks(s), *_summary_checks(s),
             *_template_checks(s), *_calendar_checks(s), *_desktop_checks(s), *_file_checks(s),
             *_update_checks(s)]
 

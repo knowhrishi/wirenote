@@ -14,6 +14,7 @@ import os
 import re
 import secrets
 import subprocess
+import sys
 import time
 from pathlib import Path
 from urllib.parse import quote
@@ -75,6 +76,51 @@ def login_url(port: int, route: str = "#/") -> str:
 def _xdg_open(target: str) -> None:
     subprocess.Popen(["xdg-open", target], start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+UI_UNIT = "wirenote-ui.service"
+
+
+def _ui_unit_installed() -> bool:
+    from ..config.settings import config_dir
+
+    return (config_dir().parent / "systemd" / "user" / UI_UNIT).is_file()
+
+
+def _systemctl(argv: list[str]) -> int:
+    return subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL, timeout=15, check=False).returncode
+
+
+def _spawn_ui() -> None:
+    subprocess.Popen([sys.executable, "-m", "wirenote.cli", "ui"], start_new_session=True,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL)
+
+
+def _start_ui() -> None:
+    """Through its systemd unit when `setup install` put one there: a child of a launcher's
+    process (the search provider runs in a unit of its own that the bus stops) would end with
+    it. Without the unit, or if systemctl fails, as a process of its own."""
+    if _ui_unit_installed():
+        try:
+            if _systemctl(["systemctl", "--user", "start", UI_UNIT]) == 0:
+                return
+        except (OSError, subprocess.SubprocessError):
+            pass
+    _spawn_ui()
+
+
+def ensure_ui(port: int) -> bool:
+    """Start this user's web app if nothing listens on port. True once it is ours that answers
+    there; False for nothing, or someone else's server, which must never get the login link."""
+    if listener_uid(port) is None:
+        _start_ui()
+        for _ in range(50):
+            if listener_uid(port) is not None:
+                break
+            time.sleep(0.1)
+    return listener_uid(port) == os.getuid()
 
 
 def open_ui(port: int, route: str = "#/", fallback: str | None = None) -> bool:

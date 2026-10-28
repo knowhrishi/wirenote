@@ -251,6 +251,10 @@ def cmd_setup(args) -> int:
         return setup.setup_openai()
     if args.what == "ollama":
         return setup.setup_ollama()
+    if args.what == "shortcuts":
+        return setup.setup_shortcuts()
+    if args.what == "search":
+        return install.search(not args.off, dry_run=args.dry_run)
     return setup.setup_consent(args.text)
 
 
@@ -271,26 +275,25 @@ def cmd_ui(args) -> int:
 
 def cmd_open(args) -> int:
     """Open the web UI through a one-time login link, starting it if needed."""
-    import subprocess
-    import time
-
     from .ui import launch
 
     port = _settings().ui_port
-    if launch.listener_uid(port) is None:
-        subprocess.Popen([sys.executable, "-m", "wirenote.cli", "ui"], start_new_session=True,
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL)
-        for _ in range(50):
-            if launch.listener_uid(port) is not None:
-                break
-            time.sleep(0.1)
-    if launch.listener_uid(port) != os.getuid():
+    if not launch.ensure_ui(port):
         print(f"wirenote: port {port} belongs to another user or nothing answers there; "
               "not opening it. Set ui_port in config.toml to a free port.", file=sys.stderr)
         return 1
     launch.open_ui(port, f"#/call/{args.call}" if args.call else "#/")
     return 0
+
+
+def cmd_search_provider(args) -> int:
+    """KRunner and GNOME search; the session bus starts this (notify/search_provider.py)."""
+    from .notify import search_provider
+
+    if args.gnome_ini:
+        print(search_provider.gnome_ini_path())
+        return 0
+    return search_provider.main(_settings(), state_dir())
 
 
 def cmd_doctor(args) -> int:
@@ -392,11 +395,15 @@ def main(argv: list[str] | None = None) -> int:
     rep.set_defaults(fn=cmd_reprocess)
     sub.add_parser("templates", help="list the summary templates").set_defaults(fn=cmd_templates)
     st = sub.add_parser("setup", help="install the services, choose the summary backend, "
-                                      "or set the consent line")
-    st.add_argument("what", choices=["install", "uninstall", "ollama", "claude", "openai", "consent"])
+                                      "set the consent line, or turn on global shortcuts or "
+                                      "the launcher search")
+    st.add_argument("what", choices=["install", "uninstall", "ollama", "claude", "openai", "consent",
+                                     "shortcuts", "search"])
     st.add_argument("text", nargs="?", help="consent line (for `setup consent`)")
     st.add_argument("--dry-run", action="store_true",
-                    help="install/uninstall: show the files and commands, change nothing")
+                    help="install/uninstall/search: show the files and commands, change nothing")
+    st.add_argument("--off", action="store_true",
+                    help="search: turn the launcher search off and remove its files")
     st.add_argument("--purge", action="store_true",
                     help="uninstall: also delete recordings, transcripts and settings")
     st.set_defaults(fn=cmd_setup)
@@ -431,6 +438,9 @@ def main(argv: list[str] | None = None) -> int:
     proc = sub.add_parser("process", help=argparse.SUPPRESS)
     proc.add_argument("job", type=int)
     proc.set_defaults(fn=cmd_process)
+    sp = sub.add_parser("search-provider", help=argparse.SUPPRESS)
+    sp.add_argument("--gnome-ini", action="store_true", help="print where the GNOME search provider file is")
+    sp.set_defaults(fn=cmd_search_provider)
     dump = sub.add_parser("dump-streams", help="probe PipeWire capture streams (test fixtures)",
                           add_help=False)
     dump.add_argument("rest", nargs=argparse.REMAINDER)

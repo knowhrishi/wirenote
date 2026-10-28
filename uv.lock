@@ -1134,7 +1134,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=2.3.0" },
-    { name = "dbus-fast", specifier = ">=2.0" },
+    { name = "dbus-fast", specifier = ">=4.0" },
     { name = "faster-whisper", specifier = ">=1.2.1" },
     { name = "icalendar", specifier = ">=7.3.0" },
     { name = "recurring-ical-events", specifier = ">=3.8.2" },

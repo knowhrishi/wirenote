@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Wirenote
+Comment=Find your meetings by title, people or summary
+Icon=wirenote
+Type=Service
+X-KDE-PluginInfo-Name=io.github.knowhrishi.wirenote
+X-KDE-PluginInfo-EnabledByDefault=true
+X-Plasma-API=DBus2
+X-Plasma-DBusRunner-Service=io.github.knowhrishi.wirenote.Search
+X-Plasma-DBusRunner-Path=/runner
+X-Plasma-Runner-Min-Letter-Count=3

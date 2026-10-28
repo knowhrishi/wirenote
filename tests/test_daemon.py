@@ -9,6 +9,8 @@ import datetime as dt
 import json
 from dataclasses import replace
 
+import pytest
+
 from wirenote.config.apps import DEFAULT_APPS_TOML, parse_apps
 from wirenote.config.settings import Settings
 from wirenote.detector.daemon import Daemon
@@ -265,6 +267,7 @@ def test_reload_settings_control(tmp_path, monkeypatch):
     d, lines = _fake_daemon(_FakeNotifier())
     d.settings = replace(Settings(), consent_line="old")
     d.detector = type("Det", (), {"tracker": None})()
+    d._apply_shortcuts = lambda again=False: None      # tests/test_shortcuts.py
     assert Daemon._control(d, "reload-settings")["ok"] is True
     assert d.settings.consent_line == "new line"
     cfg.write_text("nonsense = = =\n")
@@ -406,6 +409,58 @@ def test_toggle_records_the_one_prompt_and_refuses_several(tmp_path):
     reply = d._control("toggle")
     assert reply["ok"] is False and reply["error"].startswith("several prompts: ")
     assert d.recording is None
+
+
+def test_daemon_runs_without_tray_watcher(tmp_path):
+    from test_tray import FakeBus, labels, settle, start_tray, with_bus
+
+    d = make(tmp_path)
+    bus = FakeBus(watcher=False)               # GNOME without the AppIndicator extension
+    d.make_tray = with_bus(bus)
+    start_tray(d)
+    assert d.indicator.registered is False and not bus.disconnected
+    _record_and_stop(d)                         # detection and recording carry on
+    assert json.loads((tmp_path / "status.json").read_text())["tray"] == "no host"
+
+    assert d._control("record-now")["ok"]
+    asyncio.run(drain(d))
+
+    async def panel_starts():                   # the extension is turned on, or the panel was late
+        bus.set_watcher(True)
+        await settle()
+    asyncio.run(panel_starts())
+    assert d.indicator.registered is True
+    assert json.loads((tmp_path / "status.json").read_text())["tray"] == "shown"
+    assert labels(bus)[0][0].startswith("Recording In-person meeting since ")   # the state of now
+
+    off = tmp_path / "off"
+    off.mkdir()
+    d = make(off)
+    d.settings = replace(d.settings, tray_icon=False)
+    d.make_tray = lambda: pytest.fail("the tray is turned off")
+    assert d._start_indicator() is None
+    d._write_status(force=True)
+    assert json.loads((off / "status.json").read_text())["tray"] is None
+
+
+def test_doctor_explains_a_missing_tray(tmp_path, monkeypatch):
+    import os
+
+    from wirenote.tools import setup
+
+    monkeypatch.setattr(setup, "state_dir", lambda: tmp_path)
+    status = {"running": True, "pid": os.getpid(), "notifications": True, "jobs": {}}
+    for tray, want in (("shown", "ok"), ("no host", "warn"), ("failed", "warn"), (None, None)):
+        (tmp_path / "status.json").write_text(json.dumps({**status, "tray": tray}))
+        found = [c for c in setup._daemon_checks() if "tray" in c.message]
+        assert [c.status for c in found] == ([want] if want else [])
+        if tray == "no host":
+            assert "AppIndicator" in found[0].fix
+        if tray == "failed":                    # not the GNOME hint: something broke
+            assert "AppIndicator" not in found[0].fix and "journalctl" in found[0].fix
+    # A stopped daemon shows no icon, whatever it last wrote
+    (tmp_path / "status.json").write_text(json.dumps({**status, "running": False, "tray": "shown"}))
+    assert [c for c in setup._daemon_checks() if "tray" in c.message] == []
 
 
 # Meeting prep (docs/dev/PLAN.md › Defaults › Meeting prep) ------------------
@@ -625,3 +680,43 @@ def test_an_event_cached_empty_is_looked_at_again_after_a_note_finishes(tmp_path
     assert len(d._prep_empty) == 1
     d._note_written()
     assert d._prep_empty == set()
+
+
+def test_shutdown_stops_a_running_prep_round(tmp_path, monkeypatch):
+    import wirenote.detector.daemon as daemon_mod
+
+    monkeypatch.setenv("WIRENOTE_SOCKET", str(tmp_path / "control.sock"))
+
+    async def no_sleep_signals(on_sleep):
+        raise ConnectionError("no system bus")
+    monkeypatch.setattr(daemon_mod, "watch_sleep", no_sleep_signals)
+    d = make(tmp_path)
+    d.settings = replace(d.settings, tray_icon=False)
+    seen = []
+
+    async def slow_round(now=None):            # still reading a big library at shutdown
+        seen.append("reading")
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            seen.append("cancelled")
+            raise
+    d._prep_round = slow_round
+
+    async def first_loop():
+        d._start_prep()
+        await asyncio.sleep(0)
+        d._stopping.set()
+
+    async def idle():
+        await asyncio.Event().wait()
+    d._pw_loop = first_loop
+    for name in ("_tick_loop", "_op_loop", "_rec_loop", "_worker_loop", "_housekeeping_loop",
+                 "_control_loop", "_calendar_loop", "_update_loop"):
+        setattr(d, name, idle)
+
+    async def go():
+        await d.run()
+        # Stopped by run() itself, not left for the event loop to tidy up after it
+        assert seen == ["reading", "cancelled"] and d._prep_task.done()
+    asyncio.run(asyncio.wait_for(go(), 5))
