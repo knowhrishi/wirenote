@@ -171,7 +171,7 @@ def test_matches_title_people_and_summary_not_transcript(lib):
                summary={"summary": ["We agreed on the roadmap."], "action_items": []},
                transcript={"speakers": {"S1": {"name": "Ole Sand"}},
                            "lines": [{"speaker": "S1", "start": 1.0, "end": 2.0,
-                                      "text": "the secret password is swordfish"}]})
+                                      "text": "the budget code word is swordfish"}]})
     assert search(store, ["budget"])[0]["id"] == "20261027-100000-chrome"
     assert search(store, ["anna"]) and search(store, ["ole", "sand"]) and search(store, ["roadmap"])
     assert search(store, ["swordfish"]) == []
