@@ -1522,13 +1522,14 @@ function calendarsCard(s) {
     } catch (e) { toast(e.message); }
   };
   const inferred = (s.my_emails_inferred || []).join(", ");
+  const mineHint = (s.editable.my_emails || []).length ? "Left out of meeting prep and People. Separate several with commas."
+    : inferred ? `Wirenote thinks this is you: ${inferred}. Type your own to replace it.`
+      : "Wirenote has no guess yet, so you count like any other invitee in meeting prep and People. Type your address to leave yourself out.";
   return h("div", { class: "settings-card" },
     h("h2", {}, "Calendars"),
     h("p", {}, "Paste a calendar's secret ICS link (Outlook: Publish a calendar › ICS; Google: Secret address in iCal format). It stays in secrets.toml and is not shown again."),
     list, h("div", { class: "field inline-add" }, h("div", { class: "inline" }, link, add)),
-    field("Your email addresses", h("div", { class: "inline" }, mine, saveMine),
-      inferred ? `Wirenote thinks this is you: ${inferred}. Type your own to replace it.`
-        : "Left out of meeting prep and People. Separate several with commas."));
+    field("Your email addresses", h("div", { class: "inline" }, mine, saveMine), mineHint));
 }
 
 // Updates (docs/dev/updates-design.md) -----------------------------------------

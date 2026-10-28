@@ -157,3 +157,17 @@ def test_my_emails_is_a_list_setting():
 
     assert parse_settings('my_emails = ["a@x.test", "b@x.test"]').my_emails == ("a@x.test", "b@x.test")
     assert parse_settings("").my_emails == ()
+
+
+def test_your_address_is_inferred_despite_a_few_calls_without_you(tmp_path):
+    from wirenote.meetings.me import infer_addresses
+
+    def calls(n, missing, root):
+        for i in range(1, n + 1):
+            people = (("Other", f"o{i}@x.test"),) if i <= missing else (ME, ("Other", f"o{i}@x.test"))
+            make(root, i, people=people)
+        return load_calls(root)
+
+    assert infer_addresses(calls(4, 0, tmp_path / "a")) == {"me@x.test"}         # 4 of 4
+    assert infer_addresses(calls(10, 1, tmp_path / "b")) == {"me@x.test"}        # 9 of 10: a forwarded invite
+    assert infer_addresses(calls(3, 1, tmp_path / "c")) == set()                 # 2 of 3 is not enough

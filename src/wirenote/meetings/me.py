@@ -4,27 +4,32 @@
 
 You are on almost every invitation, so prep and people must leave you out: with you
 counted, "Standup" of another team shares a person with every standup you attend.
-The setting my_emails wins; without it, an address that is in every recorded call that
-has attendee addresses (at least INFER_MIN_CALLS such calls) is taken to be yours.
+The setting my_emails wins; without it, an address that is in at least INFER_PERCENT % of
+the recorded calls that have attendee addresses (and at least INFER_MIN_CALLS such calls)
+is taken to be yours. Not every one: an invitation forwarded to you does not list you.
 """
 
 from __future__ import annotations
 
+from collections import Counter
+
 from ..config.settings import Settings
 from .catalog import CallRecord
 
-INFER_MIN_CALLS = 3
+INFER_MIN_CALLS = 3       # docs/dev/PLAN.md › Defaults › Own address
+INFER_PERCENT = 90        # › Own address
 
 
 def infer_addresses(calls: list[CallRecord]) -> set[str]:
-    """Addresses in every call that lists any. A call whose invitees have no addresses (an
-    older one where some invitee had none) is not counted: it neither supports nor blocks
-    the guess."""
+    """Addresses in at least INFER_PERCENT % of the calls that list any. A call whose invitees
+    have no addresses (an older one where some invitee had none) is not counted: it
+    neither supports nor blocks the guess."""
     sets = [{e.casefold() for _, e in c.attendees if e} for c in calls]
     sets = [s for s in sets if s]
     if len(sets) < INFER_MIN_CALLS:
         return set()
-    return set.intersection(*sets)
+    seen = Counter(e for s in sets for e in s)
+    return {e for e, n in seen.items() if 100 * n >= INFER_PERCENT * len(sets)}
 
 
 def my_addresses(calls: list[CallRecord], settings: Settings) -> set[str]:
