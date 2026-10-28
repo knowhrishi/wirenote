@@ -19,6 +19,11 @@ from typing import Protocol
 # record and ignore answer the prompt showing; record-now records without a call app
 MENU_KEYS = ("record", "ignore", "stop", "flag", "record-now", "open")
 
+# What status.json says about the indicator, for `wirenote doctor`; None when it is turned off
+SHOWN = "shown"          # the desktop lists the icon
+NO_HOST = "no host"      # nothing on this desktop shows icons (yet)
+FAILED = "failed"        # it could not start or broke; the log says why
+
 
 @dataclass(frozen=True)
 class IndicatorState:
@@ -26,6 +31,7 @@ class IndicatorState:
     recording_since: str | None = None          # its start, ISO 8601 with the UTC offset
     prompt: tuple[str, str] | None = None       # (app key, app name) of the prompt showing
     flags: int = 0                              # flagged moments in this recording
+    other_prompts: int = 0                      # prompts showing besides `prompt`
 
 
 @dataclass(frozen=True)
@@ -46,6 +52,8 @@ def describe(s: IndicatorState) -> str:
     if s.recording is not None:
         since = _hhmm(s.recording_since)
         return f"Recording {s.recording}" + (f" since {since}" if since else "")
+    if s.prompt is not None and s.other_prompts:
+        return f"{s.other_prompts + 1} calls are using your mic"
     if s.prompt is not None:
         return f"{s.prompt[1]} is using your mic"
     return "Not recording"
@@ -58,6 +66,9 @@ def menu_for(s: IndicatorState) -> list[MenuItem]:
             line += f", {s.flags} flag" + ("s" if s.flags > 1 else "")
         return [MenuItem(None, line), MenuItem("flag", "Flag this moment"),
                 MenuItem("stop", "Stop"), MenuItem("open", "Open Wirenote")]
+    if s.prompt is not None and s.other_prompts:
+        # Record and Ignore cannot tell which call is meant: answer in the notifications or the app
+        return [MenuItem(None, describe(s)), MenuItem("open", "Open Wirenote")]
     if s.prompt is not None:
         return [MenuItem("record", f"Record {s.prompt[1]}"), MenuItem("ignore", "Ignore")]
     return [MenuItem("record-now", "Record a meeting"), MenuItem("open", "Open Wirenote")]

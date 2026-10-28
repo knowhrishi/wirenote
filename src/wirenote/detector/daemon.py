@@ -33,6 +33,7 @@ from ..config.secrets import calendar_sources
 from ..config.settings import Settings, config_dir, load_settings
 from ..notify import clipboard
 from ..notify.dbus import CLOSED_BY_CALL, Notifier, watch_sleep
+from ..notify import indicator
 from ..notify.indicator import Indicator, IndicatorState, NullIndicator
 from ..notify.tray import TrayIndicator
 from ..process.jobs import ACTIVE, Job, Jobs
@@ -146,7 +147,8 @@ class Daemon:
         self.notifier = Notifier()
         self.notify_ok = False
         self.indicator: Indicator = NullIndicator()
-        self.tray_ok: bool | None = None            # None: tray_icon is off
+        self.tray_status: str | None = None         # notify.indicator SHOWN, ...; None: off
+        self._tray_task: asyncio.Task | None = None
         self.make_tray = TrayIndicator              # tests swap in a fake session bus
         self.jobs = Jobs(state_dir / "jobs.db")
         self.recording: Recording | None = None
@@ -193,7 +195,7 @@ class Daemon:
             await watch_sleep(self._on_sleep)
         except Exception as e:  # noqa: BLE001
             self.log.write("warning", message=f"sleep/wake signals unavailable: {e!r}")
-        await self._start_indicator()
+        self._start_indicator()
         self._recover()
 
         loop = asyncio.get_running_loop()
@@ -215,6 +217,8 @@ class Daemon:
             self.log.write("error", message=f"internal error: {exc!r}",
                            traceback="".join(traceback.format_exception(exc)))
         self.log.write("stop", reason="crash" if crashed else "signal")
+        if self._tray_task is not None:
+            tasks.append(self._tray_task)
         for task in [*tasks, stop]:
             task.cancel()
         await asyncio.gather(*tasks, stop, return_exceptions=True)
@@ -250,22 +254,29 @@ class Daemon:
         for job in self.jobs.requeue_interrupted():
             self.log.write("job_interrupted", job=job.id, state=job.state, attempts=job.attempts)
 
-    async def _start_indicator(self) -> None:
-        """docs/usage.md › Tray icon. The tray is kept even with no tray host yet: at login
-        the panel often starts after the daemon, and the icon shows once it does."""
+    def _start_indicator(self) -> asyncio.Task | None:
+        """docs/usage.md › Tray icon. Starts in the background: detection never waits for the
+        panel. The tray is kept with no tray host yet: at login the panel often starts after
+        the daemon, and the icon shows once it does."""
         if not self.settings.tray_icon:
-            return
+            return None
         tray = self.make_tray()
         tray.on_menu = self._on_menu
         tray.on_error = lambda message: self.log.write("warning", message=message)
-        tray.on_host = self._on_tray_host
+        tray.on_host = lambda shown: self._set_tray(indicator.SHOWN if shown else indicator.NO_HOST)
         self.indicator = tray
-        if not await tray.start():
-            self._on_tray_host(False)
+        self._tray_task = asyncio.create_task(self._start_tray(tray))
+        return self._tray_task
 
-    def _on_tray_host(self, shown: bool) -> None:
-        self.tray_ok = shown
-        self.log.write("tray", shown=shown)
+    async def _start_tray(self, tray: TrayIndicator) -> None:
+        if not await tray.start():
+            self._set_tray(indicator.NO_HOST if tray.connected else indicator.FAILED)
+
+    def _set_tray(self, status: str) -> None:
+        if isinstance(self.indicator, NullIndicator):
+            return          # turned off after it broke; FAILED stays
+        self.tray_status = status
+        self.log.write("tray", status=status)
         self._write_status(force=True)      # for `wirenote doctor`
 
     # Inputs ----------------------------------------------------------------
@@ -883,7 +894,7 @@ class Daemon:
         status = {"updated": now_iso(), "pid": os.getpid(), "running": running,
                   "notifications": self.notify_ok,
                   "notification_buttons": self.notifier.has_actions if self.notify_ok else None,
-                  "tray": self.tray_ok,
+                  "tray": self.tray_status,
                   "recording": self.detector.tracker.recording_key,
                   "recording_id": self.recording.id if self.recording else None,
                   "flags": len(self.recording.flags) if self.recording else 0,
@@ -897,6 +908,8 @@ class Daemon:
         except Exception as e:  # noqa: BLE001 - the tray must never stop detection
             self.log.write("error", message=f"tray update failed: {type(e).__name__}; tray off")
             self.indicator = NullIndicator()
+            self.tray_status = indicator.FAILED
+            self._write_status(force=True)
 
     def _indicator_state(self) -> IndicatorState:
         rec = self.recording
@@ -906,4 +919,5 @@ class Daemon:
             recording=recording_label(rec.meta) if rec else None,
             recording_since=rec.started_wall.isoformat(timespec="seconds") if rec else None,
             prompt=(first.key, first.obs.name if first.obs else first.key) if first else None,
-            flags=len(rec.flags) if rec else 0)
+            flags=len(rec.flags) if rec else 0,
+            other_prompts=max(len(prompted) - 1, 0))

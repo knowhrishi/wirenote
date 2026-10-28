@@ -410,20 +410,15 @@ def test_toggle_records_the_one_prompt_and_refuses_several(tmp_path):
 
 
 def test_daemon_runs_without_tray_watcher(tmp_path):
-    from test_tray import FakeBus, labels, settle
-
-    from wirenote.notify.tray import TrayIndicator
+    from test_tray import FakeBus, labels, settle, start_tray, with_bus
 
     d = make(tmp_path)
     bus = FakeBus(watcher=False)               # GNOME without the AppIndicator extension
-
-    async def factory():
-        return bus
-    d.make_tray = lambda: TrayIndicator(factory)
-    asyncio.run(d._start_indicator())
+    d.make_tray = with_bus(bus)
+    start_tray(d)
     assert d.indicator.registered is False and not bus.disconnected
     _record_and_stop(d)                         # detection and recording carry on
-    assert json.loads((tmp_path / "status.json").read_text())["tray"] is False
+    assert json.loads((tmp_path / "status.json").read_text())["tray"] == "no host"
 
     assert d._control("record-now")["ok"]
     asyncio.run(drain(d))
@@ -433,7 +428,7 @@ def test_daemon_runs_without_tray_watcher(tmp_path):
         await settle()
     asyncio.run(panel_starts())
     assert d.indicator.registered is True
-    assert json.loads((tmp_path / "status.json").read_text())["tray"] is True
+    assert json.loads((tmp_path / "status.json").read_text())["tray"] == "shown"
     assert labels(bus)[0][0].startswith("Recording In-person meeting since ")   # the state of now
 
     off = tmp_path / "off"
@@ -441,7 +436,7 @@ def test_daemon_runs_without_tray_watcher(tmp_path):
     d = make(off)
     d.settings = replace(d.settings, tray_icon=False)
     d.make_tray = lambda: pytest.fail("the tray is turned off")
-    asyncio.run(d._start_indicator())
+    assert d._start_indicator() is None
     d._write_status(force=True)
     assert json.loads((off / "status.json").read_text())["tray"] is None
 
@@ -453,9 +448,11 @@ def test_doctor_explains_a_missing_tray(tmp_path, monkeypatch):
 
     monkeypatch.setattr(setup, "state_dir", lambda: tmp_path)
     status = {"running": True, "pid": os.getpid(), "notifications": True, "jobs": {}}
-    for tray, want in ((True, "ok"), (False, "warn"), (None, None)):
+    for tray, want in (("shown", "ok"), ("no host", "warn"), ("failed", "warn"), (None, None)):
         (tmp_path / "status.json").write_text(json.dumps({**status, "tray": tray}))
         found = [c for c in setup._daemon_checks() if "tray" in c.message]
         assert [c.status for c in found] == ([want] if want else [])
-        if tray is False:
+        if tray == "no host":
             assert "AppIndicator" in found[0].fix
+        if tray == "failed":                    # not the GNOME hint: something broke
+            assert "AppIndicator" not in found[0].fix and "journalctl" in found[0].fix

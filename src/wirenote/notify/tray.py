@@ -120,21 +120,28 @@ class TrayIndicator:
             bus.export(ITEM_PATH, self._item)
             bus.export(MENU_PATH, self._menu)
             await bus.request_name(self.name)
+            # Watch first, then look, so a watcher that appears in between is not missed. The
+            # bus is set before the watch: a signal read in one batch with a reply must count.
+            self._bus = bus
             bus.add_message_handler(self._on_message)
-            # Watch first, then look: a watcher that appears in between is not missed
             await self._call(bus, DBUS, DBUS_PATH, DBUS, "AddMatch", "s", [WATCHER_MATCH])
             (present,) = await self._call(bus, DBUS, DBUS_PATH, DBUS, "NameHasOwner", "s", [WATCHER])
         except Exception as e:  # noqa: BLE001
+            self._bus = None
             self._fail("start", e)
             try:
                 bus.disconnect()
             except Exception:  # noqa: BLE001 - already gone
                 pass
             return False
-        self._bus = bus
-        if present:
+        if present and not self.registered:
             await self._register()
         return self.registered
+
+    @property
+    def connected(self) -> bool:
+        """On the session bus and watching for a tray host, listed or not."""
+        return self._bus is not None
 
     def update(self, s: IndicatorState) -> None:
         """Before registration this only stores s; the host reads it when it lists the icon."""

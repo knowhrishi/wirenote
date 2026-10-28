@@ -28,10 +28,14 @@ class FakeBus:
     """What the tray uses of dbus_fast.aio.MessageBus. Calls into exported objects go through
     dbus-fast's own method table, and every reply and signal is marshalled, as on a real bus."""
 
-    def __init__(self, watcher=True, fail_calls=False, fail_signals=False, fail_register=False):
+    def __init__(self, watcher=True, fail_calls=False, fail_signals=False, fail_register=False,
+                 hang_register=False, appear_during_lookup=False, refuse_name=False):
         self.watcher = watcher
         self.fail_calls = fail_calls
         self.fail_register = fail_register
+        self.hang_register = hang_register          # a hung kded never answers
+        self.appear_during_lookup = appear_during_lookup
+        self.refuse_name = refuse_name
         self.fail_signals = fail_signals
         self.exported: dict[str, ServiceInterface] = {}
         self.names: list[str] = []
@@ -45,6 +49,8 @@ class FakeBus:
         ServiceInterface._add_bus(iface, self, lambda i, m: None)
 
     async def request_name(self, name):
+        if self.refuse_name:
+            raise PermissionError("not allowed to own the name")
         self.names.append(name)
 
     def add_message_handler(self, handler):
@@ -58,7 +64,14 @@ class FakeBus:
             raise ConnectionError("bus gone")
         self.calls.append((msg.member, list(msg.body)))
         if msg.member == "NameHasOwner":
-            return Reply([self.watcher and msg.body[0] == WATCHER])
+            answer = self.watcher and msg.body[0] == WATCHER
+            if self.appear_during_lookup:
+                # dbus-fast reads the watcher's NameOwnerChanged in the same batch as this
+                # reply and hands it to the handlers before the caller resumes
+                self.set_watcher(True)
+            return Reply([answer])
+        if msg.member == "RegisterStatusNotifierItem" and self.hang_register:
+            await asyncio.Event().wait()
         if msg.member == "RegisterStatusNotifierItem" and (self.fail_register or not self.watcher):
             return Reply([], "org.freedesktop.DBus.Error.ServiceUnknown")
         return Reply([])
@@ -103,6 +116,21 @@ class FakeBus:
 async def settle():
     for _ in range(3):
         await asyncio.sleep(0)
+
+
+def start_tray(d):
+    """The daemon starts its tray in the background; wait for that here."""
+    async def go():
+        task = d._start_indicator()
+        if task is not None:
+            await task
+    asyncio.run(go())
+
+
+def with_bus(bus):
+    async def factory():
+        return bus
+    return lambda: TrayIndicator(factory)
 
 
 def _marshal(signature, body):
@@ -213,6 +241,20 @@ def test_icon_appears_when_the_panel_starts_after_wirenote():
     assert ("NewIcon", []) in bus.signals
 
 
+def test_watcher_appearing_while_start_looks_for_it_still_registers():
+    async def run():
+        bus = FakeBus(watcher=False, appear_during_lookup=True)
+
+        async def factory():
+            return bus
+        tray = TrayIndicator(factory)
+        await tray.start()                       # the lookup's answer is "no watcher"...
+        await settle()
+        return tray, bus
+    tray, bus = asyncio.run(run())
+    assert tray.registered and bus.registrations() >= 1   # ...but its arrival was not lost
+
+
 def test_menu_layout_per_state():
     tray, bus = started()
     tray.update(IDLE)
@@ -226,6 +268,11 @@ def test_menu_layout_per_state():
     assert labels(bus) == [("Record Discord", True), ("Ignore", True)]
     assert bus.props(ITEM_PATH)["Status"] == "NeedsAttention"
     assert ("NewStatus", ["NeedsAttention"]) in bus.signals
+
+    # Two prompts: Record and Ignore could not tell which call is meant
+    tray.update(IndicatorState(None, None, ("discord", "Discord"), 0, other_prompts=1))
+    assert labels(bus) == [("2 calls are using your mic", False), ("Open Wirenote", True)]
+    assert bus.props(ITEM_PATH)["Status"] == "NeedsAttention"
 
     tray.update(RECORDING)
     assert labels(bus) == [("Recording Discord since 14:05", False), ("Flag this moment", True),
@@ -279,7 +326,7 @@ def test_menu_click_reaches_control(tmp_path):
     async def factory():
         return bus
     d.make_tray = lambda: TrayIndicator(factory)
-    asyncio.run(d._start_indicator())
+    start_tray(d)
     assert isinstance(d.indicator, TrayIndicator)
     received = []
     control = d._control
@@ -298,7 +345,51 @@ def test_menu_click_reaches_control(tmp_path):
     assert received == ["record", "flag", "stop"]
     assert d.recording is None and d.jobs.next_queued() is not None
     assert labels(bus) == [("Record a meeting", True), ("Open Wirenote", True)]
-    assert json.loads((tmp_path / "status.json").read_text())["tray"] is True
+    assert json.loads((tmp_path / "status.json").read_text())["tray"] == "shown"
+
+
+def test_several_prompts_offer_no_button_that_fails(tmp_path):
+    from wirenote.detector.tracker import Observation
+
+    from test_daemon import DISCORD
+
+    d = make(tmp_path)
+    bus = FakeBus()
+    d.make_tray = with_bus(bus)
+    start_tray(d)
+    two = {**DISCORD, "zoom": Observation("zoom", "Zoom", "meeting", frozenset({2}))}
+    for now in (0.0, 2.0):
+        d._handle(d.detector.tracker.update(now, two))
+    asyncio.run(drain(d))
+    assert labels(bus) == [("2 calls are using your mic", False), ("Open Wirenote", True)]
+
+
+def test_detection_never_waits_for_the_tray(tmp_path, monkeypatch):
+    """A watcher that never answers RegisterStatusNotifierItem (a hung kded)."""
+    import wirenote.detector.daemon as daemon_mod
+
+    monkeypatch.setenv("WIRENOTE_SOCKET", str(tmp_path / "control.sock"))
+
+    async def no_sleep_signals(on_sleep):
+        raise ConnectionError("no system bus")
+    monkeypatch.setattr(daemon_mod, "watch_sleep", no_sleep_signals)
+    d = make(tmp_path)
+    bus = FakeBus(hang_register=True)
+    d.make_tray = with_bus(bus)
+    reached = []
+
+    async def first_loop():
+        reached.append("detecting")
+        d._stopping.set()
+
+    async def idle():
+        await asyncio.Event().wait()
+    d._pw_loop = first_loop
+    for name in ("_tick_loop", "_op_loop", "_rec_loop", "_worker_loop", "_housekeeping_loop",
+                 "_control_loop", "_calendar_loop", "_update_loop"):
+        setattr(d, name, idle)
+    asyncio.run(asyncio.wait_for(d.run(), 5))
+    assert reached == ["detecting"] and bus.registrations() == 1   # it was still waiting
 
 
 def test_ignore_from_the_tray_counts_like_the_notification(tmp_path):
@@ -386,3 +477,19 @@ def test_tray_errors_are_contained(tmp_path):
     assert json.loads((tmp_path / "status.json").read_text())["recording"] == "discord"
     log = [json.loads(line) for line in (tmp_path / "detector.jsonl").open()]
     assert len([e for e in log if "tray update failed" in e.get("message", "")]) == 1
+    assert json.loads((tmp_path / "status.json").read_text())["tray"] == "failed"
+    d._set_tray("shown")                         # a late registration does not hide that
+    assert json.loads((tmp_path / "status.json").read_text())["tray"] == "failed"
+
+
+def test_tray_setup_failure_is_not_called_a_missing_tray(tmp_path):
+    async def no_bus():
+        raise FileNotFoundError("no session bus")
+    for n, make_tray in enumerate((lambda: TrayIndicator(no_bus),
+                                   with_bus(FakeBus(refuse_name=True)))):
+        state = tmp_path / str(n)
+        state.mkdir()
+        d = make(state)
+        d.make_tray = make_tray
+        start_tray(d)
+        assert json.loads((state / "status.json").read_text())["tray"] == "failed"
