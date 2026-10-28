@@ -151,6 +151,7 @@ class Daemon:
         self._tray_task: asyncio.Task | None = None
         self.make_tray = TrayIndicator              # tests swap in a fake session bus
         self.shortcuts_status: str | None = None    # notify.shortcuts BOUND, ...; None: off
+        self.shortcut_keys: dict[str, str] | None = None   # id -> the desktop's key, "" for none
         self._shortcuts_task: asyncio.Task | None = None
         self._shortcuts_bus = None
         self.make_shortcuts_bus = shortcuts.session_bus   # a connection of its own per attempt
@@ -309,9 +310,15 @@ class Daemon:
         def later(status: str) -> None:            # the portal restarted; ignored once replaced
             if self._shortcuts_bus is bus:
                 self._set_shortcuts(status)
+
+        def keys(found: dict[str, str]) -> None:
+            if self._shortcuts_bus is bus:
+                self.shortcut_keys = found
+                if self.shortcuts_status is not None:
+                    self._write_status(force=True)   # changed in the desktop's settings
         reason = await shortcuts.start_shortcuts(
             bus, self._on_shortcut, on_error=lambda message: self.log.write("warning", message=message),
-            on_status=later)
+            on_status=later, on_keys=keys)
         if reason is not None:
             self._close_shortcuts_bus()            # a refusal leaves no session open
         self._set_shortcuts(reason or shortcuts.BOUND)
@@ -321,6 +328,7 @@ class Daemon:
             self._shortcuts_task.cancel()
         self._shortcuts_task = None
         self._close_shortcuts_bus()
+        self.shortcut_keys = None
         if self.shortcuts_status is not None:
             self._set_shortcuts(None)
 
@@ -339,12 +347,16 @@ class Daemon:
             self._stop_shortcuts()
             return
         task = self._shortcuts_task
-        if task is None or (again and task.done() and self.shortcuts_status != shortcuts.BOUND):
+        working = self.shortcuts_status == shortcuts.BOUND and any((self.shortcut_keys or {}).values())
+        if task is None or (again and task.done() and not working):
             self._start_shortcuts()
 
     def _set_shortcuts(self, status: str | None) -> None:
         self.shortcuts_status = status
-        self.log.write("shortcuts", status=status)
+        if status != shortcuts.BOUND:
+            self.shortcut_keys = None
+        keys = self.shortcut_keys or {}
+        self.log.write("shortcuts", status=status, keys=sum(bool(k) for k in keys.values()))
         self._write_status(force=True)      # for `wirenote doctor` and `wirenote setup shortcuts`
 
     def _on_shortcut(self, shortcut_id: str) -> None:
@@ -971,6 +983,7 @@ class Daemon:
                   "notification_buttons": self.notifier.has_actions if self.notify_ok else None,
                   "tray": self.tray_status,
                   "shortcuts": self.shortcuts_status,
+                  "shortcut_keys": self.shortcut_keys,
                   "recording": self.detector.tracker.recording_key,
                   "recording_id": self.recording.id if self.recording else None,
                   "flags": len(self.recording.flags) if self.recording else 0,

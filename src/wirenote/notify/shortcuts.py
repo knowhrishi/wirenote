@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -43,10 +44,17 @@ PORTAL_MATCH = (f"type='signal',sender='{DBUS}',interface='{DBUS}',member='NameO
 SHORTCUTS = {"toggle-recording": ("Start or stop recording", "CTRL+ALT+R"),
              "flag-moment": ("Flag this moment", "CTRL+ALT+F")}
 COMMANDS = {"toggle-recording": "toggle", "flag-moment": "flag"}   # the daemon's _control
+# Fixed, not random: it only has to be unique on our connection, and a portal without our app
+# id (before 1.19.4) makes KDE name the shortcut component after it. A random one would be a
+# new component, and a new dialog, at every start.
+SESSION_TOKEN = "wirenote"
+# docs/dev/PLAN.md › Defaults › Shortcut debounce: a second toggle this soon is the same press
+TOGGLE_DEBOUNCE_S = 1.5
 
 # What status.json says about the shortcuts, for `wirenote doctor`; None when they are off
 BOUND = "bound"           # the desktop has them
 DENIED = "denied"         # declined in the desktop's dialog, or refused by the portal
+# BOUND says the desktop accepted the request; the keys it set, possibly none, go to on_keys
 NO_PORTAL = "no portal"   # no GlobalShortcuts portal on this desktop
 FAILED = "failed"         # something broke; the log says what
 
@@ -70,25 +78,44 @@ async def session_bus() -> MessageBus:
     return await MessageBus().connect()
 
 
+_now = time.monotonic     # the debounce's clock; tests replace it
+
+
 def _token() -> str:
     return f"wirenote_{secrets.token_hex(6)}"
 
 
+def _keys(shortcuts: list) -> dict[str, str]:
+    """{id: the desktop's description of its key, "" for none} from a portal shortcut list."""
+    keys = {sid: "" for sid in SHORTCUTS}
+    for sid, props in shortcuts:
+        if sid in keys and "trigger_description" in props:
+            # The desktop's own text: one short line wherever it is shown
+            keys[sid] = " ".join(str(props["trigger_description"].value).split())[:40]
+    return keys
+
+
 async def start_shortcuts(bus: Any, on_activated: Callable[[str], None],
                           on_error: Callable[[str], None] = log.warning,
-                          on_status: Callable[[str], None] = lambda status: None) -> str | None:
+                          on_status: Callable[[str], None] = lambda status: None,
+                          on_keys: Callable[[dict[str, str]], None] = lambda keys: None,
+                          clock: Callable[[], float] | None = None) -> str | None:
     """Register, create a session and bind SHORTCUTS on bus, a connection used for nothing
-    else. None once bound, otherwise the reason: DENIED, NO_PORTAL or FAILED. Later changes
-    (the portal stops, or comes back and binds again) go to on_status."""
-    return await _Shortcuts(bus, on_activated, on_error, on_status).start()
+    else. None once bound, otherwise the reason: DENIED, NO_PORTAL or FAILED. The keys the
+    desktop set go to on_keys, now and whenever they change. Later changes (the portal stops,
+    or comes back and binds again) go to on_status."""
+    return await _Shortcuts(bus, on_activated, on_error, on_status, on_keys, clock).start()
 
 
 class _Shortcuts:
-    def __init__(self, bus, on_activated, on_error, on_status) -> None:
+    def __init__(self, bus, on_activated, on_error, on_status, on_keys, clock) -> None:
         self._bus = bus
         self._on_activated = on_activated
         self._on_error = on_error
         self._on_status = on_status
+        self._on_keys = on_keys
+        self._clock = clock or (lambda: _now())
+        self._last_toggle: float | None = None
         self.session: str | None = None
         self._lost = False                  # bound, then the portal went away
         self._waiting: dict[str, asyncio.Future] = {}
@@ -114,26 +141,43 @@ class _Shortcuts:
                 # A portal before 1.19.4: it may still find an id, or refuse the session below
             step = "session"
             code, results = await self._request(
-                "CreateSession", "a{sv}", [], {"session_handle_token": Variant("s", _token())})
+                "CreateSession", "a{sv}", [], {"session_handle_token": Variant("s", SESSION_TOKEN)})
             if code != 0:
-                return DENIED
+                return self._refused(step, code)
             session = results["session_handle"].value
             step = "bind"
             wanted = [[sid, {"description": Variant("s", d), "preferred_trigger": Variant("s", t)}]
                       for sid, (d, t) in SHORTCUTS.items()]
-            code, _ = await self._request("BindShortcuts", "oa(sa{sv})sa{sv}", [session, wanted, ""], {})
+            code, results = await self._request("BindShortcuts", "oa(sa{sv})sa{sv}",
+                                                [session, wanted, ""], {})
             if code != 0:
-                return DENIED
+                return self._refused(step, code)
+            keys = _keys(results["shortcuts"].value if "shortcuts" in results else [])
         except PortalError as e:
             if e.name in NO_METHOD | NO_SERVICE:
                 return NO_PORTAL
-            if e.name == NOT_ALLOWED:
+            if e.name == NOT_ALLOWED:          # e.g. "An app id is required" (portal 1.21+)
+                self._on_error(f"global shortcuts: {step} refused ({e.name})")
                 return DENIED
             return self._fail(step, e)
         except Exception as e:  # noqa: BLE001
             return self._fail(step, e)
         self.session = session
+        self._keys_changed(keys)
         return None
+
+    def _refused(self, step: str, code: int) -> str:
+        """A Response other than 0: 1 is the user's no, 2 is the backend ending it otherwise."""
+        if code == 1:
+            return DENIED
+        self._on_error(f"global shortcuts: {step} failed (response {code})")
+        return FAILED
+
+    def _keys_changed(self, keys: dict[str, str]) -> None:
+        try:
+            self._on_keys(keys)
+        except Exception as e:  # noqa: BLE001
+            self._fail("keys", e)
 
     def _fail(self, what: str, e: Exception) -> str:
         """Only the error name or the exception's type: its text may hold a path."""
@@ -179,6 +223,9 @@ class _Shortcuts:
                   and self.session is not None and len(msg.body) >= 2
                   and msg.body[0] == self.session and msg.body[1] in SHORTCUTS):
                 self._activate(msg.body[1])
+            elif (msg.interface == GLOBAL_SHORTCUTS and msg.member == "ShortcutsChanged"
+                  and self.session is not None and len(msg.body) == 2 and msg.body[0] == self.session):
+                self._keys_changed(_keys(msg.body[1]))   # you changed them in the desktop's settings
             elif (msg.interface == DBUS and msg.member == "NameOwnerChanged"
                   and len(msg.body) == 3 and msg.body[0] == PORTAL):
                 self._portal_changed(bool(msg.body[1]), bool(msg.body[2]))
@@ -187,6 +234,12 @@ class _Shortcuts:
         return None
 
     def _activate(self, shortcut_id: str) -> None:
+        if shortcut_id == "toggle-recording":
+            # Some desktops send one press twice; a second toggle would stop what the first started
+            now = self._clock()
+            if self._last_toggle is not None and now - self._last_toggle < TOGGLE_DEBOUNCE_S:
+                return
+            self._last_toggle = now
         try:
             self._on_activated(shortcut_id)
         except Exception as e:  # noqa: BLE001 - a key press is not worth stopping the daemon for

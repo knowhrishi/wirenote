@@ -41,7 +41,7 @@ class FakePortal:
 
     def __init__(self, portal=True, interface=True, registry=True, refuse_register=None,
                  session_answer=0, bind_answer=0, refuse_session=None, hang=None,
-                 respond_first=False):
+                 respond_first=False, keys=None):
         self.portal = portal                    # org.freedesktop.portal.Desktop on the bus
         self.interface = interface              # GNOME 46/47: a portal without GlobalShortcuts
         self.registry = registry                # portal 1.19.4+
@@ -51,6 +51,8 @@ class FakePortal:
         self.refuse_session = refuse_session    # an error name
         self.hang = hang                        # a method the portal never answers
         self.respond_first = respond_first      # the Response read in one batch with the reply
+        self.keys = keys                        # id -> key the desktop sets; default: as asked
+        self.session_tokens: list[str] = []
         self.calls: list[tuple[str, str, list]] = []
         self.handlers = []
         self.disconnected = False
@@ -95,13 +97,14 @@ class FakePortal:
         if msg.member == "CreateSession":
             if self.refuse_session:
                 return self._error(msg, self.refuse_session)
+            self.session_tokens.append(options["session_handle_token"].value)
             self.session = f"{PORTAL_PATH}/session/1_42/{options['session_handle_token'].value}"
             results = {"session_handle": Variant("s", self.session)} if self.session_answer == 0 else {}
             self._respond(request, self.session_answer, results)
         elif msg.member == "BindShortcuts":
             assert msg.body[0] == self.session and msg.body[2] == ""
-            bound = [[sid, {"description": props["description"],
-                            "trigger_description": Variant("s", props["preferred_trigger"].value)}]
+            bound = [[sid, {"description": props["description"], "trigger_description": Variant(
+                "s", (self.keys or {}).get(sid, props["preferred_trigger"].value.title()))}]
                      for sid, props in msg.body[1]]
             self._respond(request, self.bind_answer,
                           {"shortcuts": Variant("a(sa{sv})", bound)} if self.bind_answer == 0 else {})
@@ -204,17 +207,77 @@ def test_portal_missing_is_reported():
 
 
 def test_denied_binding_is_reported_not_retried():
-    for answer in (1, 2):                       # cancelled in the dialog, or ended otherwise
-        bus = FakePortal(bind_answer=answer)
-        reason, activated = bind(bus)
-        assert reason == DENIED
-        assert len(bus.portal_calls("BindShortcuts")) == 1
-        bus.press("toggle-recording")
-        assert activated == []
+    errors = []
+    bus = FakePortal(bind_answer=1)             # cancelled in the dialog
+    reason, activated = bind(bus, on_error=errors.append)
+    assert reason == DENIED and errors == []
+    assert len(bus.portal_calls("BindShortcuts")) == 1
+    bus.press("toggle-recording")
+    assert activated == []
     bus = FakePortal(session_answer=1)
     assert bind(bus)[0] == DENIED and bus.portal_calls("BindShortcuts") == []
+    # "An app id is required" (portal 1.21+ without a registered id): refused, and the log says how
     bus = FakePortal(refuse_session="org.freedesktop.portal.Error.NotAllowed")
-    assert bind(bus)[0] == DENIED
+    assert bind(bus, on_error=errors.append)[0] == DENIED
+    assert errors == ["global shortcuts: session refused (org.freedesktop.portal.Error.NotAllowed)"]
+
+
+def test_response_ended_otherwise_is_a_failure():
+    """Response 2: the backend ended the request some other way, not the user's no."""
+    for bus, step in ((FakePortal(bind_answer=2), "bind"), (FakePortal(session_answer=2), "session")):
+        errors = []
+        assert bind(bus, on_error=errors.append)[0] == FAILED
+        assert errors == [f"global shortcuts: {step} failed (response 2)"]
+
+
+def test_session_token_is_the_same_at_every_start():
+    """Without a registered app id KDE names the shortcut component after the session token:
+    a new token would be a new component and a new dialog at every start."""
+    first, second = FakePortal(registry=False), FakePortal(registry=False)
+    assert bind(first)[0] is None and bind(second)[0] is None
+    assert first.session_tokens == second.session_tokens == ["wirenote"]
+    requests = [c[2][-1]["handle_token"].value for b in (first, second) for c in b.portal_calls()
+                if c[0] in ("CreateSession", "BindShortcuts")]
+    assert len(set(requests)) == 4             # each request still gets a token of its own
+
+
+def test_keys_the_desktop_set_are_reported():
+    found = []
+    reason, _ = bind(FakePortal(keys={"toggle-recording": "Meta+R"}), on_keys=found.append)
+    assert reason is None and found == [{"toggle-recording": "Meta+R", "flag-moment": "Ctrl+Alt+F"}]
+
+    # KDE after a first "no": later starts succeed with no key set
+    found.clear()
+    no_keys = FakePortal(keys={"toggle-recording": "", "flag-moment": ""})
+    assert bind(no_keys, on_keys=found.append)[0] is None
+    assert found == [{"toggle-recording": "", "flag-moment": ""}]
+
+    async def changed():
+        bus = FakePortal()
+        await start_shortcuts(bus, lambda sid: None, on_keys=found.append)
+        bus.emit(PORTAL_PATH, GLOBAL_SHORTCUTS, "ShortcutsChanged", "oa(sa{sv})",
+                 [bus.session, [["flag-moment", {"trigger_description": Variant("s", "F9\nmore")}]]])
+    found.clear()
+    asyncio.run(changed())
+    assert found[-1] == {"toggle-recording": "", "flag-moment": "F9 more"}
+
+
+def test_one_press_delivered_twice_toggles_once():
+    activated = []
+    now = [100.0]
+
+    async def go():
+        bus = FakePortal()
+        await start_shortcuts(bus, activated.append, clock=lambda: now[0])
+        bus.press("toggle-recording")
+        now[0] += 0.2
+        bus.press("toggle-recording")           # the same press again
+        bus.press("flag-moment")                # flags are not debounced here (the recording is)
+        now[0] += shortcuts.TOGGLE_DEBOUNCE_S
+        bus.press("toggle-recording")           # a real second press
+    asyncio.run(go())
+    assert activated == ["toggle-recording", "flag-moment", "toggle-recording"]
+    assert shortcuts.TOGGLE_DEBOUNCE_S == 1.5
 
 
 def test_register_refused_is_a_failure_with_its_reason():
@@ -315,6 +378,9 @@ def test_status_values(tmp_path):
         start(d)
         assert status(state) == want
         assert bus.disconnected is (want != "bound")       # a refusal leaves no session open
+        keys = json.loads((state / "status.json").read_text())["shortcut_keys"]
+        assert keys == ({"toggle-recording": "Ctrl+Alt+R", "flag-moment": "Ctrl+Alt+F"}
+                        if want == "bound" else None)
 
     async def no_bus():
         raise FileNotFoundError("no session bus")
@@ -326,7 +392,9 @@ def test_status_values(tmp_path):
     assert status(state) == "failed"
 
 
-def test_shortcuts_reach_control(tmp_path):
+def test_shortcuts_reach_control(tmp_path, monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(shortcuts, "_now", lambda: now[0])
     d = on(make(tmp_path))
     bus = FakePortal()
     with_portal(d, bus)
@@ -340,8 +408,12 @@ def test_shortcuts_reach_control(tmp_path):
         bus.press("toggle-recording")
         await drain(d)
         assert d.recording is not None
+        bus.press("toggle-recording")                # delivered twice: still recording
+        await drain(d)
+        assert d.recording is not None
         bus.press("flag-moment")
         assert len(d.recording.flags) == 1
+        now[0] += 5
         bus.press("toggle-recording")
         await drain(d)
     asyncio.run(go())
@@ -384,6 +456,31 @@ def test_setting_switched_in_the_app_binds_and_unbinds(tmp_path):
     assert len(second.portal_calls("CreateSession")) == 1
 
 
+def test_setup_asks_again_when_no_keys_are_set(tmp_path):
+    from wirenote.config.secrets import set_config_value
+    from wirenote.config.settings import config_dir, load_settings
+
+    d = make(tmp_path)
+    empty = {"toggle-recording": "", "flag-moment": ""}
+    first, second, third = FakePortal(keys=empty), FakePortal(), FakePortal()
+    made = with_portal(d, first, second, third)
+    cfg = config_dir() / "config.toml"
+    load_settings(cfg)
+    set_config_value(cfg, "global_shortcuts", "true")
+
+    async def go():
+        assert d._control("reload-settings")["ok"]
+        await settle()
+        assert status(tmp_path) == "bound" and d.shortcut_keys == empty
+        assert d._control("bind-shortcuts")["ok"]           # allowed without keys: ask again
+        await settle()
+        assert first.disconnected and d.shortcut_keys["toggle-recording"] == "Ctrl+Alt+R"
+        assert d._control("bind-shortcuts")["ok"]           # keys set: nothing to do
+        await settle()
+    asyncio.run(go())
+    assert made == [third]
+
+
 def test_hung_portal_never_delays_detection(tmp_path, monkeypatch):
     import wirenote.detector.daemon as daemon_mod
 
@@ -424,15 +521,29 @@ def test_doctor_explains_each_status(tmp_path, monkeypatch):
     monkeypatch.setattr(setup, "state_dir", lambda: tmp_path)
     base = {"running": True, "pid": os.getpid(), "notifications": True, "jobs": {}}
     s_on = replace(Settings(), global_shortcuts=True)
+    keys = {"toggle-recording": "Meta+R", "flag-moment": "Ctrl+Alt+F"}
     for value, s, want in (("bound", s_on, "ok"), ("denied", s_on, "warn"), ("no portal", s_on, "warn"),
                            ("failed", s_on, "warn"), (None, s_on, "warn"), (None, Settings(), None)):
-        (tmp_path / "status.json").write_text(json.dumps({**base, "shortcuts": value}))
+        (tmp_path / "status.json").write_text(json.dumps({**base, "shortcuts": value, "shortcut_keys": keys}))
         found = [c for c in setup._daemon_checks(s) if "shortcut" in c.message]
         assert [c.status for c in found] == ([want] if want else [])
+        if value == "bound":                    # the keys you really have, not the ones asked for
+            assert "Meta+R starts or stops recording" in found[0].message
+            assert "Ctrl+Alt+F flags the moment" in found[0].message
         if value in ("no portal", "denied"):
             assert "wirenote toggle" in found[0].fix and "wirenote flag" in found[0].fix
         if value == "failed":
             assert "journalctl" in found[0].fix and "setup install" in found[0].fix
+
+    def bound_with(keys):
+        (tmp_path / "status.json").write_text(json.dumps({**base, "shortcuts": "bound", "shortcut_keys": keys}))
+        (check,) = [c for c in setup._daemon_checks(s_on) if "shortcut" in c.message]
+        return check
+    none = bound_with({"toggle-recording": "", "flag-moment": ""})
+    assert none.status == "warn" and "no keys are set" in none.message
+    assert "keyboard settings" in none.fix and "wirenote toggle" in none.fix
+    some = bound_with({"toggle-recording": "Ctrl+Alt+R", "flag-moment": ""})
+    assert some.status == "warn" and "no key for flagging" in some.message
 
 
 def test_setup_shortcuts_turns_it_on_and_reports(tmp_path, monkeypatch, capsys):
@@ -450,12 +561,20 @@ def test_setup_shortcuts_turns_it_on_and_reports(tmp_path, monkeypatch, capsys):
     answers = iter([None, None, "bound"])
 
     def tick(seconds):          # the desktop's dialog is answered after a while
-        (tmp_path / "status.json").write_text(json.dumps({"shortcuts": next(answers)}))
+        answer = next(answers)
+        keys = {"toggle-recording": "Meta+R", "flag-moment": "Ctrl+Alt+F"} if answer == "bound" else None
+        (tmp_path / "status.json").write_text(json.dumps({"shortcuts": answer, "shortcut_keys": keys}))
     assert setup.setup_shortcuts(sleep=tick) == 0
     assert sent == ["bind-shortcuts"]
     assert load_settings(config_dir() / "config.toml").global_shortcuts is True
     out = capsys.readouterr().out
-    assert "allow" in out and "Ctrl+Alt+R" in out
+    assert "allow" in out and "Meta+R starts or stops recording" in out
+
+    def no_keys(seconds):       # allowed, but the desktop set no key
+        (tmp_path / "status.json").write_text(json.dumps(
+            {"shortcuts": "bound", "shortcut_keys": {"toggle-recording": "", "flag-moment": ""}}))
+    assert setup.setup_shortcuts(sleep=no_keys) == 1
+    assert "no keys are set" in capsys.readouterr().out
 
     monkeypatch.setattr(setup, "control", lambda c: {"ok": False, "error": "daemon not running"})
     assert setup.setup_shortcuts(sleep=lambda s: pytest.fail("nothing to wait for")) == 1

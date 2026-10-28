@@ -67,13 +67,15 @@ Two shortcuts work in any app, even while a call app has the focus:
 - `Ctrl+Alt+R` starts or stops recording, like `wirenote toggle`: it stops the recording; or, with a call prompt showing, records it; or else records a meeting without a call app.
 - `Ctrl+Alt+F` flags this moment of the recording, like `wirenote flag`.
 
+A second `Ctrl+Alt+R` within 1.5 seconds counts as the same press, so one press never starts and stops a recording at once.
+
 They are off until you turn them on, because your desktop asks whether to allow them. Turn them on in **Settings › Desktop**, or run:
 
 ```sh
 wirenote setup shortcuts
 ```
 
-Your desktop shows a dialog: allow the shortcuts there, or pick other keys. The command waits for your answer and tells you the result. Change the keys later in your desktop's keyboard settings. Wirenote asks for the same shortcuts every time it starts, and your desktop does not ask again once you answered.
+Your desktop shows a dialog: allow the shortcuts there, or pick other keys. The command waits for your answer and shows the keys your desktop set. If the desktop allowed the shortcuts but set no keys, it says so; set them in your desktop's keyboard settings, or use the commands below. Change the keys later in your desktop's keyboard settings. Wirenote asks for the same shortcuts every time it starts, and your desktop does not ask again once you answered.
 
 They work through the desktop's shortcuts portal (xdg-desktop-portal), which KDE Plasma and GNOME 48 or newer have. `wirenote doctor` says whether they are set up and, if not, why.
 

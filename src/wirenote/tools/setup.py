@@ -178,7 +178,7 @@ def setup_shortcuts(sleep=time.sleep, clock=time.monotonic, wait_s: float = SHOR
             print(f"{WARN} no answer from the desktop yet; `wirenote doctor` shows the result later")
             return 1
         sleep(0.5)
-    check = _shortcuts_check(value, True)
+    check = _shortcuts_check(value, True, _status().get("shortcut_keys"))
     mark = {"ok": OK, "warn": WARN, "bad": BAD}[check.status]
     print(f"{mark} {check.message}" + (f": {check.fix}" if check.fix else ""))
     return 0 if check.status == "ok" else 1
@@ -290,11 +290,26 @@ CUSTOM_KEYS = ("bind `wirenote toggle` and `wirenote flag` to keys yourself, as 
                "shortcuts in your desktop's keyboard settings")
 
 
-def _shortcuts_check(value: str | None, on: bool) -> Check | None:
-    """status.json "shortcuts" (notify/shortcuts.py BOUND, ...); recording works without them."""
+SHORTCUT_ACTS = {"toggle-recording": "starts or stops recording", "flag-moment": "flags the moment"}
+SHORTCUT_NAMES = {"toggle-recording": "starting and stopping", "flag-moment": "flagging"}
+
+
+def _shortcuts_check(value: str | None, on: bool, keys: dict | None = None) -> Check | None:
+    """status.json "shortcuts" (notify/shortcuts.py BOUND, ...) and "shortcut_keys", the keys
+    the desktop really set; recording works without them."""
     if value == "bound":
-        return Check("ok", "global shortcuts: Ctrl+Alt+R starts or stops recording, Ctrl+Alt+F flags "
-                           "the moment (change the keys in your desktop's keyboard settings)")
+        keys = keys if isinstance(keys, dict) else {}
+        have = [f"{keys[sid]} {act}" for sid, act in SHORTCUT_ACTS.items() if keys.get(sid)]
+        if not have:
+            return Check("warn", "global shortcuts are allowed, but no keys are set",
+                         f"set them in your desktop's keyboard settings; or {CUSTOM_KEYS}")
+        missing = [name for sid, name in SHORTCUT_NAMES.items() if not keys.get(sid)]
+        if missing:
+            return Check("warn", f"global shortcuts: {', '.join(have)}; no key for "
+                                 f"{' or '.join(missing)}",
+                         "set it in your desktop's keyboard settings")
+        return Check("ok", f"global shortcuts: {', '.join(have)} (change them in your desktop's "
+                           "keyboard settings)")
     if value == "denied":
         return Check("warn", "global shortcuts: the desktop refused them, or they were declined in "
                              "its dialog", f"{CUSTOM_KEYS}; or ask again: wirenote setup shortcuts")
@@ -338,8 +353,9 @@ def _daemon_checks(s: Settings | None = None) -> list[Check]:
     elif status.get("tray") == "failed":
         out.append(Check("warn", "the tray icon could not start or stopped working",
                          "see journalctl --user -u wirenote; or set tray_icon = false"))
-    if alive and (keys := _shortcuts_check(status.get("shortcuts"), s.global_shortcuts)):
-        out.append(keys)
+    found = _shortcuts_check(status.get("shortcuts"), s.global_shortcuts, status.get("shortcut_keys"))
+    if alive and found:
+        out.append(found)
     failed = (status.get("jobs") or {}).get("failed", 0)
     out.append(_ok(not failed, "no failed note jobs", f"{failed} failed note job(s)",
                    "wirenote jobs", warn=True))
