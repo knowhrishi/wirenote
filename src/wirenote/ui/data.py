@@ -27,6 +27,11 @@ from ..capture.recorder import add_flag, read_flags, read_manifest, write_flags,
 from ..config.secrets import (calendar_sources, load_secrets, save_secrets, with_config_value,
                               write_config_atomic)
 from ..config.settings import DEFAULT_CONFIG_TOML, Settings, config_dir, parse_settings
+from ..meetings.catalog import load_calls
+from ..meetings.people import (MAX_NAME, build_people, is_person, link, load_aliases, person_key, resolve,
+                               save_aliases)
+from ..meetings.me import infer_addresses, my_addresses
+from ..meetings.related import event_key, prep_brief, related_calls
 from ..config.vocabulary import load_vocabulary, save_vocabulary
 from ..process.engines import ENGINES, OVERRIDES, check_overrides
 from ..process.jobs import Jobs
@@ -39,6 +44,8 @@ from ..process.templates import remember_series, scan, series_templates
 from ..process.worker import MY_NOTES, SUMMARY, TRANSCRIPT, read_my_notes, rewrite_note
 
 REC_ID = re.compile(r"^\d{8}-\d{6}-[A-Za-z0-9_.-]{1,64}$")
+CALLS_TTL_S = 30.0
+PREP_KEY = re.compile(r"^[0-9a-f]{12}$")
 LABEL = re.compile(r"^(S\d{1,3}|Others)$")
 MIX = "mix.ogg"
 ASKS = "asks.json"
@@ -82,7 +89,9 @@ subject: a short subject line."""
 EDITABLE = ("consent_line", "summary_backend", "ollama_model", "anthropic_model",
             "openai_url", "openai_model",
             "whisper_model", "whisper_language", "summary_language", "asr_engine",
-            "live_transcript", "default_template", "global_shortcuts", "launcher_search")
+            "live_transcript", "default_template", "my_emails", "global_shortcuts",
+            "launcher_search")
+LISTS = ("my_emails",)             # the EDITABLE settings that are lists of text
 # The EDITABLE settings that are true or false
 SWITCHES = ("live_transcript", "global_shortcuts", "launcher_search")
 LIVE_READ = 256 * 1024             # most of live.jsonl sent per poll
@@ -90,6 +99,7 @@ BACKENDS = ("ollama", "anthropic", "openai", "none")
 API_KEYS = {"anthropic": "anthropic_api_key", "openai": "openai_api_key"}   # secrets.toml
 UPDATE_UNIT = "wirenote-update"
 MAX_SETTING = 500
+MAX_LIST = 10
 CALENDAR_LINK = re.compile(r"^(https|webcal)://\S{1,2000}$", re.IGNORECASE)
 
 CLOUD_DISCLOSURE = ("With Claude or an online API on, these go to Anthropic, or to the API you "
@@ -183,6 +193,7 @@ class Store:
         self._jobs_lock = threading.Lock()
         self._mix_locks: dict[str, threading.Lock] = {}
         self._upcoming: tuple[float, list] = (0.0, [])
+        self._calls_cache: tuple[float, int, list | None] = (0.0, 0, None)
         # The launcher's quick search: per call, what it matches, keyed by file times
         self._quick: dict[str, tuple[tuple, dict]] = {}
         self._quick_speakers: dict[str, tuple[int | None, list[str]]] = {}
@@ -408,6 +419,10 @@ class Store:
                    "seconds": round(talk.get(label, 0.0)),
                    "can_remember": bool((speakers.get(label) or {}).get("embedding"))}
                   for label in sorted(talk, key=lambda l: (l != "Me", -talk[l]))]
+        aliases = load_aliases(self.state_dir)
+        known = self._known_people(aliases)
+        for p in people:
+            p["person"] = link(p["name"], aliases, known) if p["named"] else None
         return {**brief,
                 "summary": summary,
                 "template": used,
@@ -418,6 +433,7 @@ class Store:
                 "series_template": series_templates(self.state_dir).get(str(uid)) if uid else None,
                 "lines": lines,
                 "people": people,
+                "attendee_people": {n: link(n, aliases, known) for n in brief["attendees"]},
                 "names": {p["label"]: p["name"] for p in people},
                 "runs": tr.get("runs", []),
                 "echo_dropped": len(tr.get("dropped_echo", [])),
@@ -493,6 +509,7 @@ class Store:
         item = s["action_items"][index]
         item["done"] = bool(done)
         _write_json(d / SUMMARY, s)
+        self._calls_cache = (0.0, 0, None)      # after the write: a read meanwhile must not stay cached
         note = self._note(read_manifest(d))
         if note and note.exists():
             _tick_in_note(note, item, done)
@@ -570,6 +587,7 @@ class Store:
             if remember and name and info.get("embedding"):
                 self.voices.remember(name, info["embedding"])
         _write_json(d / TRANSCRIPT, tr)
+        self._calls_cache = (0.0, 0, None)      # a newly named speaker is a person with a page
         if read_manifest(d).get("note"):
             rewrite_note(d, self.settings)
 
@@ -762,6 +780,53 @@ class Store:
                             "due": a.get("due", ""), "done": bool(a.get("done"))})
         return out
 
+    # People ----------------------------------------------------------------
+
+    def _known_people(self, aliases: dict[str, str]) -> dict:
+        """The people that have a page, for links from a call; reads the cached library."""
+        calls = self._recent_calls()
+        return build_people(calls, aliases, my_addresses(calls, self.settings))
+
+    def _people(self):
+        calls = load_calls(self.root)
+        mine = my_addresses(calls, self.settings)
+        return build_people(calls, load_aliases(self.state_dir), mine), {c.id: c for c in calls}
+
+    def people(self) -> list[dict]:
+        out = [{"key": person_key(p.name), "name": p.name, "emails": sorted(p.emails),
+                "calls": len(p.calls), "last_met": p.last_met, "seconds": round(p.seconds),
+                "open_actions": sum(1 for a in p.actions if not a["done"])}
+               for p in self._people()[0].values()]
+        return sorted(out, key=lambda p: (p["last_met"], p["name"].casefold()), reverse=True)
+
+    def person(self, key: str) -> dict:
+        people, calls = self._people()
+        for p in people.values():
+            if person_key(p.name) == key:
+                actions = [{**a, "owner": p.name, "title": calls[a["call"]].title,
+                            "started": calls[a["call"]].started} for a in p.actions]
+                return {"key": key, "name": p.name, "emails": sorted(p.emails), "calls": p.calls,
+                        "actions": actions, "last_met": p.last_met, "seconds": round(p.seconds)}
+        raise NotFound("person")
+
+    def alias(self, name: str, same_as: str) -> str:
+        """Say that name is the same person as same_as; gives the key of the merged person."""
+        name, same_as = name.strip(), same_as.strip()
+        if not is_person(name) or not is_person(same_as):
+            raise Invalid("give two names")
+        if len(name) > MAX_NAME or len(same_as) > MAX_NAME:
+            raise Invalid("name too long")
+        aliases = load_aliases(self.state_dir)
+        target = resolve(same_as, aliases)
+        if target not in self._people()[0]:
+            raise Invalid("no one called that")      # a typo must not make a new person
+        if resolve(name, aliases) == target:
+            raise Invalid("those are already the same person")
+        # Point the old name at the target's spelling, so the merged person is shown that way.
+        aliases[name.casefold()] = same_as
+        save_aliases(self.state_dir, aliases)
+        return person_key(target)
+
     def ask_all(self, question: str) -> dict:
         question = question.strip()
         if not question:
@@ -852,7 +917,9 @@ class Store:
                 "notes_dir": str(s.notes_path()),
                 "vocabulary": load_vocabulary(), "voices": self.voices.names(),
                 "calendars": self.calendars(),
-                "editable": {k: getattr(s, k) for k in EDITABLE},
+                "editable": {k: list(v) if isinstance(v, tuple) else v
+                             for k, v in ((k, getattr(s, k)) for k in EDITABLE)},
+                "my_emails_inferred": sorted(infer_addresses(self._recent_calls())) if not s.my_emails else [],
                 "templates": self.templates(),
                 "anthropic_key_set": bool(secrets.get("anthropic_api_key")
                                           or os.environ.get("ANTHROPIC_API_KEY")),
@@ -880,6 +947,12 @@ class Store:
             if k in SWITCHES:
                 if not isinstance(v, bool):
                     raise Invalid(f"{k}: true or false")
+                continue
+            if k in LISTS:
+                if not isinstance(v, list) or len(v) > MAX_LIST or not all(
+                        isinstance(x, str) and "@" in x and x.isprintable() and not any(c.isspace() for c in x)
+                        and len(x) <= MAX_SETTING for x in v):
+                    raise Invalid(f"{k}: a list of email addresses")
                 continue
             if not isinstance(v, str) or len(v) > MAX_SETTING:
                 raise Invalid(f"{k}: expected text of at most {MAX_SETTING} characters")
@@ -1121,10 +1194,39 @@ class Store:
             events = ics.load(sources, dt.datetime.now().astimezone())[0] if sources else []
             self._upcoming = (time.monotonic(), events)
         now = dt.datetime.now().astimezone()
-        soon = [e for e in events if e.end > now and e.start < now + dt.timedelta(hours=18)]
+        soon = sorted((e for e in events if e.end > now and e.start < now + dt.timedelta(hours=18)),
+                      key=lambda e: e.start)[:8]
+        calls = self._recent_calls() if soon else []
+        mine = my_addresses(calls, self.settings)
         return [{"title": e.title, "start": e.start.isoformat(), "end": e.end.isoformat(),
-                 "attendees": list(e.attendees), "call": bool(e.service_links(None))}
-                for e in sorted(soon, key=lambda e: e.start)[:8]]
+                 "attendees": list(e.attendees), "call": bool(e.service_links(None)),
+                 "key": event_key(e), "related": len(related_calls(e, calls, mine=mine))}
+                for e in soon]
+
+    def prep(self, key: str) -> dict:
+        """The brief for an event in the calendar, found by its hash key (never by title)."""
+        if not PREP_KEY.match(key or ""):
+            raise NotFound("event")
+        self.upcoming()                         # refreshes the cached events when they are stale
+        for e in self._upcoming[1]:
+            if event_key(e) == key:
+                calls = self._recent_calls()
+                return prep_brief(e, calls, my_addresses(calls, self.settings), load_aliases(self.state_dir))
+        raise NotFound("event")
+
+    def _recent_calls(self) -> list:
+        """load_calls for the home page and prep, reused for CALLS_TTL_S while the recordings
+        folder is unchanged; ticking an action drops it."""
+        try:
+            stamp = self.root.stat().st_mtime_ns
+        except OSError:
+            stamp = 0
+        at, seen, calls = self._calls_cache
+        if calls is not None and seen == stamp and time.monotonic() - at < CALLS_TTL_S:
+            return calls
+        calls = load_calls(self.root)
+        self._calls_cache = (time.monotonic(), stamp, calls)
+        return calls
 
 
 def _mtime_ns(path: Path) -> int | None:

@@ -109,6 +109,12 @@ class Settings:
     # › Calendar window: starts in <=10 min, started <=5 min ago, or in progress
     calendar_before_s: float = 600.0
     calendar_after_start_s: float = 300.0
+    # docs/dev/PLAN.md › Defaults › Meeting prep: on; a banner 5 min before an event with past calls
+    meeting_prep: bool = True
+    # › Meeting prep
+    prep_lead_s: float = 300.0
+    # › Own address: yours, left out of prep and people; empty means guess from your calls
+    my_emails: tuple = ()
 
     # UI (docs/dev/ui-design.md): local web app on 127.0.0.1
     ui_port: int = 8765
@@ -185,6 +191,9 @@ DEFAULT_CONFIG_TOML = """# wirenote settings. Defaults come from docs/dev/PLAN.m
 # calendar_refresh_s = 300.0
 # calendar_before_s = 600.0
 # calendar_after_start_s = 300.0
+# meeting_prep = true                # a banner before a meeting you have had calls about
+# prep_lead_s = 300.0
+# my_emails = []                     # your own addresses; empty: guessed from your calls
 
 # UI
 # ui_port = 8765                     # wirenote ui serves http://127.0.0.1:<port>/
@@ -208,8 +217,23 @@ def parse_settings(text: str) -> Settings:
     coerced = {}
     for k, v in data.items():
         default = getattr(base, k)
-        coerced[k] = v if isinstance(default, bool) else type(default)(v)
+        if k in TEXT_LISTS:
+            coerced[k] = _text_list(k, v)
+        else:
+            coerced[k] = v if isinstance(default, bool) else type(default)(v)
     return replace(base, **coerced)
+
+
+TEXT_LISTS = ("my_emails",)       # settings that are a list of text
+
+
+def _text_list(key: str, value) -> tuple[str, ...]:
+    """A list of text; one text alone is a list of one, not a list of its letters."""
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, list) and all(isinstance(x, str) for x in value):
+        return tuple(value)
+    raise ValueError(f'config.toml: {key} must be a list of text, such as ["you@example.com"]')
 
 
 def load_settings(path: Path) -> Settings:

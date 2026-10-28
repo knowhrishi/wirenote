@@ -1,0 +1,45 @@
+{
+  "model": "/home/user/.cache/whisper",
+  "runs": [
+    {
+      "file": "mic-000.wav",
+      "engine": "whisper",
+      "language": "en",
+      "language_probability": 0.99,
+      "audio_s": 5.7,
+      "speech_s": 2.5
+    },
+    {
+      "file": "system-000.wav",
+      "engine": "whisper",
+      "language": "en",
+      "language_probability": 0.99,
+      "audio_s": 5.7,
+      "speech_s": 2.5
+    }
+  ],
+  "lines": [
+    {
+      "speaker": "Me",
+      "start": 0.2,
+      "end": 2.7,
+      "text": "I will send the changelog by Thursday."
+    },
+    {
+      "speaker": "S1",
+      "start": 0.21,
+      "end": 2.71,
+      "text": "Great, then we ship the release on Friday."
+    }
+  ],
+  "speakers": {
+    "S1": {
+      "name": "Anna Berg",
+      "source": "transcript",
+      "score": 0.0,
+      "evidence": "Thanks, Anna",
+      "seconds": 2.5
+    }
+  },
+  "dropped_echo": []
+}
