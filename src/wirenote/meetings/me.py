@@ -17,8 +17,9 @@ INFER_MIN_CALLS = 3
 
 
 def infer_addresses(calls: list[CallRecord]) -> set[str]:
-    """Addresses in every call that lists any. Calls saved before 1.0 have names only and
-    are not counted, so they neither support nor block the guess."""
+    """Addresses in every call that lists any. A call whose invitees have no addresses (an
+    older one where some invitee had none) is not counted: it neither supports nor blocks
+    the guess."""
     sets = [{e.casefold() for _, e in c.attendees if e} for c in calls]
     sets = [s for s in sets if s]
     if len(sets) < INFER_MIN_CALLS:

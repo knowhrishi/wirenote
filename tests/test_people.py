@@ -28,12 +28,12 @@ server = test_ui.server
 
 def rec(root: Path, n: int, *, speakers: dict | None = None, lines: list | None = None,
         attendees: list | None = None, people: list | None = None, actions: list | None = None,
-        title: str = "Call") -> Path:
+        title: str = "Call", emails: list | None = None) -> Path:
     d = root / f"20261027-1{n:05d}-chrome"
     d.mkdir(parents=True)
     cal = None
     if attendees is not None:
-        cal = {"title": title, "attendees": attendees, "emails": []}
+        cal = {"title": title, "attendees": attendees, "emails": emails or []}
         if people is not None:
             cal["people"] = people
     write_manifest(d, {"version": 1, "id": d.name, "app": "chrome", "name": "Chrome", "service": None,
@@ -71,10 +71,20 @@ def test_catalog_reads_0_3_recordings(tmp_path):
     assert plain.calendar_uid == "" and plain.flags == () and plain.attendees == ()
     assert plain.speakers == () and plain.summary["title"] == "Release planning"
     assert cal.calendar_uid == "" and cal.flags == () and cal.calendar_title == "Release planning"
-    # Before 1.0 only names were stored; emails are not guessed.
-    assert cal.attendees == (("Anna Berg", ""), ("bo@example.org", "bo@example.org"))
+    # Before 1.0 names and addresses were two lists, in the same order when every invitee had one.
+    assert cal.attendees == (("Anna Berg", "anna@example.org"), ("bo@example.org", "bo@example.org"))
     assert cal.speakers == (("Anna Berg", 2.5),)
     assert isinstance(cal, CallRecord)
+
+
+def test_old_calls_pair_names_and_addresses_only_when_the_lists_line_up(tmp_path):
+    rec(tmp_path, 1, attendees=["Anna", "Bo"], emails=["anna@x.test", "bo@x.test"])
+    rec(tmp_path, 2, attendees=["Anna", "Bo"], emails=["anna@x.test"])         # Bo had no address
+    rec(tmp_path, 3, attendees=["Anna"], emails=["anna@x.test"], people=[["Anna", "new@x.test"]])
+    newest, uneven, paired = load_calls(tmp_path)
+    assert paired.attendees == (("Anna", "anna@x.test"), ("Bo", "bo@x.test"))
+    assert uneven.attendees == (("Anna", ""), ("Bo", ""))
+    assert newest.attendees == (("Anna", "new@x.test"),)                       # people wins when present
 
 
 def test_catalog_skips_unreadable_folders_and_reads_flags(tmp_path):
@@ -204,3 +214,14 @@ def test_a_person_with_your_address_is_not_listed(tmp_path):
     calls = load_calls(tmp_path)
     assert "me myself" in build_people(calls, {})
     assert sorted(build_people(calls, {}, {"me@x.test"})) == ["anna", "bo", "cy"]
+
+
+def test_you_are_not_listed_from_calls_saved_before_1_0(tmp_path):
+    from wirenote.config.settings import Settings
+    from wirenote.meetings.me import my_addresses
+
+    for n, other in enumerate(["Anna", "Bo", "Cy"], 1):
+        rec(tmp_path, n, attendees=["Me Myself", other], emails=["me@x.test", f"{other.lower()}@x.test"])
+    calls = load_calls(tmp_path)
+    assert my_addresses(calls, Settings()) == {"me@x.test"}
+    assert sorted(build_people(calls, {}, my_addresses(calls, Settings()))) == ["anna", "bo", "cy"]

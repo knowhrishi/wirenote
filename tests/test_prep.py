@@ -23,9 +23,11 @@ def event(title="Weekly sync", uid="", people=(("Anna", "anna@x.test"), ("Ben", 
                  attendees=tuple(n for n, _ in people), people=tuple(people))
 
 
-def make(root, n, *, uid="", title="Weekly sync", people=(("Anna", "anna@x.test"),), actions=None, summary=None):
-    d = rec(root, n, attendees=[p[0] for p in people], people=[list(p) for p in people],
-            title=title, actions=actions)
+def make(root, n, *, uid="", title="Weekly sync", people=(("Anna", "anna@x.test"),), actions=None, summary=None,
+         old=False):
+    """old: written like 0.1 to 0.3, names and addresses as two lists, no people."""
+    d = rec(root, n, attendees=[p[0] for p in people], people=None if old else [list(p) for p in people],
+            emails=[p[1] for p in people] if old else None, title=title, actions=actions)
     m = read_manifest(d)
     m["calendar"]["uid"] = uid
     write_manifest(d, m)
@@ -120,6 +122,20 @@ def test_you_on_every_invitation_do_not_make_other_meetings_match(tmp_path):
     assert prep_brief(e, calls, mine)["people"] and "Me Myself" not in [
         p["name"] for p in prep_brief(e, calls, mine)["people"]]
     assert my_addresses(calls, replace(Settings(), my_emails=("Other@x.test",))) == {"other@x.test"}
+
+
+def test_you_are_inferred_from_calls_saved_before_1_0(tmp_path):
+    from wirenote.config.settings import Settings
+    from wirenote.meetings.me import my_addresses
+
+    make(tmp_path, 1, title="All hands", people=(ME, ("Zed", "zed@x.test")), old=True)
+    make(tmp_path, 2, title="1:1", people=(ME, ("Anna", "anna@x.test")), old=True)
+    make(tmp_path, 3, title="Filler", people=(ME, ("Quinn", "quinn@x.test")), old=True)
+    calls = load_calls(tmp_path)
+    mine = my_addresses(calls, Settings())
+    assert mine == {"me@x.test"}
+    e = event(title="All hands", people=(ME, ("Anna", "anna@x.test"), ("Ben", "ben@x.test")))
+    assert related_calls(e, calls, mine=mine) == []          # not the other all-hands, not the 1:1
 
 
 def test_your_address_is_inferred_only_from_three_calls(tmp_path):

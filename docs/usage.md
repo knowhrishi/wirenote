@@ -146,7 +146,7 @@ A template has at most 6 sections and 2000 characters of instructions. A file th
 - A person is a name. You are left out: an invitee with one of your addresses (`my_emails`, or the guess shown in Settings › Calendars) has no page. Speakers count once you have named them (a "Speaker 2" has no page), and so does everyone on a calendar invitation. "Me" and "Others" never do.
 - The same person under two names, such as "Anna" and "Anna Berg"? Open one of them and click **Same person as…**. Their calls and action items come together. The recordings and notes are not changed. The choice is kept in `people.json` in `~/.local/state/wirenote/`; delete a line there to undo it.
 - In a call, the name chips under the title open that person's page too.
-- Nothing is sent anywhere: the pages are built from your own recordings each time you open them. Calls saved before this version have names but no email addresses, and show up the same way.
+- Nothing is sent anywhere: the pages are built from your own recordings each time you open them. Calls saved before this version show up the same way, with the addresses their invitation had.
 
 ## Before a meeting
 
@@ -155,7 +155,7 @@ With a calendar connected, Wirenote shows a banner 5 minutes before a meeting wh
 - An earlier call counts when it has the same calendar entry (a repeating meeting), or the same title and an invitee in common, or at least two invitees in common. You are never counted as an invitee (see below).
 - There is no banner while you are recording, and none for a meeting without history. Each meeting gets one banner.
 - To turn it off, set `meeting_prep = false` in `config.toml` and restart: `systemctl --user restart wirenote`. `prep_lead_s = 300.0` is how many seconds ahead the banner comes.
-- **Your own address.** You are on nearly every invitation, so Wirenote leaves you out when it compares invitees, and from People. Set `my_emails = ["you@example.com"]` in `config.toml`, or type it in **Settings › Calendars**. If you have not, Wirenote guesses: an address that is on the invitation of every recorded call, once at least 3 calls list addresses. Settings shows the guess ("Wirenote thinks this is you"). Calls saved before this version list names only; they still count by name.
+- **Your own address.** You are on nearly every invitation, so Wirenote leaves you out when it compares invitees, and from People. Set `my_emails = ["you@example.com"]` in `config.toml`, or type it in **Settings › Calendars**. If you have not, Wirenote guesses: an address that is on the invitation of every recorded call, once at least 3 calls list addresses. Settings shows the guess ("Wirenote thinks this is you"). Calls saved before this version count too: by address when every invitee on them had one, else by name.
 - Nothing is sent anywhere: the page is built from your own recordings.
 
 ## Import and export

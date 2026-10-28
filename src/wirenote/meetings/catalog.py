@@ -74,11 +74,16 @@ def _load(d: Path) -> CallRecord:
 
 
 def _attendees(cal: dict) -> tuple[tuple[str, str], ...]:
-    """(name, email) pairs. Calendars saved before 1.0 hold names only; an invitee who
-    has no display name is listed by address, so that address is the email too."""
+    """(name, email) pairs. Calendars saved before 1.0 have no people, only attendees and
+    emails: two lists that line up by index when they are as long (every invitee then had
+    an address); otherwise names only. An invitee who has no display name is listed by
+    address, so that address is the email too."""
     pairs = cal.get("people")
     if not isinstance(pairs, list):
-        pairs = [[n, ""] for n in cal.get("attendees") or []]
+        names, emails = cal.get("attendees") or [], cal.get("emails") or []
+        if not (isinstance(emails, list) and isinstance(names, list) and len(emails) == len(names)):
+            emails = [""] * len(names)
+        pairs = [[n, e] for n, e in zip(names, emails)]
     out = []
     for p in pairs:
         name, email = (list(p) + ["", ""])[:2] if isinstance(p, (list, tuple)) else (p, "")
