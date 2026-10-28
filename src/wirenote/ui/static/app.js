@@ -11,7 +11,7 @@ const state = {
   query: "",
   status: {},
   call: null,          // the open call (full detail)
-  view: "home",        // home | call | ask | tasks | people | settings | updates
+  view: "home",        // home | call | ask | tasks | people | prep | settings | updates
   tab: "notes",
   asking: false,
   find: "",
@@ -1205,7 +1205,7 @@ async function renderTasks() {
 // Meeting prep ------------------------------------------------------------------
 
 async function renderPrep(key) {
-  state.view = "home";
+  state.view = "prep";
   state.call = null;
   setPlayer(null);
   renderList();

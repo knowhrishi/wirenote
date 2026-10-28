@@ -183,3 +183,21 @@ def test_your_address_is_inferred_despite_a_few_calls_without_you(tmp_path):
     assert infer_addresses(calls(4, 0, tmp_path / "a")) == {"me@x.test"}         # 4 of 4
     assert infer_addresses(calls(10, 1, tmp_path / "b")) == {"me@x.test"}        # 9 of 10: a forwarded invite
     assert infer_addresses(calls(3, 1, tmp_path / "c")) == set()                 # 2 of 3 is not enough
+
+
+def test_three_calls_with_one_partner_give_no_guess_and_keep_the_partner(tmp_path):
+    from wirenote.config.settings import Settings
+    from wirenote.meetings.me import infer_addresses, my_addresses
+    from wirenote.meetings.people import build_people
+
+    for n in (1, 2, 3):
+        make(tmp_path, n, title="1:1", people=(ME, ("Anna", "anna@x.test")))
+    calls = load_calls(tmp_path)
+    assert infer_addresses(calls) == set()               # both pass 90%: which one is you?
+    mine = my_addresses(calls, Settings())
+    assert mine == set()
+    assert "anna" in build_people(calls, {}, mine)
+    e = event(title="1:1", people=(ME, ("Anna", "anna@x.test")))
+    assert len(related_calls(e, calls, mine=mine)) == 3
+    e2 = event(title="Other", people=(("Anna", "anna@x.test"),))
+    assert related_calls(e2, calls, mine=mine)

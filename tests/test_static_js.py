@@ -49,3 +49,9 @@ def test_script_parses(script):
 def test_syntax_errors_are_caught(source):
     with pytest.raises(quickjs.JSException, match="SyntaxError"):
         parse(source)
+
+
+def test_the_prep_page_has_its_own_view_so_a_status_refresh_does_not_replace_it():
+    src = (STATIC / "app.js").read_text()
+    body = src[src.index("async function renderPrep"):]
+    assert 'state.view = "prep";' in body.split("\n}\n")[0]
