@@ -83,7 +83,7 @@ They work through the desktop's shortcuts portal (xdg-desktop-portal), which KDE
 
 **The app-menu entry has a new file name.** `wirenote setup install` now installs it as `io.github.knowhrishi.wirenote.desktop`, the id your desktop knows Wirenote by, and removes the old `wirenote.desktop`. If you pinned Wirenote to a dock or a favorites bar, pin it again.
 
-To turn the shortcuts off, untick them in **Settings › Desktop**, or set `global_shortcuts = false` in `config.toml`.
+To turn the shortcuts off, untick them in **Settings › Desktop**, or set `global_shortcuts = false` in `config.toml`. Wirenote does not watch `config.toml`, so after you change it there yourself, run `systemctl --user restart wirenote`.
 
 ## Find a meeting from the launcher
 
