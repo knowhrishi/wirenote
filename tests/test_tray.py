@@ -302,7 +302,7 @@ def test_untrusted_names_are_shown_as_text():
 
 def test_control_and_direction_characters_never_reach_the_panel():
     tray, bus = started()
-    hostile = "Disc‮ord\x00\x1b[31m⁦x‏"           # bidi override, NUL, escape, isolates
+    hostile = "Disc\N{RIGHT-TO-LEFT OVERRIDE}ord\x00\x1b[31m\N{LEFT-TO-RIGHT ISOLATE}x\N{RIGHT-TO-LEFT MARK}"           # bidi override, NUL, escape, isolates
     tray.update(IndicatorState(None, None, ("x", hostile), 0))
     assert labels(bus)[0] == ("Record Discord[31mx", True)
     tray.update(IndicatorState(hostile, "2026-10-27T14:05:00+01:00", None, 0))
@@ -314,7 +314,7 @@ def test_launcher_and_tray_share_one_cleaner():
     from wirenote.notify import search_provider, text, tray
 
     assert search_provider.plain is text.plain and tray.plain is text.plain
-    assert text.plain("a‮b\n c", limit=3) == "ab…" and text.plain("a‮b\n c") == "ab c"
+    assert text.plain("a\N{RIGHT-TO-LEFT OVERRIDE}b\n c", limit=3) == "ab…" and text.plain("a\N{RIGHT-TO-LEFT OVERRIDE}b\n c") == "ab c"
 
 
 def test_menu_clicks_call_on_menu_and_activate_opens():

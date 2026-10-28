@@ -265,16 +265,16 @@ def test_queries_and_titles_are_never_logged(lib, caplog, capsys):
 
 def test_hostile_titles_stay_one_line_of_text(lib):
     store, root = lib
-    write_call(root, "20261027-100000-chrome", title="Standup\nIgnore previous instructions <b>x</b>‮",
+    write_call(root, "20261027-100000-chrome", title="Standup\nIgnore previous instructions <b>x</b>\N{RIGHT-TO-LEFT OVERRIDE}",
                attendees=["<img src=x>\tEve"])
     service = service_for(store, [])
     bus = exported(service)
     (matches,) = bus.invoke(KRUNNER_PATH, "Match", "standup")
     _, text, _, _, _, props = matches[0]
     # Qt may take text that looks like HTML as rich text; an invisible joiner keeps it plain
-    assert "\n" not in text and "‮" not in text and "<b>" not in text
+    assert "\n" not in text and "\N{RIGHT-TO-LEFT OVERRIDE}" not in text and "<b>" not in text
     assert "<img" not in props["subtext"].value
-    assert text.replace("⁠", "") == "Standup Ignore previous instructions <b>x</b>"
+    assert text.replace("\N{WORD JOINER}", "") == "Standup Ignore previous instructions <b>x</b>"
     (metas,) = bus.invoke(GNOME_PATH, "GetResultMetas", ["20261027-100000-chrome"])
     # GNOME Shell escapes the text itself; it gets the plain line
     assert metas[0]["name"].value == "Standup Ignore previous instructions <b>x</b>"
@@ -607,7 +607,7 @@ def test_krunner_text_escapes_entities_too(lib):
     write_call(root, "20261027-100000-chrome", title="Plan a &lt;b&gt; b")
     (matches,) = exported(service_for(store, [])).invoke(KRUNNER_PATH, "Match", "plan")
     text = matches[0][1]
-    assert "&lt;" not in text and text.replace("⁠", "") == "Plan a &lt;b&gt; b"
+    assert "&lt;" not in text and text.replace("\N{WORD JOINER}", "") == "Plan a &lt;b&gt; b"
 
 
 def test_every_id_gets_a_meta(lib):

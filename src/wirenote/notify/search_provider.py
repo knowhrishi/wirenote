@@ -86,7 +86,7 @@ def _plain(text: Any, limit: int = MAX_TEXT) -> str:
 def _krunner_text(text: str) -> str:
     """Qt may render text that looks like HTML (a tag, or an entity like `&lt;`) as rich text;
     a word joiner after each `<` and `&` keeps it plain and looks the same."""
-    return text.replace("<", "<⁠").replace("&", "&⁠")
+    return text.replace("<", "<\N{WORD JOINER}").replace("&", "&\N{WORD JOINER}")
 
 
 def _date(started: Any) -> str:
