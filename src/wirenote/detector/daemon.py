@@ -117,8 +117,12 @@ class PersistentState:
         self.dismisses: dict[str, int] = data.get("dismisses", {})
         self.ignored: set[str] = set(data.get("ignored", []))
         prepped = data.get("prepped", {})       # absent before 1.0
-        self.prepped: dict[str, float] = {str(k): float(v) for k, v in prepped.items()} \
-            if isinstance(prepped, dict) else {}
+        self.prepped: dict[str, float] = {}
+        for k, v in (prepped.items() if isinstance(prepped, dict) else ()):
+            try:
+                self.prepped[str(k)] = float(v)
+            except (TypeError, ValueError):
+                continue        # a damaged entry must not stop the daemon from starting
 
     def save(self, dismisses: dict[str, int], ignored: set[str]) -> None:
         self.dismisses, self.ignored = dict(dismisses), set(ignored)
@@ -439,6 +443,8 @@ class Daemon:
             await self._safe_close(nid)
 
     async def _show_recording(self, rec: Recording) -> None:
+        for nid in [n for n, s in self._shown.items() if s.kind == "prep"]:
+            await self._safe_close(nid)        # the meeting has begun: the prep banner is done
         m = rec.meta
         what = (m.calendar or {}).get("title") or (f"{m.service} call" if m.service else m.name)
         nid = await self.notifier.notify(f"Recording {what}",

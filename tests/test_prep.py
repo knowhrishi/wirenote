@@ -157,6 +157,18 @@ def test_my_emails_is_a_list_setting():
 
     assert parse_settings('my_emails = ["a@x.test", "b@x.test"]').my_emails == ("a@x.test", "b@x.test")
     assert parse_settings("").my_emails == ()
+    assert parse_settings('my_emails = "me@x.test"').my_emails == ("me@x.test",)       # one address, no list
+
+
+def test_my_emails_rejects_items_that_are_not_text():
+    import pytest
+
+    from wirenote.config.settings import parse_settings
+
+    with pytest.raises(ValueError, match="my_emails"):
+        parse_settings('my_emails = ["a@x.test", 3]')
+    with pytest.raises(ValueError, match="my_emails"):
+        parse_settings("my_emails = 3")
 
 
 def test_your_address_is_inferred_despite_a_few_calls_without_you(tmp_path):

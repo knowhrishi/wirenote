@@ -208,8 +208,23 @@ def parse_settings(text: str) -> Settings:
     coerced = {}
     for k, v in data.items():
         default = getattr(base, k)
-        coerced[k] = v if isinstance(default, bool) else type(default)(v)
+        if k in TEXT_LISTS:
+            coerced[k] = _text_list(k, v)
+        else:
+            coerced[k] = v if isinstance(default, bool) else type(default)(v)
     return replace(base, **coerced)
+
+
+TEXT_LISTS = ("my_emails",)       # settings that are a list of text
+
+
+def _text_list(key: str, value) -> tuple[str, ...]:
+    """A list of text; one text alone is a list of one, not a list of its letters."""
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, list) and all(isinstance(x, str) for x in value):
+        return tuple(value)
+    raise ValueError(f'config.toml: {key} must be a list of text, such as ["you@example.com"]')
 
 
 def load_settings(path: Path) -> Settings:

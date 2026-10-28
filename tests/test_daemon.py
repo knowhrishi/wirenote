@@ -569,3 +569,25 @@ def test_prep_rounds_run_as_one_task_at_a_time(tmp_path):
 
     asyncio.run(go())
     assert len(started) == 2
+
+
+def test_a_bad_prepped_entry_in_state_json_is_skipped(tmp_path):
+    from wirenote.detector.daemon import PersistentState
+
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"dismisses": {}, "ignored": [], "prepped": {
+        "good": 5.0, "text": "x", "none": None, "list": [1], "int": 7}}))
+    assert PersistentState(path).prepped == {"good": 5.0, "int": 7.0}
+    path.write_text(json.dumps({"prepped": {"a": "nan-ish"}}))
+    make(tmp_path)                                       # the daemon still starts
+
+
+def test_the_prep_banner_is_withdrawn_when_a_recording_starts(tmp_path):
+    d, now = _prep_setup(tmp_path)
+    asyncio.run(d._prep_round(now))
+    asyncio.run(drain(d))
+    (banner,) = [k for k, v in d.notifier.shown.items() if v[0].startswith("Next: ")]
+    prompt(d)
+    assert d._control("record")["ok"]
+    asyncio.run(drain(d))
+    assert d.recording is not None and banner in d.notifier.closed and banner not in d._shown
