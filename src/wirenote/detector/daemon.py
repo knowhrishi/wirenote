@@ -232,6 +232,7 @@ class Daemon:
             task.cancel()
         await asyncio.gather(*tasks, stop, return_exceptions=True)
         self._close_shortcuts_bus()
+        self._stop_tray()
         if self.recording is not None:
             await self._finish_recording("wirenote stopped")
         for nid in list(self._shown):
@@ -294,6 +295,15 @@ class Daemon:
     async def _start_tray(self, tray: TrayIndicator) -> None:
         if not await tray.start():
             self._set_tray(self._no_icon(tray))
+
+    def _stop_tray(self) -> None:
+        """Also a tray the daemon swapped for a NullIndicator after it broke."""
+        tray, self._tray = self._tray, None
+        if tray is not None:
+            try:
+                tray.stop()
+            except Exception as e:  # noqa: BLE001 - shutting down anyway
+                self.log.write("warning", message=f"tray icon: stop failed ({type(e).__name__})")
 
     def _set_tray(self, status: str) -> None:
         if isinstance(self.indicator, NullIndicator):

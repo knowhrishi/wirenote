@@ -300,6 +300,23 @@ def test_untrusted_names_are_shown_as_text():
     assert bus.props(ITEM_PATH)["ToolTip"][3] == "Recording &lt;b&gt;Board&lt;/b&gt; &amp; co since 14:05"
 
 
+def test_control_and_direction_characters_never_reach_the_panel():
+    tray, bus = started()
+    hostile = "Disc‮ord\x00\x1b[31m⁦x‏"           # bidi override, NUL, escape, isolates
+    tray.update(IndicatorState(None, None, ("x", hostile), 0))
+    assert labels(bus)[0] == ("Record Discord[31mx", True)
+    tray.update(IndicatorState(hostile, "2026-10-27T14:05:00+01:00", None, 0))
+    assert labels(bus)[0][0] == "Recording Discord[31mx since 14:05"
+    assert bus.props(ITEM_PATH)["ToolTip"][3] == "Recording Discord[31mx since 14:05"
+
+
+def test_launcher_and_tray_share_one_cleaner():
+    from wirenote.notify import search_provider, text, tray
+
+    assert search_provider.plain is text.plain and tray.plain is text.plain
+    assert text.plain("a‮b\n c", limit=3) == "ab…" and text.plain("a‮b\n c") == "ab c"
+
+
 def test_menu_clicks_call_on_menu_and_activate_opens():
     tray, bus = started()
     clicks = []
@@ -528,6 +545,57 @@ def test_a_refused_registration_is_a_failure_not_a_missing_tray(tmp_path):
     asyncio.run(panel_accepts_again())
     assert d.indicator.register_failed is False
     assert json.loads((later / "status.json").read_text())["tray"] == "shown"
+
+
+def test_tray_stop_cancels_its_tasks_and_leaves_the_bus():
+    async def go():
+        bus = FakeBus(watcher=False, hang_register=True)    # a hung host never answers
+        tray = with_bus(bus)()
+        await tray.start()
+        bus.set_watcher(True)
+        await settle()
+        tasks = list(tray._tasks)
+        assert tasks and not any(t.done() for t in tasks)
+        tray.stop()
+        await settle()
+        assert all(t.cancelled() for t in tasks) and bus.disconnected
+        assert not tray.connected and not tray.registered
+        tray.update(RECORDING)                              # after stop: stored, nothing sent
+        tray.stop()                                         # twice is fine
+        return bus
+    bus = asyncio.run(asyncio.wait_for(go(), 5))
+    assert not [s for s in bus.signals if s[0] == "NewIcon"]
+    NullIndicator().stop()
+
+
+def test_daemon_closes_the_tray_at_shutdown(tmp_path, monkeypatch):
+    import signal
+
+    from wirenote.detector import daemon as daemon_mod
+
+    bus = FakeBus()
+    d = make(tmp_path)
+    d.make_tray = with_bus(bus)
+    monkeypatch.setattr(daemon_mod, "control_socket_path", lambda: tmp_path / "ctl.sock")
+    monkeypatch.setattr(daemon_mod, "watch_sleep", lambda cb: asyncio.sleep(0))
+
+    async def idle(self=None):
+        await asyncio.Event().wait()
+    for name in ("_pw_loop", "_tick_loop", "_worker_loop", "_housekeeping_loop", "_calendar_loop",
+                 "_update_loop", "_control_loop"):
+        monkeypatch.setattr(d, name, idle)
+
+    async def go():
+        run = asyncio.create_task(d.run())
+        for _ in range(50):
+            await asyncio.sleep(0.01)
+            if d.indicator.registered:
+                break
+        assert d.indicator.registered
+        os.kill(os.getpid(), signal.SIGTERM)
+        await run
+    asyncio.run(asyncio.wait_for(go(), 10))
+    assert bus.disconnected and not d.indicator.connected
 
 
 def test_tray_creation_error_leaves_the_daemon_running(tmp_path):

@@ -23,7 +23,6 @@ import asyncio
 import datetime as dt
 import logging
 import time
-import unicodedata
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from importlib.resources import files
@@ -37,6 +36,7 @@ from dbus_fast.aio import MessageBus
 from dbus_fast.service import ServiceInterface, dbus_method
 
 from .. import APP_ID
+from .text import plain
 
 if TYPE_CHECKING:
     from ..config.settings import Settings
@@ -80,9 +80,7 @@ def gnome_ini_path() -> Path:
 
 def _plain(text: Any, limit: int = MAX_TEXT) -> str:
     """Calendar titles and names are untrusted: one line, no control or direction characters."""
-    one = " ".join(str(text).split())
-    one = "".join(c for c in one if not unicodedata.category(c).startswith("C"))
-    return one if len(one) <= limit else one[:limit - 1].rstrip() + "…"
+    return plain(text, limit)
 
 
 def _krunner_text(text: str) -> str:

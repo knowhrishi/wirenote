@@ -30,6 +30,7 @@ from dbus_fast.service import ServiceInterface, dbus_method, dbus_property, dbus
 
 from .dbus import escape_markup
 from .indicator import IndicatorState, MenuItem, describe, menu_for
+from .text import plain
 
 WATCHER = "org.kde.StatusNotifierWatcher"
 WATCHER_PATH = "/StatusNotifierWatcher"
@@ -75,9 +76,9 @@ async def session_bus() -> MessageBus:
 
 
 def _label(text: str) -> str:
-    """App names and calendar titles are untrusted: one line, and `_` is a mnemonic
-    marker in dbusmenu labels, so a literal one is doubled."""
-    return " ".join(text.split()).replace("_", "__")
+    """App names and calendar titles are untrusted: one line with no control or direction
+    characters, and `_` is a mnemonic marker in dbusmenu labels, so a literal one is doubled."""
+    return plain(text).replace("_", "__")
 
 
 def _icon(s: IndicatorState) -> str:
@@ -139,6 +140,20 @@ class TrayIndicator:
         if present and not self.registered:
             await self._register()
         return self.registered
+
+    def stop(self) -> None:
+        """At shutdown: cancel a registration in flight and leave the bus, which takes the
+        icon off the panel. Later updates are only stored."""
+        for task in list(self._tasks):
+            task.cancel()
+        self._tasks.clear()
+        bus, self._bus = self._bus, None
+        self.registered = False
+        if bus is not None:
+            try:
+                bus.disconnect()
+            except Exception:  # noqa: BLE001 - already gone
+                pass
 
     @property
     def connected(self) -> bool:
@@ -285,7 +300,7 @@ class _Item(ServiceInterface):
     @dbus_property(access=PropertyAccess.READ)
     def ToolTip(self) -> ToolTipType:
         # Plasma shows tooltip text as rich text
-        return [_icon(self._tray.state), [], "Wirenote", escape_markup(describe(self._tray.state))]
+        return [_icon(self._tray.state), [], "Wirenote", escape_markup(plain(describe(self._tray.state)))]
 
     @dbus_property(access=PropertyAccess.READ)
     def ItemIsMenu(self) -> DBusBool:

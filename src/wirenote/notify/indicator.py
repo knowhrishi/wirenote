@@ -85,6 +85,10 @@ class Indicator(Protocol):
         """Show s. Never raises: the daemon must keep detecting whatever the panel does."""
         ...
 
+    def stop(self) -> None:
+        """At shutdown: take the icon away and end what start() began. Never raises."""
+        ...
+
 
 class NullIndicator:
     """For desktops without a tray, and when the tray icon is turned off."""
@@ -96,4 +100,7 @@ class NullIndicator:
         return False
 
     def update(self, s: IndicatorState) -> None:
+        pass
+
+    def stop(self) -> None:
         pass
