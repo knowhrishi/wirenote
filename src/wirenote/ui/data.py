@@ -857,7 +857,17 @@ class Store:
                 "anthropic_key_set": bool(secrets.get("anthropic_api_key")
                                           or os.environ.get("ANTHROPIC_API_KEY")),
                 "openai_key_set": bool(secrets.get("openai_api_key")),
+                "shortcut_keys": self._shortcut_keys(),
                 "cloud_disclosure": CLOUD_DISCLOSURE}
+
+    def _shortcut_keys(self) -> dict[str, str] | None:
+        """The keys the desktop really set for the global shortcuts (status.json), or None
+        until it allowed them; Settings › Desktop shows these instead of the ones asked for."""
+        st = self.status()
+        keys = st.get("shortcut_keys")
+        if st.get("shortcuts") != "bound" or not isinstance(keys, dict):
+            return None
+        return {str(k): v for k, v in keys.items() if isinstance(v, str)}
 
     def update_settings(self, changes: dict, confirm_cloud: bool) -> dict:
         """Change some of EDITABLE in config.toml; the file is untouched unless all are valid."""

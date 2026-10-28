@@ -1349,6 +1349,16 @@ function setupCard(s) {
       kv("Notes folder", s.notes_dir)));
 }
 
+// The keys the desktop really set (status.json, through /api/settings), else the ones asked for
+function shortcutsHint(keys) {
+  if (!keys) return "Ctrl+Alt+R starts or stops recording and Ctrl+Alt+F flags the moment, in any app. Your desktop asks once whether to allow them; change the keys in its keyboard settings. KDE Plasma and GNOME 48 or newer have them; elsewhere, Setup check says what to do instead.";
+  const have = [];
+  if (keys["toggle-recording"]) have.push(`${keys["toggle-recording"]} starts or stops recording`);
+  if (keys["flag-moment"]) have.push(`${keys["flag-moment"]} flags the moment`);
+  if (!have.length) return "Your desktop allowed the shortcuts but set no keys: set them in its keyboard settings.";
+  return `${have.join(" and ")}, in any app. Change the keys in your desktop's keyboard settings.`;
+}
+
 // Global shortcuts (docs/usage.md › Keyboard shortcuts). Saved at once: turning them on makes
 // the desktop ask whether to allow them, and that should follow the click.
 function desktopCard(s) {
@@ -1376,7 +1386,7 @@ function desktopCard(s) {
   return h("div", { class: "settings-card" },
     h("h2", {}, "Desktop"),
     h("label", { class: "check-row tight", for: "global-shortcuts" }, box, "Global shortcuts"),
-    h("div", { class: "hint below-check" }, "Ctrl+Alt+R starts or stops recording and Ctrl+Alt+F flags the moment, in any app. Your desktop asks once whether to allow them; change the keys in its keyboard settings. KDE Plasma and GNOME 48 or newer have them; elsewhere, Setup check says what to do instead."),
+    h("div", { class: "hint below-check" }, shortcutsHint(s.shortcut_keys)),
     h("label", { class: "check-row tight", for: "launcher-search" }, search, "Find meetings from the launcher"),
     h("div", { class: "hint below-check" }, "KRunner and GNOME's search list your meetings by title, people and summary. Anyone who sees your screen sees those names as you type. Turning it on here is not enough the first time: run `wirenote setup search` once (GNOME needs one sudo step it shows). Off, the launcher finds nothing."));
 }

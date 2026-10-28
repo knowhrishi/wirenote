@@ -616,6 +616,26 @@ def test_app_switches_global_shortcuts(tmp_path, monkeypatch):
         st.update_settings({"global_shortcuts": "yes"}, False)
 
 
+def test_app_shows_the_keys_the_desktop_really_set(tmp_path):
+    from pathlib import Path
+
+    from wirenote import ui
+    from wirenote.config.settings import Settings
+    from wirenote.ui.data import Store
+
+    st = Store(Settings(), tmp_path)
+    assert st.settings_info()["shortcut_keys"] is None          # the daemon has not said yet
+    keys = {"toggle-recording": "Meta+R", "flag-moment": ""}
+    (tmp_path / "status.json").write_text(json.dumps({"shortcuts": "bound", "shortcut_keys": keys}))
+    assert st.settings_info()["shortcut_keys"] == keys
+    (tmp_path / "status.json").write_text(json.dumps({"shortcuts": "denied", "shortcut_keys": keys}))
+    assert st.settings_info()["shortcut_keys"] is None
+    (tmp_path / "status.json").write_text(json.dumps({"shortcuts": "bound", "shortcut_keys": ["x"]}))
+    assert st.settings_info()["shortcut_keys"] is None
+    script = (Path(ui.__file__).parent / "static" / "app.js").read_text()
+    assert "s.shortcut_keys" in script
+
+
 def test_app_script_has_the_desktop_switch():
     from pathlib import Path
 
