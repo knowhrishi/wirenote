@@ -69,6 +69,19 @@ def test_event_people_pairs_names_with_emails():
     json.dumps(ev.as_meta())
 
 
+def test_rooms_resources_and_groups_are_not_invitees():
+    ics = ("BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//t//EN\nBEGIN:VEVENT\nUID:a@t\nSUMMARY:S\n"
+           "DTSTART:20261027T100000Z\nDTEND:20261027T110000Z\n"
+           "ATTENDEE;CN=Ana:mailto:ana@example.org\n"
+           "ATTENDEE;CUTYPE=ROOM;CN=Building 1-Room 4:mailto:room4@example.org\n"
+           "ATTENDEE;CUTYPE=resource;CN=Projector:mailto:beamer@example.org\n"
+           "ATTENDEE;CUTYPE=GROUP;CN=Team:mailto:team@example.org\n"
+           "ATTENDEE;CUTYPE=INDIVIDUAL;CN=Bo:mailto:bo@example.org\nEND:VEVENT\nEND:VCALENDAR\n")
+    (ev,) = parse(ics, at(10))
+    assert ev.people == (("Ana", "ana@example.org"), ("Bo", "bo@example.org"))
+    assert ev.attendees == ("Ana", "Bo") and ev.emails == ("ana@example.org", "bo@example.org")
+
+
 def test_window_edges():
     evs = [e for e in events_at(at(9)) if e.title == "Weekly sync"]
     win = lambda now: in_window(evs, now, 600, 300)  # noqa: E731

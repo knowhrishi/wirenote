@@ -52,6 +52,7 @@ BY_PARTS = ("BYSECOND", "BYMINUTE", "BYHOUR", "BYDAY", "BYMONTHDAY", "BYYEARDAY"
 MAX_SERIES_STEPS = 200_000
 MAX_FEED_STEPS = 500_000
 SCHEME = re.compile(r"^(https?|webcal)://", re.IGNORECASE)
+NOT_INVITEES = ("ROOM", "RESOURCE", "GROUP")     # ATTENDEE;CUTYPE=... that are not a person
 
 
 class CalendarError(Exception):
@@ -156,6 +157,8 @@ def _event(ev) -> Event:
     links = tuple(dict.fromkeys(m.rstrip(".,;)") for m in LINK.findall(text_fields)))
     att = ev.get("ATTENDEE", [])
     att = att if isinstance(att, list) else [att]
+    # Feeds list meeting rooms, equipment and mailing lists as attendees; they are not people.
+    att = [a for a in att if str(getattr(a, "params", {}).get("CUTYPE", "")).upper() not in NOT_INVITEES]
     emails = tuple(re.sub(r"^mailto:", "", str(a), flags=re.IGNORECASE) for a in att)
     names = tuple(str(a.params.get("CN") or e) for a, e in zip(att, emails))
     title = str(ev.get("SUMMARY", "")).strip()[:MAX_TITLE] or "(no title)"
