@@ -3,8 +3,8 @@
 """People across calls (docs/dev/PLAN.md › Defaults › People).
 
 A person is a name that spoke in a call (a named speaker) or was invited to one,
-joined by case-folded name. Me, Others and unnamed "Speaker N" are not people. There
-is no own-address setting, so everyone invited counts. Aliases say that one name is
+joined by case-folded name. Me, Others and unnamed "Speaker N" are not people, and
+neither are you (your addresses, meetings/me.py). Aliases say that one name is
 another (stored in state_dir/people.json); they never touch the recordings.
 Names are untrusted text: pages and URLs use person_key, never the name.
 """

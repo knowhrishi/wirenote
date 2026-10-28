@@ -52,7 +52,8 @@ BY_PARTS = ("BYSECOND", "BYMINUTE", "BYHOUR", "BYDAY", "BYMONTHDAY", "BYYEARDAY"
 MAX_SERIES_STEPS = 200_000
 MAX_FEED_STEPS = 500_000
 SCHEME = re.compile(r"^(https?|webcal)://", re.IGNORECASE)
-NOT_INVITEES = ("ROOM", "RESOURCE", "GROUP")     # ATTENDEE;CUTYPE=... that are not a person
+# docs/dev/PLAN.md › Defaults › People: ATTENDEE;CUTYPE=... that are not a person
+NOT_INVITEES = ("ROOM", "RESOURCE", "GROUP")
 
 
 class CalendarError(Exception):

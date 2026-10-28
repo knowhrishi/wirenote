@@ -37,7 +37,7 @@ def normalize_title(title: str) -> str:
 
 
 def _invitees(e: Event) -> tuple[tuple[str, str], ...]:
-    """(name, email) of the invitees. There is no own-address setting, so all of them count."""
+    """(name, email) of the invitees, you included; callers leave you out with _others."""
     if e.people:
         return e.people
     if e.attendees:
