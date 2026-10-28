@@ -157,7 +157,8 @@ def test_match_returns_titles_and_activation_opens_call(lib):
     (metas,) = bus.invoke(GNOME_PATH, "GetResultMetas", ["20261028-180000-chrome", "20990101-000000-gone"])
     assert [{k: v.value for k, v in m.items()} for m in metas] == [
         {"id": "20261028-180000-chrome", "name": "Weekly sync 8", "gicon": "wirenote",
-         "description": "2026-10-28 18:00 · Anna Berg, Ben Ott, Cem Kaya +1"}]
+         "description": "2026-10-28 18:00 · Anna Berg, Ben Ott, Cem Kaya +1"},
+        {"id": "20990101-000000-gone", "name": "Meeting not found", "gicon": "wirenote", "description": ""}]
     run_with(service, lambda: bus.invoke(GNOME_PATH, "ActivateResult", "20261028-180000-chrome",
                                          ["weekly"], 0))
     run_with(service, lambda: bus.invoke(GNOME_PATH, "LaunchSearch", ["weekly", "sync&x=1"], 0))
@@ -430,3 +431,87 @@ def test_app_opens_with_the_launcher_query():
 
     script = (Path(ui.__file__).parent / "static" / "app.js").read_text()
     assert "#\\/\\?q=" in script and "decodeURIComponent" in script
+
+
+# Review fixes ----------------------------------------------------------------
+
+def test_a_big_library_answers_from_few_reads_then_from_the_cache(lib, monkeypatch):
+    from wirenote.ui import data as data_mod
+
+    store, root = lib
+    for i in range(500):
+        write_call(root, f"2026{1 + i // 28:02d}{1 + i % 28:02d}-100000-chrome", title=f"Weekly sync {i}",
+                   summary={"summary": [f"Point {i}"]},
+                   transcript={"speakers": {"S1": {"name": f"Ole {i}"}}, "lines": []})
+    reads = []
+    real = data_mod._read_json
+    monkeypatch.setattr(data_mod, "_read_json", lambda path, default=None: reads.append(path.name)
+                        or real(path, default))
+    monkeypatch.setattr(Store, "status", lambda self: pytest.fail("the launcher reads no status"))
+
+    found = search(store, ["weekly"])
+    assert len(found) == 8
+    # newest first, stopping at 8: their manifests, summaries and (for the people line) speakers
+    assert reads.count("manifest.json") == 8 and reads.count("summary.json") == 8
+    assert reads.count("transcript.json") == 8
+    reads.clear()
+    assert search(store, ["weekly"]) == found and reads == []          # the next key press: stats only
+
+    assert search(store, ["ole 3"])                                      # only in speaker names
+    assert reads.count("transcript.json") < 500
+    reads.clear()
+    search(store, ["ole 3"])
+    assert reads == []
+
+    assert search(store, ["nothing like this"]) == []       # every call read once
+    reads.clear()
+    assert search(store, ["nothing like this"]) == [] and reads == []
+    summary = root / found[0]["id"] / "summary.json"
+    summary.write_text(json.dumps({"summary": ["changed"]}))
+    os.utime(summary, ns=(1, 1))                         # a different time: that call is read again
+    reads.clear()
+    assert search(store, ["changed"])[0]["id"] == found[0]["id"]
+    assert reads.count("summary.json") == 1 and reads.count("manifest.json") == 1
+
+
+def test_krunner_text_escapes_entities_too(lib):
+    store, root = lib
+    write_call(root, "20261027-100000-chrome", title="Plan a &lt;b&gt; b")
+    (matches,) = exported(service_for(store, [])).invoke(KRUNNER_PATH, "Match", "plan")
+    text = matches[0][1]
+    assert "&lt;" not in text and text.replace("⁠", "") == "Plan a &lt;b&gt; b"
+
+
+def test_every_id_gets_a_meta(lib):
+    store, root = lib
+    write_call(root, "20261027-100000-chrome", title="Weekly sync", attendees=["Anna Berg"])
+    bus = exported(service_for(store, []))         # a fresh process: nothing searched yet
+    ids = ["20261027-100000-chrome", "20990101-000000-gone", "../../etc", ""]
+    (metas,) = bus.invoke(GNOME_PATH, "GetResultMetas", ids)
+    assert [m["id"].value for m in metas] == ids
+    assert metas[0]["name"].value == "Weekly sync"
+    assert metas[0]["description"].value == "2026-10-27 10:00 · Anna Berg"
+    assert [m["name"].value for m in metas[1:]] == ["Meeting not found"] * 3
+
+
+def test_launch_search_survives_the_login_redirect(lib):
+    from wirenote.ui.server import NEXT_ROUTE
+
+    store, _ = lib
+    opened = []
+    service = service_for(store, opened)
+    run_with(service, lambda: exported(service).invoke(GNOME_PATH, "LaunchSearch", ["~anna", "ü"], 0))
+    assert opened == ["#/?q=%7Eanna%20%C3%BC"] and NEXT_ROUTE.match(opened[0])
+
+
+def test_calls_with_a_bad_id_are_left_out(lib):
+    store, root = lib
+    write_call(root, "20261027-100000-chrome", title="Weekly sync")
+    for name, bad in (("20261027-110000-chrome", 123), ("20261027-120000-chrome", "../../x"),
+                      ("20261027-130000-chrome", "20261027-130000-chrome\n")):
+        d = write_call(root, name, title="Weekly evil")
+        m = json.loads((d / "manifest.json").read_text())
+        (d / "manifest.json").write_text(json.dumps({**m, "id": bad}))
+    assert [f["id"] for f in search(store, ["weekly"])] == ["20261027-100000-chrome"]
+    (matches,) = exported(service_for(store, [])).invoke(KRUNNER_PATH, "Match", "weekly")
+    assert [m[0] for m in matches] == ["20261027-100000-chrome"]

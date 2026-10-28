@@ -182,6 +182,9 @@ class Store:
         self._jobs_lock = threading.Lock()
         self._mix_locks: dict[str, threading.Lock] = {}
         self._upcoming: tuple[float, list] = (0.0, [])
+        # The launcher's quick search: per call, what it matches, keyed by file times
+        self._quick: dict[str, tuple[tuple, dict]] = {}
+        self._quick_speakers: dict[str, tuple[int | None, list[str]]] = {}
 
     # Paths -----------------------------------------------------------------
 
@@ -257,10 +260,16 @@ class Store:
                                        if not a.get("done") and a.get("owner") == "Me"),
                 "preview": ((s or {}).get("summary") or [""])[0]}
 
-    def calls(self, query: str = "", deep: bool = True) -> list[dict]:
-        """Every call, newest first; with a query, those that match it. deep=False looks at the
-        title, people and summary only, not your notes or the transcript: fast enough for a
-        launcher that searches at every key press."""
+    def calls(self, query: str = "", deep: bool = True, limit: int | None = None) -> list[dict]:
+        """Every call, newest first; with a query, those that match it.
+
+        deep=False is the launcher's search: title, people and summary only, never your notes
+        or the transcript, stopping after limit hits. Its results are short ({id, title,
+        started, attendees, speakers, match}), and what it reads is kept until the files
+        change, so the next key press costs a few stat calls per meeting."""
+        q = query.strip().lower()
+        if q and not deep:
+            return self._quick_calls(q, limit)
         recording_id = self.status().get("recording_id")
         q = query.strip().lower()
         out = []
@@ -268,16 +277,84 @@ class Store:
             try:
                 brief = self._brief(d, recording_id)
                 if q:
-                    hit = self._search(d, brief, q, deep)
+                    hit = self._search(d, brief, q)
                     if hit is None:
                         continue
                     brief["match"] = hit
             except (OSError, ValueError, KeyError, TypeError, AttributeError):
                 continue        # a broken call folder hides that call, not the list
             out.append(brief)
+            if limit is not None and len(out) >= limit:
+                break
         return out
 
-    def _search(self, d: Path, brief: dict, q: str, deep: bool = True) -> dict | None:
+    def quick_brief(self, rec_id: str) -> dict:
+        """One call as the launcher shows it; NotFound for an id that is not a call."""
+        d = self.rec_dir(rec_id)
+        try:
+            entry = dict(self._quick_entry(d))
+            entry["speakers"] = self._quick_people(d)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+            raise NotFound(rec_id) from e
+        return entry
+
+    def _quick_calls(self, q: str, limit: int | None) -> list[dict]:
+        out = []
+        for d in self._rec_dirs():
+            try:
+                entry = self._quick_entry(d)
+                hit = _quick_hit(entry, q)
+                if hit is None:
+                    # Speaker names come from transcript.json: the dearest file, read last
+                    hit = next(({"where": "people", "text": n} for n in self._quick_people(d)
+                                if q in n.lower()), None)
+                if hit is None:
+                    continue
+                found = {k: entry[k] for k in ("id", "title", "started", "attendees")}
+                found["speakers"] = [] if entry["attendees"] else self._quick_people(d)
+                found["match"] = hit
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                continue        # a broken call folder hides that call, not the list
+            out.append(found)
+            if limit is not None and len(out) >= limit:
+                break
+        return out
+
+    def _quick_entry(self, d: Path) -> dict:
+        """Title, start, invitees and summary text of one call, read once per change."""
+        key = tuple(_mtime_ns(d / name) for name in ("manifest.json", SUMMARY))
+        cached = self._quick.get(d.name)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        m = _read_json(d / "manifest.json")
+        if not isinstance(m, dict):
+            raise ValueError("bad manifest")
+        s = _read_json(d / SUMMARY)
+        s = s if isinstance(s, dict) else None
+        cal = m.get("calendar") or {}
+        texts = [item for key_ in ("summary", "decisions", "open_questions")
+                 for item in (s or {}).get(key_) or []]
+        texts += [item for items in ((s or {}).get("sections") or {}).values() for item in items or []]
+        texts += [a.get("task") for a in (s or {}).get("action_items") or [] if isinstance(a, dict)]
+        entry = {"id": m["id"], "title": self._title(m, s), "started": m.get("started"),
+                 "attendees": [a for a in cal.get("attendees") or [] if isinstance(a, str)],
+                 "texts": [t for t in texts if isinstance(t, str)]}
+        self._quick[d.name] = (key, entry)
+        return entry
+
+    def _quick_people(self, d: Path) -> list[str]:
+        key = _mtime_ns(d / TRANSCRIPT)
+        cached = self._quick_speakers.get(d.name)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        tr = _read_json(d / TRANSCRIPT, {}) if key is not None else {}
+        speakers = tr.get("speakers") if isinstance(tr, dict) else None
+        names = [display_name(l, speakers) for l in sorted(speakers)] if isinstance(speakers, dict) else []
+        names = [n for n in names if isinstance(n, str)]
+        self._quick_speakers[d.name] = (key, names)
+        return names
+
+    def _search(self, d: Path, brief: dict, q: str) -> dict | None:
         if q in brief["title"].lower():
             return {"where": "title", "text": brief["title"]}
         for name in brief["speakers"] + brief["attendees"]:
@@ -293,8 +370,6 @@ class Store:
         for a in s.get("action_items", []):
             if q in a.get("task", "").lower():
                 return {"where": "action_items", "text": a["task"]}
-        if not deep:
-            return None
         if q in read_my_notes(d).lower():
             return {"where": "my_notes", "text": read_my_notes(d)[:140]}
         for line in self._transcript(d).get("lines", []):
@@ -1039,6 +1114,25 @@ class Store:
         return [{"title": e.title, "start": e.start.isoformat(), "end": e.end.isoformat(),
                  "attendees": list(e.attendees), "call": bool(e.service_links(None))}
                 for e in sorted(soon, key=lambda e: e.start)[:8]]
+
+
+def _mtime_ns(path: Path) -> int | None:
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return None
+
+
+def _quick_hit(entry: dict, q: str) -> dict | None:
+    if isinstance(entry["title"], str) and q in entry["title"].lower():
+        return {"where": "title", "text": entry["title"]}
+    for name in entry["attendees"]:
+        if q in name.lower():
+            return {"where": "people", "text": name}
+    for text in entry["texts"]:
+        if q in text.lower():
+            return {"where": "summary", "text": text}
+    return None
 
 
 def _seconds(hhmmss: str) -> float:

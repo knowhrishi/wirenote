@@ -60,6 +60,7 @@ MAX_TEXT = 120           # characters of a title or a line of people
 # KRunner's QueryMatch type (KF5 Type::PossibleMatch, KF6 CategoryRelevance::Low)
 POSSIBLE_MATCH = 30
 METAS_KEPT = 64          # results GNOME may ask GetResultMetas about
+NOT_FOUND = "Meeting not found"
 
 Matches = Annotated[list, DBusSignature("a(sssida{sv})")]
 ActionList = Annotated[list, DBusSignature("a(sss)")]
@@ -83,9 +84,9 @@ def _plain(text: Any, limit: int = MAX_TEXT) -> str:
 
 
 def _krunner_text(text: str) -> str:
-    """Qt may render text that looks like HTML as rich text; a word joiner after each `<` keeps
-    it plain and looks the same."""
-    return text.replace("<", "<⁠")
+    """Qt may render text that looks like HTML (a tag, or an entity like `&lt;`) as rich text;
+    a word joiner after each `<` and `&` keeps it plain and looks the same."""
+    return text.replace("<", "<⁠").replace("&", "&⁠")
 
 
 def _date(started: Any) -> str:
@@ -110,14 +111,25 @@ def search(store: Store, terms: list[str]) -> list[dict]:
     if len(query) < MIN_CHARS:
         return []
     out = []
-    for brief in store.calls(query, deep=False):
-        try:
-            out.append({"id": brief["id"], "title": _plain(brief["title"]), "subtitle": _subtitle(brief)})
-        except (KeyError, TypeError, ValueError):
-            continue
-        if len(out) == MAX_RESULTS:
-            break
+    for brief in store.calls(query, deep=False, limit=MAX_RESULTS):
+        r = _result(brief)
+        if r is not None:
+            out.append(r)
     return out
+
+
+def _result(brief: dict) -> dict | None:
+    """None for a call whose id is not a recording id: it could not go on the bus as a string,
+    or be opened."""
+    from ..ui.data import REC_ID
+
+    rec_id = brief.get("id")
+    if not isinstance(rec_id, str) or not REC_ID.fullmatch(rec_id):
+        return None
+    try:
+        return {"id": rec_id, "title": _plain(brief["title"]), "subtitle": _subtitle(brief)}
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def open_in_app(port: int, route: str) -> None:
@@ -164,9 +176,23 @@ class SearchService:
             self._metas.popitem(last=False)
         return found
 
-    def meta(self, rec_id: str) -> dict | None:
+    def meta(self, rec_id: str) -> dict:
+        """GNOME drops every result when it gets fewer metas than ids, so there is one for
+        each: from the last searches, else from the call's folder (after a restart), else a
+        placeholder."""
+        from ..ui.data import REC_ID
+
         self.touch()
-        return self._metas.get(rec_id)
+        found = self._metas.get(rec_id)
+        if found is None and isinstance(rec_id, str) and REC_ID.fullmatch(rec_id):
+            try:
+                if self._store is None:
+                    self._store = self._store_factory()
+                found = _result(self._store.quick_brief(rec_id))
+            except Exception as e:  # noqa: BLE001 - NotFound, or a broken folder
+                if type(e).__name__ != "NotFound":
+                    self._fail("meta", e)
+        return found or {"id": str(rec_id), "title": NOT_FOUND, "subtitle": ""}
 
     def activate(self, rec_id: str) -> None:
         from ..ui.data import REC_ID
@@ -178,7 +204,8 @@ class SearchService:
     def launch_search(self, terms: list[str]) -> None:
         self.touch()
         query = " ".join(" ".join(str(t) for t in terms).split())
-        self._open(f"#/?q={quote(query, safe='')}" if query else "#/")
+        # `~` too: the web app's login accepts only the characters quote() makes plus `%`
+        self._open(f"#/?q={quote(query, safe='').replace('~', '%7E')}" if query else "#/")
 
     def _open(self, route: str) -> None:
         try:
@@ -264,12 +291,11 @@ class _GnomeProvider(ServiceInterface):
     @dbus_method()
     def GetResultMetas(self, identifiers: Strings) -> Metas:
         out = []
-        for rec_id in identifiers:
+        for rec_id in identifiers:          # exactly one meta per id, in order
             r = self._s.meta(rec_id)
-            if r is not None:
-                # GNOME Shell escapes these itself
-                out.append({"id": Variant("s", r["id"]), "name": Variant("s", r["title"]),
-                            "description": Variant("s", r["subtitle"]), "gicon": Variant("s", ICON)})
+            # GNOME Shell escapes these itself
+            out.append({"id": Variant("s", rec_id), "name": Variant("s", r["title"]),
+                        "description": Variant("s", r["subtitle"]), "gicon": Variant("s", ICON)})
         return out
 
     @dbus_method()
