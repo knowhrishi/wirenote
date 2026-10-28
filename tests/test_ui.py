@@ -816,3 +816,77 @@ def test_chosen_template_is_exposed_and_automatic_clears_it(store):
     assert st.call(rec_id)["chosen_template"] == "lecture"
     st.requeue(rec_id, summary_only=True, template="")
     assert st.call(rec_id)["chosen_template"] is None and "template" not in read_manifest(st.rec_dir(rec_id))
+
+
+def test_upcoming_has_keys_and_prep_page(store, tmp_path, monkeypatch):
+    import datetime as dt
+
+    from wirenote.calendar.ics import Event
+    from wirenote.meetings.related import event_key
+
+    st, rec_id = store
+    now = dt.datetime.now().astimezone()
+    ev = Event(title="Release planning", start=now + dt.timedelta(minutes=20), end=now + dt.timedelta(hours=1),
+               uid="series-9", attendees=("Anna",), people=(("Anna", "a@x.test"),))
+    other = Event(title="Lunch", start=now + dt.timedelta(hours=2), end=now + dt.timedelta(hours=3))
+    m = read_manifest(st.root / rec_id)
+    m["calendar"] = {"title": "Release planning", "uid": "series-9", "attendees": ["Anna"]}
+    write_manifest(st.root / rec_id, m)
+    monkeypatch.setattr(data_mod, "calendar_sources", lambda urls: ("x",))
+    monkeypatch.setattr("wirenote.calendar.ics.load", lambda sources, n: ([ev, other], []))
+    up = st.upcoming()
+    assert [u["key"] for u in up] == [event_key(ev), event_key(other)]
+    assert [u["related"] for u in up] == [1, 0]
+    brief = st.prep(event_key(ev))
+    assert brief["event"]["title"] == "Release planning" and brief["last"]["title"]
+    assert isinstance(brief["open_actions"], list)
+    with pytest.raises(NotFound):
+        st.prep("0" * 12)
+    with pytest.raises(NotFound):
+        st.prep("not-a-key")
+
+
+def test_prep_route(server, monkeypatch):
+    import datetime as dt
+
+    from wirenote.calendar.ics import Event
+
+    app, port, rec_id = server
+    now = dt.datetime.now().astimezone()
+    ev = Event(title="Sync", start=now + dt.timedelta(minutes=20), end=now + dt.timedelta(hours=1))
+    monkeypatch.setattr(data_mod, "calendar_sources", lambda urls: ("x",))
+    monkeypatch.setattr("wirenote.calendar.ics.load", lambda sources, n: ([ev], []))
+    status, body = request(port, "GET", "/api/upcoming")
+    key = json.loads(body)["events"][0]["key"]
+    assert request(port, "GET", "/api/prep/zzzzzzzzzzzz")[0] == 404
+    status, body = request(port, "GET", f"/api/prep/{key}")
+    assert status == 200 and json.loads(body)["event"]["title"] == "Sync" and json.loads(body)["last"] is None
+
+
+def test_my_emails_setting_and_inferred_address(store, cfg_env):
+    st, rec_id = store
+    assert st.settings_info()["my_emails_inferred"] == []         # one call is too few to guess
+    assert st.update_settings({"my_emails": ["Me@x.test"]}, False)["editable"]["my_emails"] == ["Me@x.test"]
+    with pytest.raises(Invalid, match="my_emails"):
+        st.update_settings({"my_emails": "me@x.test"}, False)
+    with pytest.raises(Invalid, match="my_emails"):
+        st.update_settings({"my_emails": ["not an address"]}, False)
+    assert st.update_settings({"my_emails": []}, False)["editable"]["my_emails"] == []
+
+
+def test_upcoming_and_prep_read_the_library_once_in_a_while(store, monkeypatch):
+    import datetime as dt
+
+    from wirenote.calendar.ics import Event
+
+    st, rec_id = store
+    now = dt.datetime.now().astimezone()
+    ev = Event(title="Sync", start=now + dt.timedelta(minutes=20), end=now + dt.timedelta(hours=1))
+    monkeypatch.setattr(data_mod, "calendar_sources", lambda urls: ("x",))
+    monkeypatch.setattr("wirenote.calendar.ics.load", lambda sources, n: ([ev], []))
+    loads = []
+    real = data_mod.load_calls
+    monkeypatch.setattr(data_mod, "load_calls", lambda root: loads.append(1) or real(root))
+    st.upcoming()
+    st.prep(st.upcoming()[0]["key"])
+    assert len(loads) == 1

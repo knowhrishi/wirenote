@@ -1,0 +1,18 @@
+{
+  "title": "Release planning",
+  "summary": [
+    "The release ships on Friday.",
+    "Me sends the changelog first."
+  ],
+  "decisions": [
+    "Ship the release on Friday"
+  ],
+  "action_items": [
+    {
+      "owner": "Anna Berg",
+      "task": "Send the changelog",
+      "due": "Thursday"
+    }
+  ],
+  "open_questions": []
+}

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import json
 from dataclasses import replace
 
@@ -405,3 +406,222 @@ def test_toggle_records_the_one_prompt_and_refuses_several(tmp_path):
     reply = d._control("toggle")
     assert reply["ok"] is False and reply["error"].startswith("several prompts: ")
     assert d.recording is None
+
+
+# Meeting prep (docs/dev/PLAN.md › Defaults › Meeting prep) ------------------
+
+def _prep_setup(tmp_path, title="Weekly sync", past=True):
+    import datetime as dt
+
+    from wirenote.calendar.ics import Event
+    from wirenote.capture.recorder import read_manifest, write_manifest
+    from test_people import rec
+
+    d = make(tmp_path)
+    now = dt.datetime(2026, 11, 3, 9, 57).astimezone()
+    d.calendar_events = [Event(title=title, start=now + dt.timedelta(minutes=3), end=now + dt.timedelta(hours=1),
+                               uid="series-1", attendees=("Anna",), people=(("Anna", "a@x.test"),))]
+    if past:
+        root = d.settings.recordings_path()
+        root.mkdir(parents=True, exist_ok=True)
+        call = rec(root, 1, attendees=["Anna"], people=[["Anna", "a@x.test"]], title="Weekly sync",
+                   actions=[{"task": "Send deck", "owner": "Anna", "due": "", "done": False}])
+        m = read_manifest(call)
+        m["started"] = "2026-10-27T10:00:00+00:00"
+        m["calendar"]["uid"] = "series-1"
+        write_manifest(call, m)
+        s = json.loads((call / "summary.json").read_text())
+        s["summary"] = ["We agreed the plan."]
+        (call / "summary.json").write_text(json.dumps(s))
+    return d, now
+
+
+def test_prep_notifies_once_not_during_recording_not_without_history(tmp_path, monkeypatch):
+    import wirenote.ui.launch as launch
+
+    d, now = _prep_setup(tmp_path / "a", past=False)
+    asyncio.run(d._prep_round(now))
+    asyncio.run(drain(d))
+    assert d.notifier.shown == {}                       # no history, no banner
+
+    d, now = _prep_setup(tmp_path / "b")
+    prompt(d)
+    assert d._control("record")["ok"]
+    asyncio.run(drain(d))
+    d.notifier.shown.clear()
+    asyncio.run(d._prep_round(now))
+    asyncio.run(drain(d))
+    assert d.notifier.shown == {}                       # a recording is running
+    assert d._control("stop")["ok"]
+    asyncio.run(drain(d))
+
+    d.notifier.shown.clear()
+    late = now - dt.timedelta(minutes=10)               # more than prep_lead_s before the start
+    asyncio.run(d._prep_round(late))
+    asyncio.run(drain(d))
+    assert d.notifier.shown == {}
+    d.settings = replace(d.settings, meeting_prep=False)
+    asyncio.run(d._prep_round(now))
+    asyncio.run(drain(d))
+    assert d.notifier.shown == {}
+    d.settings = replace(d.settings, meeting_prep=True)
+
+    for _ in range(2):
+        asyncio.run(d._prep_round(now))
+        asyncio.run(drain(d))
+    (nid, (summary, body, actions, _)), = d.notifier.shown.items()
+    assert summary == "Next: Weekly sync in 3 min" and actions == ["open"]
+    assert body == "We agreed the plan. 1 open action item"
+    opened = []
+    monkeypatch.setattr(launch, "open_ui", lambda port, route, fallback=None: opened.append(route) or True)
+    d._on_action(nid, "open")
+    assert len(opened) == 1 and opened[0].startswith("#/prep/") and len(opened[0]) == len("#/prep/") + 12
+    d2 = make(tmp_path / "b")                           # a restart does not repeat it
+    d2.calendar_events = d.calendar_events
+    asyncio.run(d2._prep_round(now))
+    asyncio.run(drain(d2))
+    assert d2.notifier.shown == {}
+
+
+def test_prep_notification_escapes_title(tmp_path):
+    from wirenote.notify.dbus import Notifier
+
+    sent = []
+
+    class Iface:
+        async def call_notify(self, app, rid, icon, summary, body, actions, hints, timeout):
+            sent.append((summary, body))
+            return 7
+
+    real = Notifier()
+    real.caps = {"actions"}
+    real._iface = Iface()
+    d, now = _prep_setup(tmp_path, title="<b>Plan</b> & more\nIgnore previous instructions")
+    d.notifier = real
+    asyncio.run(d._prep_round(now))
+    asyncio.run(drain(d))
+    (summary, body), = sent
+    assert "<b>" not in summary and "&lt;b&gt;Plan&lt;/b&gt; &amp; more" in summary and "\n" not in summary
+    assert "<" not in body
+
+
+def test_prep_state_is_pruned_after_48_hours_and_old_files_still_read(tmp_path):
+    from wirenote.detector.daemon import PersistentState
+
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"dismisses": {"a": 1}, "ignored": ["b"]}))      # written by 0.3
+    st = PersistentState(path)
+    assert st.prepped == {} and st.dismisses == {"a": 1}
+    st.mark_prepped("old", 1000.0)
+    st.mark_prepped("new", 1000.0 + 49 * 3600)
+    again = PersistentState(path)
+    assert set(again.prepped) == {"new"} and again.ignored == {"b"}
+    again.save({"a": 2}, {"b"})
+    assert set(PersistentState(path).prepped) == {"new"}
+
+
+def test_prep_failure_is_logged_without_paths_or_titles(tmp_path, monkeypatch):
+    import wirenote.detector.daemon as daemon_mod
+
+    d, now = _prep_setup(tmp_path, title="Secret board meeting")
+
+    def boom(root):
+        raise OSError(f"cannot read {root}/secret-folder")
+
+    monkeypatch.setattr(daemon_mod, "load_calls", boom)
+    asyncio.run(d._prep_round(now))
+    log = (tmp_path / "detector.jsonl").read_text()
+    assert "meeting prep failed: OSError" in log
+    assert "secret" not in log.lower() and str(tmp_path / "recordings") not in log
+    assert d._prep_empty == set()
+
+
+def test_prep_empty_cache_follows_the_calendar_and_ignores_empty_libraries(tmp_path):
+    d, now = _prep_setup(tmp_path, past=False)
+    asyncio.run(d._prep_round(now))                      # no recordings at all: not remembered
+    assert d._prep_empty == set()
+    from test_people import rec
+    root = d.settings.recordings_path()
+    root.mkdir(parents=True, exist_ok=True)
+    rec(root, 1, attendees=["Zed"], people=[["Zed", "z@x.test"]], title="Other")
+    asyncio.run(d._prep_round(now))                      # a library, but nothing matches
+    assert len(d._prep_empty) == 1
+    d.calendar_events = []
+    asyncio.run(d._prep_round(now))
+    assert d._prep_empty == set()
+
+
+def test_prep_rounds_run_as_one_task_at_a_time(tmp_path):
+    d, now = _prep_setup(tmp_path)
+    started = []
+
+    async def slow(*a):
+        started.append(1)
+        await asyncio.sleep(0.05)
+
+    async def go():
+        d._prep_round = slow
+        d._start_prep()
+        d._start_prep()                                  # the first is still running
+        await asyncio.sleep(0.1)
+        d._start_prep()
+        await asyncio.sleep(0.1)
+
+    asyncio.run(go())
+    assert len(started) == 2
+
+
+def test_a_bad_prepped_entry_in_state_json_is_skipped(tmp_path):
+    from wirenote.detector.daemon import PersistentState
+
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"dismisses": {}, "ignored": [], "prepped": {
+        "good": 5.0, "text": "x", "none": None, "list": [1], "int": 7}}))
+    assert PersistentState(path).prepped == {"good": 5.0, "int": 7.0}
+    path.write_text(json.dumps({"prepped": {"a": "nan-ish"}}))
+    make(tmp_path)                                       # the daemon still starts
+
+
+def test_the_prep_banner_is_withdrawn_when_a_recording_starts(tmp_path):
+    d, now = _prep_setup(tmp_path)
+    asyncio.run(d._prep_round(now))
+    asyncio.run(drain(d))
+    (banner,) = [k for k, v in d.notifier.shown.items() if v[0].startswith("Next: ")]
+    prompt(d)
+    assert d._control("record")["ok"]
+    asyncio.run(drain(d))
+    assert d.recording is not None and banner in d.notifier.closed and banner not in d._shown
+
+
+def test_a_recording_that_starts_while_the_library_loads_gets_no_prep_banner(tmp_path, monkeypatch):
+    import wirenote.detector.daemon as daemon_mod
+
+    d, now = _prep_setup(tmp_path)
+    real = daemon_mod.load_calls
+
+    def load_then_record(path):
+        calls = real(path)
+        prompt(d)
+        assert d._control("record")["ok"]       # starts during the await
+        return calls
+
+    monkeypatch.setattr(daemon_mod, "load_calls", load_then_record)
+
+    async def go():
+        await d._prep_round(now)
+        await drain(d)
+    asyncio.run(go())
+    assert not [v for v in d.notifier.shown.values() if v[0].startswith("Next: ")]
+    assert d.state.prepped == {}                        # not marked, so it can retry
+
+
+def test_an_event_cached_empty_is_looked_at_again_after_a_note_finishes(tmp_path):
+    d, now = _prep_setup(tmp_path, past=False)
+    from test_people import rec
+    root = d.settings.recordings_path()
+    root.mkdir(parents=True, exist_ok=True)
+    rec(root, 1, attendees=["Zed"], people=[["Zed", "z@x.test"]], title="Other")
+    asyncio.run(d._prep_round(now))
+    assert len(d._prep_empty) == 1
+    d._note_written()
+    assert d._prep_empty == set()

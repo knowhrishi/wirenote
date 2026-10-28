@@ -17,6 +17,7 @@ import datetime as dt
 import fcntl
 import hashlib
 import json
+import math
 import os
 import signal
 import sys
@@ -31,6 +32,9 @@ from ..capture.recorder import (Recording, RecordingMeta, read_manifest, recover
 from ..config.apps import AppRules
 from ..config.secrets import calendar_sources
 from ..config.settings import Settings, config_dir, load_settings
+from ..meetings.catalog import load_calls
+from ..meetings.me import my_addresses
+from ..meetings.related import event_key, prep_brief, related_calls
 from ..notify import clipboard
 from ..notify.dbus import CLOSED_BY_CALL, Notifier, watch_sleep
 from ..process.jobs import ACTIVE, Job, Jobs
@@ -96,8 +100,13 @@ class EventLog:
         print(f"{event} {short}", file=sys.stderr, flush=True)
 
 
+PREP_KEEP_S = 48 * 3600.0     # docs/dev/PLAN.md › Defaults › Meeting prep
+PREP_CHECK_S = 30.0
+
+
 class PersistentState:
-    """state.json: dismiss counts and apps the user chose to always ignore."""
+    """state.json: dismiss counts, apps the user chose to always ignore and the meetings
+    already prepped (key -> time, forgotten after PREP_KEEP_S)."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -107,19 +116,36 @@ class PersistentState:
             data = {}
         self.dismisses: dict[str, int] = data.get("dismisses", {})
         self.ignored: set[str] = set(data.get("ignored", []))
+        prepped = data.get("prepped", {})       # absent before 1.0
+        self.prepped: dict[str, float] = {}
+        for k, v in (prepped.items() if isinstance(prepped, dict) else ()):
+            try:
+                self.prepped[str(k)] = float(v)
+            except (TypeError, ValueError):
+                continue        # a damaged entry must not stop the daemon from starting
 
     def save(self, dismisses: dict[str, int], ignored: set[str]) -> None:
         self.dismisses, self.ignored = dict(dismisses), set(ignored)
+        self._write()
+
+    def mark_prepped(self, key: str, now: float) -> None:
+        self.prepped = {k: t for k, t in self.prepped.items() if now - t < PREP_KEEP_S}
+        self.prepped[key] = now
+        self._write()
+
+    def _write(self) -> None:
         tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"dismisses": self.dismisses,
-                                   "ignored": sorted(self.ignored)}, indent=2))
+        data = {"dismisses": self.dismisses, "ignored": sorted(self.ignored)}
+        if self.prepped:
+            data["prepped"] = self.prepped
+        tmp.write_text(json.dumps(data, indent=2))
         tmp.replace(self.path)
 
 
 @dataclasses.dataclass
 class Shown:
     """A notification we put up: what it is for, and whether it was answered."""
-    kind: str        # "prompt", "recording", "nudge", "note" or "update"
+    kind: str        # "prompt", "recording", "nudge", "note", "update" or "prep"
     key: str
     handled: bool = False
     path: str | None = None
@@ -155,6 +181,9 @@ class Daemon:
         self._calendar_kick = asyncio.Event()
         self._update_kick = asyncio.Event()
         self._last_status = 0.0
+        self._last_prep = 0.0
+        self._prep_task: asyncio.Task | None = None
+        self._prep_empty: set[str] = set()          # events looked at that have no history
         self._stopping = asyncio.Event()
 
     # Lifecycle -------------------------------------------------------------
@@ -275,6 +304,8 @@ class Daemon:
             if self.recording is not None and not self._capture_tick_queued:
                 self._capture_tick_queued = True
                 self._rec_ops.put_nowait((self._capture_tick, None))
+            if time.monotonic() - self._last_prep >= PREP_CHECK_S:
+                self._start_prep()
 
     def _on_sleep(self, going_to_sleep: bool) -> None:
         now = time.monotonic()
@@ -292,6 +323,10 @@ class Daemon:
         if shown.kind == "note" and action in ("open", "default"):
             shown.handled = True
             self._open_note(shown.key, shown.path)
+            return
+        if shown.kind == "prep" and action in ("open", "default"):
+            shown.handled = True
+            self._open_ui(f"#/prep/{shown.key}")
             return
         if shown.kind == "update" and action in ("open", "default"):
             shown.handled = True
@@ -324,7 +359,7 @@ class Daemon:
             self._prompt_ids.pop(shown.key, None)
         if shown.kind == "recording" and self._recording_id == nid:
             self._recording_id = None
-        if shown.handled or reason == CLOSED_BY_CALL or shown.kind in ("note", "update"):
+        if shown.handled or reason == CLOSED_BY_CALL or shown.kind in ("note", "update", "prep"):
             return
         self.log.write("notification_closed", notification=shown.kind, app=shown.key,
                        reason=reason)
@@ -408,6 +443,8 @@ class Daemon:
             await self._safe_close(nid)
 
     async def _show_recording(self, rec: Recording) -> None:
+        for nid in [n for n, s in self._shown.items() if s.kind == "prep"]:
+            await self._safe_close(nid)        # the meeting has begun: the prep banner is done
         m = rec.meta
         what = (m.calendar or {}).get("title") or (f"{m.service} call" if m.service else m.name)
         nid = await self.notifier.notify(f"Recording {what}",
@@ -455,6 +492,17 @@ class Daemon:
                                          "See what's new and update from the Wirenote window.",
                                          [("open", "See what's new")], timeout_ms=0)
         self._shown[nid] = Shown("update", version)
+
+    async def _show_prep(self, arg: tuple[dict, int]) -> None:
+        brief, minutes = arg
+        title = " ".join(brief["event"]["title"].split())[:80]    # one line; the notifier escapes it
+        point = ((brief["last"] or {}).get("summary") or [""])[0]
+        k = len(brief["open_actions"])
+        body = " ".join(x for x in (" ".join(point.split())[:160],
+                                    f"{k} open action item{'' if k == 1 else 's'}" if k else "") if x)
+        nid = await self.notifier.notify(f"Next: {title} in {minutes} min", body,
+                                         [("open", "Open prep")], timeout_ms=0)
+        self._shown[nid] = Shown("prep", brief["event"]["key"])
 
     def _open_ui(self, route: str) -> None:
         from ..ui.launch import open_ui
@@ -632,6 +680,7 @@ class Daemon:
                            note=bool(job.note), error=(job.error or "")[-300:] or None)
             self._write_status(force=True)
             if job.state == "done":
+                self._note_written()
                 self._ops.put_nowait((self._show_note_ready, job))
             elif job.state == "failed":
                 self._ops.put_nowait((self._show_message, (
@@ -715,11 +764,55 @@ class Daemon:
                                errors=len(errors))
             else:
                 self.calendar_events = []
+            self._start_prep()
             self._calendar_kick.clear()
             try:
                 await asyncio.wait_for(self._calendar_kick.wait(), self.settings.calendar_refresh_s)
             except asyncio.TimeoutError:
                 pass
+
+    def _start_prep(self) -> None:
+        """Run a prep round beside the loops, one at a time: reading the library must not
+        hold up a detector tick."""
+        self._last_prep = time.monotonic()
+        if self._prep_task is None or self._prep_task.done():
+            self._prep_task = asyncio.create_task(self._prep_round())
+
+    def _note_written(self) -> None:
+        """New history: an event judged to have none may match it now."""
+        self._prep_empty.clear()
+
+    async def _prep_round(self, now: dt.datetime | None = None) -> None:
+        """Queue a prep banner for an event starting within prep_lead_s, once, when there is
+        history and no call is being recorded. Never lets an error stop the loop it runs in."""
+        self._last_prep = time.monotonic()
+        now = now or dt.datetime.now().astimezone()
+        try:
+            self._prep_empty &= {event_key(e) for e in self.calendar_events}
+            soon = [e for e in self.calendar_events
+                    if now < e.start <= now + dt.timedelta(seconds=self.settings.prep_lead_s)
+                    and event_key(e) not in self.state.prepped and event_key(e) not in self._prep_empty]
+            if (not soon or not self.settings.meeting_prep or not self.notify_ok
+                    or self.detector.tracker.recording_key is not None):
+                return
+            calls = await asyncio.to_thread(load_calls, self.settings.recordings_path())
+            # A recording or a setting change can land during the read: look again, and mark
+            # nothing, so a skipped event can still be prepped later.
+            if self.detector.tracker.recording_key is not None or not self.settings.meeting_prep:
+                return
+            mine = my_addresses(calls, self.settings)
+            for e in soon:
+                if not related_calls(e, calls, mine=mine):
+                    if calls:       # an empty library may just not be readable yet: look again
+                        self._prep_empty.add(event_key(e))      # nothing to show: stay silent
+                    continue
+                brief = prep_brief(e, calls, mine)
+                self.state.mark_prepped(brief["event"]["key"], time.time())
+                self.log.write("prep", related=brief["related"])      # no title: docs/dev/PLAN.md
+                minutes = max(1, math.ceil((e.start - now).total_seconds() / 60))
+                self._ops.put_nowait((self._show_prep, (brief, minutes)))
+        except Exception as err:  # noqa: BLE001 - prep is a courtesy; detection carries on
+            self.log.write("error", message=f"meeting prep failed: {type(err).__name__}")
 
     def _calendar_window(self) -> list[ics.Event]:
         return ics.in_window(self.calendar_events, dt.datetime.now().astimezone(),

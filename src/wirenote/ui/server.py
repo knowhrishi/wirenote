@@ -245,8 +245,14 @@ def make_handler(app: App):
                 return self._json({"calls": app.store.calls(q)})
             if path == "/api/upcoming":
                 return self._json({"events": app.store.upcoming()})
+            if path.startswith("/api/prep/"):
+                return self._json(app.store.prep(path.removeprefix("/api/prep/")))
             if path == "/api/actions":
                 return self._json({"items": app.store.action_items()})
+            if path == "/api/people":
+                return self._json({"people": app.store.people()})
+            if path.startswith("/api/people/"):
+                return self._json(app.store.person(path.removeprefix("/api/people/")))
             if path == "/api/asks":
                 return self._json({"asks": app.store.asks()})
             if path == "/api/settings":
@@ -357,6 +363,10 @@ def make_handler(app: App):
                 return self._json(store.control("flag"))
             if path == "/api/ask":
                 return self._json(store.ask_all(str(self._body().get("question", ""))))
+            if path == "/api/people/alias":
+                body = self._body()
+                return self._json({"key": store.alias(str(body.get("name", "")),
+                                                      str(body.get("same_as", "")))})
             if path == "/api/vocabulary":
                 terms = self._body().get("terms", [])
                 if not isinstance(terms, list):

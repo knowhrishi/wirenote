@@ -139,6 +139,25 @@ hint = "concerns the customer raised, and how each was answered"
 
 A template has at most 6 sections and 2000 characters of instructions. A file that breaks a rule is skipped, and `wirenote doctor` and `wirenote templates` say which one and why.
 
+## People
+
+**People** in the sidebar lists everyone who spoke in one of your calls or was invited to one. Open a person to see the calls you had with them, how long they spoke, their email addresses from the calendar, and the action items assigned to them. Tick items off there or in the call.
+
+- A person is a name. You are left out: an invitee with one of your addresses (`my_emails`, or the guess shown in Settings › Calendars) has no page. Speakers count once you have named them (a "Speaker 2" has no page), and so does everyone on a calendar invitation. "Me" and "Others" never do, nor do meeting rooms and equipment booked on an invitation.
+- The same person under two names, such as "Anna" and "Anna Berg"? Open one of them, click **Same person as…** and type the other name as People shows it; a name no one has is refused. Their calls and action items come together. The recordings and notes are not changed. The choice is kept in `people.json` in `~/.local/state/wirenote/`; delete a line there to undo it.
+- In a call, the name chips under the title open that person's page too.
+- Nothing is sent anywhere: the pages are built from your own recordings each time you open them. Calls saved before this version show up the same way, with the addresses their invitation had.
+
+## Before a meeting
+
+With a calendar connected, Wirenote shows a banner 5 minutes before a meeting when you have had calls about it before: the first point of the last summary and how many action items are still open. **Open prep** opens a page with what was said last time, what was decided, the open action items from earlier calls and who is invited. **Coming up** on the home page has a **Prep** link for each such meeting.
+
+- An earlier call counts when it has the same calendar entry (a repeating meeting), or the same title and an invitee in common, or at least two invitees in common. You are never counted as an invitee (see below).
+- There is no banner while you are recording, and none for a meeting without history. Each meeting gets one banner.
+- To turn it off, set `meeting_prep = false` in `config.toml` and restart: `systemctl --user restart wirenote`. `prep_lead_s = 300.0` is how many seconds ahead the banner comes.
+- **Your own address.** You are on nearly every invitation, so Wirenote leaves you out when it compares invitees, and from People. Set `my_emails = ["you@example.com"]` in `config.toml`, or type it in **Settings › Calendars**. If you have not, Wirenote guesses: an address that is on the invitation of at least 9 in 10 recorded calls, once at least 3 calls list addresses. Settings shows the guess ("Wirenote thinks this is you"), or says it has none yet; until then you count like any other invitee. Calls saved before this version count too: by address when every invitee on them had one, else by name.
+- Nothing is sent anywhere: the page is built from your own recordings.
+
 ## Import and export
 
 **Import a recording.** Click **Import** in the meetings app, or drop an audio or video file on its window. On the command line:
@@ -246,6 +265,7 @@ wirenote changelog       # what changed in this version; --since 0.1.0 for more
 | `~/.local/state/wirenote/detector.jsonl` | every event, without room names or speaker names |
 | `~/.local/state/wirenote/jobs.db` | processing queue |
 | `~/.local/state/wirenote/series.json` | the summary template you kept for each calendar series |
+| `~/.local/state/wirenote/people.json` | which names you put together as one person |
 
 Everything Wirenote writes is private to your user (mode 600, folders 700).
 
