@@ -1362,10 +1362,23 @@ function desktopCard(s) {
       toast(box.checked ? "Shortcuts on. If your desktop asks, allow them." : "Shortcuts off.");
     } catch (e) { box.checked = !box.checked; toast(e.message); }
   };
+  // Launcher search (docs/usage.md › Find a meeting from the launcher): off until you turn it on
+  const search = h("input", { type: "checkbox", id: "launcher-search" });
+  search.checked = s.editable.launcher_search;
+  search.onchange = async () => {
+    try {
+      const r = await api("/api/settings", { method: "PUT", body: { changes: { launcher_search: search.checked }, confirm_cloud: false } });
+      Object.assign(s.editable, r.editable);
+      state.doctor = null;
+      toast(search.checked ? "Launcher search on. Run `wirenote setup search` once so your launcher knows Wirenote." : "Launcher search off. It finds nothing now.");
+    } catch (e) { search.checked = !search.checked; toast(e.message); }
+  };
   return h("div", { class: "settings-card" },
     h("h2", {}, "Desktop"),
     h("label", { class: "check-row tight", for: "global-shortcuts" }, box, "Global shortcuts"),
-    h("div", { class: "hint below-check" }, "Ctrl+Alt+R starts or stops recording and Ctrl+Alt+F flags the moment, in any app. Your desktop asks once whether to allow them; change the keys in its keyboard settings. KDE Plasma and GNOME 48 or newer have them; elsewhere, Setup check says what to do instead."));
+    h("div", { class: "hint below-check" }, "Ctrl+Alt+R starts or stops recording and Ctrl+Alt+F flags the moment, in any app. Your desktop asks once whether to allow them; change the keys in its keyboard settings. KDE Plasma and GNOME 48 or newer have them; elsewhere, Setup check says what to do instead."),
+    h("label", { class: "check-row tight", for: "launcher-search" }, search, "Find meetings from the launcher"),
+    h("div", { class: "hint below-check" }, "KRunner and GNOME's search list your meetings by title, people and summary. Anyone who sees your screen sees those names as you type. Turning it on here is not enough the first time: run `wirenote setup search` once (GNOME needs one sudo step it shows). Off, the launcher finds nothing."));
 }
 
 // Calendar links are secret: the page only ever sees an id and the host name.

@@ -95,17 +95,27 @@ Type a few letters of a meeting in your desktop's launcher, KRunner on KDE Plasm
 
 What you type stays on your computer and is never written to a log. The search runs only while you use it: it starts with your first search and stops a minute after your last.
 
-**KDE Plasma:** it works after `wirenote setup install`. If KRunner does not show meetings at once, run `kquitapp6 krunner`, or log out and in.
+**It is off until you turn it on.** The launcher shows meeting titles and the names of the people in them as you type, so anyone who sees your screen, for example while you share it, sees them too. Turn it on with:
 
-**GNOME:** GNOME reads search providers only from system folders, so this needs one step with `sudo`. After `wirenote setup install`, run:
+```sh
+wirenote setup search
+```
+
+This sets `launcher_search = true` in `config.toml` and installs the two files the launcher needs. The switch "Find meetings from the launcher" in **Settings › Desktop** turns the setting on or off too, but the first time you still run `wirenote setup search` once, so the files are there.
+
+**KDE Plasma:** it works after `wirenote setup search`. If KRunner does not show meetings at once, run `kquitapp6 krunner`, or log out and in.
+
+**GNOME:** GNOME reads search providers only from system folders, so this needs one step with `sudo`. After `wirenote setup search`, run:
 
 ```sh
 sudo install -Dm644 "$(wirenote search-provider --gnome-ini)" /usr/local/share/gnome-shell/search-providers/io.github.knowhrishi.wirenote.search-provider.ini
 ```
 
-Then log out and in. To turn it off, untick Wirenote in Settings › Search. `wirenote setup uninstall` leaves this file in place and shows the `sudo rm` command that removes it.
+Then log out and in.
 
-`wirenote doctor` says whether the launcher search is set up. If the session bus could not be told about the new search service, `wirenote setup install` says so; the search then works after your next login.
+**To turn it off,** run `wirenote setup search --off`, or untick "Find meetings from the launcher" in **Settings › Desktop**. Either way the launcher finds no meetings from that moment. `setup search --off` also removes the files; after the Settings switch, `wirenote setup install` removes them the next time it runs (`wirenote update` runs it for you). Your desktop has its own switch as well: on KDE Plasma, untick Wirenote in System Settings › Search › Plasma Search; on GNOME, in Settings › Search. On GNOME, `wirenote setup search --off` and `wirenote setup uninstall` leave the system file in place and show the `sudo rm` command that removes it.
+
+`wirenote doctor` says whether the launcher search is on and whether its files match the setting. If the session bus could not be told about the change, `wirenote setup search` says so; the launcher then follows after your next login.
 
 ## Summaries
 
@@ -287,6 +297,7 @@ wirenote doctor          # check every part of the setup; --fix makes your files
 wirenote setup claude    # summaries with Claude (your key or `ant auth login`)
 wirenote setup openai    # summaries with OpenRouter, OpenAI or a compatible server
 wirenote setup shortcuts # turn on Ctrl+Alt+R and Ctrl+Alt+F in any app
+wirenote setup search    # find meetings from KRunner or GNOME search; --off turns it off
 wirenote setup install   # install or update the services and the app-menu entry
 wirenote setup uninstall # remove them; --purge also deletes recordings and settings
 wirenote update          # install the newest version and restart; --check only checks

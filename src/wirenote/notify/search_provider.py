@@ -4,9 +4,11 @@
 search (org.gnome.Shell.SearchProvider2) on one service object, over dbus-fast
 (docs/usage.md › Find a meeting from the launcher).
 
-The session bus starts `wirenote search-provider` on the first search, through the D-Bus
-service file `wirenote setup install` writes, and the process exits after SEARCH_IDLE_S
-without a call. It owns io.github.knowhrishi.wirenote.Search on the session bus, which only
+It is off until you turn it on (launcher_search; `wirenote setup search`), and while it is off
+it answers every search with nothing, so a plugin file left behind lists no meetings. The
+session bus starts `wirenote search-provider` on the first search, through the D-Bus service
+file that `wirenote setup search` (or `setup install`, while it is on) writes, and the process
+exits after SEARCH_IDLE_S without a call. It owns io.github.knowhrishi.wirenote.Search on the session bus, which only
 the user who started it can reach. It matches titles, people and summaries, never
 transcripts, and opens a result in the meetings app with a one-time login link, as
 `wirenote open` does.
@@ -146,7 +148,10 @@ class SearchService:
     the web app can take seconds, and the bus must keep answering."""
 
     def __init__(self, store_factory: Callable[[], Store], open_route: Callable[[str], None],
-                 clock: Callable[[], float] | None = None) -> None:
+                 clock: Callable[[], float] | None = None,
+                 enabled: Callable[[], bool] = lambda: True) -> None:
+        # launcher_search, asked at every call: a plugin file left behind finds nothing
+        self.enabled = enabled
         self._store_factory = store_factory
         self._store: Store | None = None
         self._open_route = open_route
@@ -163,6 +168,8 @@ class SearchService:
     def find(self, terms: list[str]) -> list[dict]:
         self.touch()
         try:
+            if not self._on():
+                return []
             if self._store is None:
                 self._store = self._store_factory()
             found = search(self._store, terms)
@@ -183,6 +190,8 @@ class SearchService:
         from ..ui.data import REC_ID
 
         self.touch()
+        if not self._on():
+            return {"id": str(rec_id), "title": NOT_FOUND, "subtitle": ""}
         found = self._metas.get(rec_id)
         if found is None and isinstance(rec_id, str) and REC_ID.fullmatch(rec_id):
             try:
@@ -198,11 +207,13 @@ class SearchService:
         from ..ui.data import REC_ID
 
         self.touch()
-        if isinstance(rec_id, str) and REC_ID.fullmatch(rec_id):
+        if isinstance(rec_id, str) and REC_ID.fullmatch(rec_id) and self._on():
             self._open(f"#/call/{rec_id}")
 
     def launch_search(self, terms: list[str]) -> None:
         self.touch()
+        if not self._on():
+            return
         query = " ".join(" ".join(str(t) for t in terms).split())
         # `~` too: the web app's login accepts only the characters quote() makes plus `%`
         self._open(f"#/?q={quote(query, safe='').replace('~', '%7E')}" if query else "#/")
@@ -233,6 +244,13 @@ class SearchService:
     async def wait_idle(self, idle_s: float, sleep: Callable[[float], Awaitable[Any]]) -> None:
         while (left := self.last_active + idle_s - self._clock()) > 0:
             await sleep(left)
+
+    def _on(self) -> bool:
+        try:
+            return bool(self.enabled())
+        except Exception as e:  # noqa: BLE001 - unreadable settings: off
+            self._fail("settings", e)
+            return False
 
     def _fail(self, what: str, e: Exception) -> None:
         """Only the exception's type: its text may hold the query, a title or a path."""
@@ -348,9 +366,20 @@ async def serve(service: SearchService, bus_factory: Callable[[], Awaitable[Any]
     return 0
 
 
+def launcher_search_on() -> bool:
+    """config.toml's launcher_search as it is now; off if the file cannot be read."""
+    from ..config.settings import config_dir, load_settings
+
+    try:
+        return load_settings(config_dir() / "config.toml").launcher_search
+    except (OSError, ValueError):
+        return False
+
+
 def main(settings: Settings, state_dir: Path) -> int:
     from ..ui.data import Store
 
     service = SearchService(lambda: Store(settings, state_dir),
-                            lambda route: open_in_app(settings.ui_port, route))
+                            lambda route: open_in_app(settings.ui_port, route),
+                            enabled=launcher_search_on)
     return asyncio.run(serve(service))

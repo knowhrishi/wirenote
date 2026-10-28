@@ -387,9 +387,10 @@ def test_doctor_says_where_the_search_provider_is(tmp_path, monkeypatch):
     local, system = tmp_path / "local", tmp_path / "usr"
     monkeypatch.setattr(search_provider, "GNOME_PROVIDER_DIRS", (local, system))
 
-    def found(desktop):
+    def found(desktop, on=True):
         monkeypatch.setenv("XDG_CURRENT_DESKTOP", desktop)
-        return [c for c in setup._desktop_checks(Settings()) if "search" in c.message.lower()
+        s = replace(Settings(), launcher_search=on)
+        return [c for c in setup._desktop_checks(s) if "search" in c.message.lower()
                 or "krunner" in c.message.lower()]
     (check,) = found("GNOME")
     assert check.status == "warn" and "sudo install" in check.fix
@@ -399,7 +400,7 @@ def test_doctor_says_where_the_search_provider_is(tmp_path, monkeypatch):
         where.mkdir()
         (where / search_provider.GNOME_INI).write_text("[Shell Search Provider]\n")
         (check,) = found("ubuntu:GNOME")
-        assert check.status == "warn" and "setup install" in check.fix     # nothing starts it
+        assert check.status == "warn" and "wirenote setup search" in check.fix     # nothing starts it
         service = install._dbus_service_path()
         service.parent.mkdir(parents=True, exist_ok=True)
         service.write_text("[D-BUS Service]\n")
@@ -408,13 +409,92 @@ def test_doctor_says_where_the_search_provider_is(tmp_path, monkeypatch):
         (where / search_provider.GNOME_INI).unlink()
         service.unlink()
     (check,) = found("KDE")
-    assert check.status == "warn" and "wirenote setup install" in check.fix
+    assert check.status == "warn" and "wirenote setup search" in check.fix
     for path in (install._krunner_path(), install._dbus_service_path()):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("x\n")
     (check,) = found("KDE")
     assert check.status == "ok"
     assert found("XFCE") == []
+
+
+def test_doctor_reports_the_setting_and_whether_the_files_match(tmp_path, monkeypatch):
+    from wirenote.tools import install, setup
+
+    monkeypatch.setattr(search_provider, "GNOME_PROVIDER_DIRS", (tmp_path / "local", tmp_path / "usr"))
+
+    def found(desktop):
+        monkeypatch.setenv("XDG_CURRENT_DESKTOP", desktop)
+        return [c for c in setup._desktop_checks(Settings()) if "search" in c.message.lower()
+                or "krunner" in c.message.lower()]
+    for desktop in ("KDE", "GNOME"):
+        (check,) = found(desktop)
+        assert check.status == "ok" and "off" in check.message and "wirenote setup search" in check.message
+    assert found("XFCE") == []
+    install._krunner_path().parent.mkdir(parents=True)
+    install._krunner_path().write_text("x\n")       # left from an install when it was on
+    for desktop in ("KDE", "XFCE"):
+        (check,) = found(desktop)
+        assert check.status == "warn" and check.fix == "wirenote setup search --off"
+
+
+# Off unless you turn it on ---------------------------------------------------
+
+def test_provider_answers_nothing_when_turned_off(lib):
+    """A plugin file left behind finds nothing: no titles, no names, nothing opens."""
+    store, root = lib
+    write_call(root, "20261027-100000-chrome", title="Weekly sync", attendees=["Anna Berg"])
+    opened = []
+    on = [False]
+    service = SearchService(lambda: store, opened.append, enabled=lambda: on[0])
+    bus = exported(service)
+    assert bus.invoke(KRUNNER_PATH, "Match", "weekly") == [[]]
+    assert bus.invoke(GNOME_PATH, "GetInitialResultSet", ["weekly"]) == [[]]
+    assert bus.invoke(GNOME_PATH, "GetSubsearchResultSet", [], ["weekly"]) == [[]]
+    (metas,) = bus.invoke(GNOME_PATH, "GetResultMetas", ["20261027-100000-chrome"])
+    assert metas[0]["name"].value == "Meeting not found" and metas[0]["description"].value == ""
+    run_with(service, lambda: bus.invoke(KRUNNER_PATH, "Run", "20261027-100000-chrome", ""))
+    run_with(service, lambda: bus.invoke(GNOME_PATH, "ActivateResult", "20261027-100000-chrome", [], 0))
+    run_with(service, lambda: bus.invoke(GNOME_PATH, "LaunchSearch", ["weekly"], 0))
+    assert opened == []
+    on[0] = True
+    (matches,) = bus.invoke(KRUNNER_PATH, "Match", "weekly")
+    assert [m[0] for m in matches] == ["20261027-100000-chrome"]
+
+
+def test_provider_follows_the_setting_in_config_toml(monkeypatch):
+    from wirenote.config.secrets import set_config_value
+    from wirenote.config.settings import config_dir
+
+    services = []
+
+    async def fake_serve(service, *args, **kwargs):
+        services.append(service)
+        return 0
+    monkeypatch.setattr(search_provider, "serve", fake_serve)
+    assert search_provider.main(Settings(), config_dir()) == 0
+    (service,) = services
+    assert service.enabled() is False                    # the default
+    set_config_value(config_dir() / "config.toml", "launcher_search", "true")
+    assert service.enabled() is True                     # read again: turning it off needs no restart
+    (config_dir() / "config.toml").write_text("launcher_search = [")
+    assert service.enabled() is False                    # unreadable: off
+
+
+def test_app_switches_launcher_search(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from wirenote import ui
+    from wirenote.config.settings import config_dir, load_settings
+    from wirenote.ui import data
+
+    monkeypatch.setattr(data, "poke_daemon", lambda command: None)
+    st = Store(Settings(), tmp_path)
+    assert st.settings_info()["editable"]["launcher_search"] is False
+    assert st.update_settings({"launcher_search": True}, False)["editable"]["launcher_search"] is True
+    assert load_settings(config_dir() / "config.toml").launcher_search is True
+    script = (Path(ui.__file__).parent / "static" / "app.js").read_text()
+    assert "launcher_search" in script and "wirenote setup search" in script
 
 
 def test_gnome_provider_dirs_are_the_system_ones():

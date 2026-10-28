@@ -485,20 +485,28 @@ def _desktop_checks(s: Settings) -> list[Check]:
     if s.consent_line and "KDE" not in desktop.upper() and not available_tools():
         out.append(Check("warn", "no clipboard tool for the consent line",
                          "install wl-clipboard (Wayland) or xclip (X11)"))
-    return out + _search_checks(desktop.upper())
+    return out + _search_checks(desktop.upper(), s.launcher_search)
 
 
-def _search_checks(desktop: str) -> list[Check]:
-    """docs/usage.md › Find a meeting from the launcher: KRunner reads the plugin from your
-    data folder; GNOME reads its provider file only from a system folder."""
+def _search_checks(desktop: str, on: bool) -> list[Check]:
+    """docs/usage.md › Find a meeting from the launcher: off unless launcher_search is on.
+    KRunner reads the plugin from your data folder; GNOME reads its provider file only from a
+    system folder."""
     from ..notify import search_provider as sp
     from . import install
 
     started_by_bus = install._dbus_service_path().is_file()
+    if not on:
+        if started_by_bus or install._krunner_path().is_file():
+            return [Check("warn", "the launcher search is off, but its files are still installed",
+                          "wirenote setup search --off")]
+        if "KDE" in desktop or "GNOME" in desktop:
+            return [Check("ok", "launcher search off (turn it on: wirenote setup search)")]
+        return []
     if "KDE" in desktop:
         if install._krunner_path().is_file() and started_by_bus:
             return [Check("ok", "KRunner finds your meetings")]
-        return [Check("warn", "KRunner does not search your meetings yet", "wirenote setup install")]
+        return [Check("warn", "KRunner does not search your meetings yet", "wirenote setup search")]
     if "GNOME" not in desktop:
         return []
     found = next((d / sp.GNOME_INI for d in sp.GNOME_PROVIDER_DIRS if (d / sp.GNOME_INI).is_file()), None)
@@ -508,7 +516,7 @@ def _search_checks(desktop: str) -> list[Check]:
                       f"sudo install -Dm644 {sp.gnome_ini_path()} {target}, then log out and in")]
     if not started_by_bus:
         return [Check("warn", f"GNOME's search knows Wirenote ({found}), but cannot start it",
-                      "wirenote setup install")]
+                      "wirenote setup search")]
     return [Check("ok", f"GNOME's search finds your meetings ({found})")]
 
 

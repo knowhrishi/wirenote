@@ -253,6 +253,8 @@ def cmd_setup(args) -> int:
         return setup.setup_ollama()
     if args.what == "shortcuts":
         return setup.setup_shortcuts()
+    if args.what == "search":
+        return install.search(not args.off, dry_run=args.dry_run)
     return setup.setup_consent(args.text)
 
 
@@ -393,12 +395,15 @@ def main(argv: list[str] | None = None) -> int:
     rep.set_defaults(fn=cmd_reprocess)
     sub.add_parser("templates", help="list the summary templates").set_defaults(fn=cmd_templates)
     st = sub.add_parser("setup", help="install the services, choose the summary backend, "
-                                      "set the consent line, or turn on global shortcuts")
+                                      "set the consent line, or turn on global shortcuts or "
+                                      "the launcher search")
     st.add_argument("what", choices=["install", "uninstall", "ollama", "claude", "openai", "consent",
-                                     "shortcuts"])
+                                     "shortcuts", "search"])
     st.add_argument("text", nargs="?", help="consent line (for `setup consent`)")
     st.add_argument("--dry-run", action="store_true",
-                    help="install/uninstall: show the files and commands, change nothing")
+                    help="install/uninstall/search: show the files and commands, change nothing")
+    st.add_argument("--off", action="store_true",
+                    help="search: turn the launcher search off and remove its files")
     st.add_argument("--purge", action="store_true",
                     help="uninstall: also delete recordings, transcripts and settings")
     st.set_defaults(fn=cmd_setup)
