@@ -50,7 +50,7 @@ Change the window with `flag_before_s` and `flag_after_s` in `config.toml`.
 
 ## Tray icon
 
-Wirenote puts a microphone icon in your panel's tray. It turns into a record icon while a call records, and asks for your attention while a call prompt is showing. Hover it to see what records and since when. Click it for a short menu:
+Wirenote puts a microphone icon in your panel's tray. It turns into a record icon while a call records, and asks for your attention while a call prompt is showing. Hover it to see what records and since when. On KDE Plasma, click it for a short menu. On GNOME's AppIndicator extension, a click opens Wirenote and a right click opens the menu:
 
 - **While recording:** what records and since when, then **Flag this moment**, **Stop** and **Open Wirenote**.
 - **While a call prompt shows:** **Record** the call, or **Ignore** it, like the notification's buttons.

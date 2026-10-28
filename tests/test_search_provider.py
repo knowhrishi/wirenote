@@ -438,6 +438,23 @@ def test_doctor_reports_the_setting_and_whether_the_files_match(tmp_path, monkey
         assert check.status == "warn" and check.fix == "wirenote setup search --off"
 
 
+def test_doctor_gnome_fix_is_one_command_you_can_paste(tmp_path, monkeypatch):
+    import shlex
+    from pathlib import Path
+
+    from wirenote.tools import setup
+
+    local = tmp_path / "share dir" / "search-providers"
+    ini = tmp_path / "site packages" / search_provider.GNOME_INI
+    monkeypatch.setattr(search_provider, "GNOME_PROVIDER_DIRS", (local, tmp_path / "usr"))
+    monkeypatch.setattr(search_provider, "gnome_ini_path", lambda: Path(ini))
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "GNOME")
+    (check,) = [c for c in setup._desktop_checks(replace(Settings(), launcher_search=True))
+                if "search" in c.message.lower()]
+    assert shlex.split(check.fix) == ["sudo", "install", "-Dm644", str(ini), str(local / search_provider.GNOME_INI)]
+    assert "log out and in" in check.message
+
+
 # Off unless you turn it on ---------------------------------------------------
 
 def test_provider_answers_nothing_when_turned_off(lib):

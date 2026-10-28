@@ -12,6 +12,7 @@ import datetime as dt
 import getpass
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import time
@@ -148,7 +149,8 @@ def setup_consent(text: str | None) -> int:
     return 0
 
 
-SHORTCUTS_WAIT_S = 120.0      # time to answer the desktop's dialog before we stop waiting
+# docs/dev/PLAN.md › Defaults › Shortcut setup wait: time to answer the desktop's dialog
+SHORTCUTS_WAIT_S = 120.0
 
 
 def _status() -> dict:
@@ -342,15 +344,17 @@ def _daemon_checks(s: Settings | None = None) -> list[Check]:
     if status.get("notifications") and status.get("notification_buttons") is False:
         out.append(Check("warn", "notifications here have no buttons: record from the Wirenote "
                                  "window or with `wirenote record`"))
-    # notify/indicator.py SHOWN, NO_HOST, FAILED; recording works without the icon
-    if status.get("tray") == "shown":
+    # notify/indicator.py SHOWN, NO_HOST, FAILED; recording works without the icon. Only while
+    # the daemon runs: a stopped one shows no icon, whatever it wrote last.
+    tray = status.get("tray") if alive else None
+    if tray == "shown":
         out.append(Check("ok", "tray icon shown"))
-    elif status.get("tray") == "no host":
+    elif tray == "no host":
         # No org.kde.StatusNotifierWatcher on the session bus
         out.append(Check("warn", "no tray icon: this desktop has no tray for it",
                          "on GNOME, install and turn on the AppIndicator extension; the icon "
                          "appears then. Or set tray_icon = false"))
-    elif status.get("tray") == "failed":
+    elif tray == "failed":
         out.append(Check("warn", "the tray icon could not start or stopped working",
                          "see journalctl --user -u wirenote; or set tray_icon = false"))
     found = _shortcuts_check(status.get("shortcuts"), s.global_shortcuts, status.get("shortcut_keys"))
@@ -512,8 +516,8 @@ def _search_checks(desktop: str, on: bool) -> list[Check]:
     found = next((d / sp.GNOME_INI for d in sp.GNOME_PROVIDER_DIRS if (d / sp.GNOME_INI).is_file()), None)
     if found is None:
         target = sp.GNOME_PROVIDER_DIRS[0] / sp.GNOME_INI
-        return [Check("warn", "GNOME's search does not list your meetings yet",
-                      f"sudo install -Dm644 {sp.gnome_ini_path()} {target}, then log out and in")]
+        return [Check("warn", "GNOME's search does not list your meetings yet; run this, then log out and in",
+                      f"sudo install -Dm644 {shlex.quote(str(sp.gnome_ini_path()))} {shlex.quote(str(target))}")]
     if not started_by_bus:
         return [Check("warn", f"GNOME's search knows Wirenote ({found}), but cannot start it",
                       "wirenote setup search")]

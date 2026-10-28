@@ -457,3 +457,6 @@ def test_doctor_explains_a_missing_tray(tmp_path, monkeypatch):
             assert "AppIndicator" in found[0].fix
         if tray == "failed":                    # not the GNOME hint: something broke
             assert "AppIndicator" not in found[0].fix and "journalctl" in found[0].fix
+    # A stopped daemon shows no icon, whatever it last wrote
+    (tmp_path / "status.json").write_text(json.dumps({**status, "running": False, "tray": "shown"}))
+    assert [c for c in setup._daemon_checks() if "tray" in c.message] == []
