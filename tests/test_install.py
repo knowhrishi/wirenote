@@ -9,6 +9,10 @@ import pytest
 from wirenote.tools import install
 
 
+RELOAD_BUS = ["busctl", "--user", "call", "org.freedesktop.DBus", "/org/freedesktop/DBus",
+              "org.freedesktop.DBus", "ReloadConfig"]
+
+
 @pytest.fixture
 def home(tmp_path, monkeypatch):
     for var in ("XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_RUNTIME_DIR"):
@@ -41,7 +45,7 @@ def test_install_writes_files_and_runs_systemctl(home):
     desktop = (tmp / "xdg_data_home" / "applications" / "io.github.knowhrishi.wirenote.desktop").read_text()
     assert "Exec=/x/bin/wirenote open" in desktop and "Name=Wirenote" in desktop
     assert (tmp / "xdg_data_home" / "icons/hicolor/scalable/apps/wirenote.svg").read_text().startswith("<svg")
-    assert ran == [["systemctl", "--user", "daemon-reload"],
+    assert ran == [["systemctl", "--user", "daemon-reload"], RELOAD_BUS,
                    ["systemctl", "--user", "enable", "wirenote.service", "wirenote-ui.service"],
                    # an update must run the new code: restart, which also starts them
                    ["systemctl", "--user", "restart", "wirenote.service", "wirenote-ui.service"]]
@@ -78,8 +82,11 @@ def test_package_ships_templates():
     from importlib.resources import files
 
     data = files("wirenote") / "data"
-    for name in ("wirenote.service", "wirenote-ui.service", "io.github.knowhrishi.wirenote.desktop"):
+    for name in ("wirenote.service", "wirenote-ui.service", "io.github.knowhrishi.wirenote.desktop",
+                 "io.github.knowhrishi.wirenote.Search.service"):
         assert "@EXEC@" in (data / name).read_text()
+    for name in ("krunner-plugin.desktop", "io.github.knowhrishi.wirenote.search-provider.ini"):
+        assert (data / name).is_file()
     assert not (data / "wirenote.desktop").is_file()
 
 
@@ -123,3 +130,65 @@ def test_install_without_a_terminal_leaves_update_checks_off(home):
 
     install.ask_update_check(confirm=lambda q: pytest.fail("asked"), interactive=lambda: False)
     assert load_settings(config_dir() / "config.toml").update_check is False
+
+
+def test_install_writes_and_uninstall_removes_search_files(home):
+    """KRunner reads its plugin from your data folder and starts the search through the D-Bus
+    service file. GNOME reads search providers only from system folders: install leaves those
+    alone, and uninstall never touches /usr/local."""
+    from wirenote.notify import search_provider
+
+    tmp, ran = home
+    data = tmp / "xdg_data_home"
+    plugin = data / "krunner" / "dbusplugins" / "io.github.knowhrishi.wirenote.desktop"
+    service = data / "dbus-1" / "services" / "io.github.knowhrishi.wirenote.Search.service"
+    assert install.install(dry_run=False) == 0
+    text = plugin.read_text()
+    for line in ("X-Plasma-API=DBus2", "X-Plasma-DBusRunner-Service=io.github.knowhrishi.wirenote.Search",
+                 "X-Plasma-DBusRunner-Path=/runner", "Name=Wirenote", "Icon=wirenote",
+                 "X-KDE-PluginInfo-EnabledByDefault=true"):
+        assert line in text.splitlines()
+    text = service.read_text()
+    assert "[D-BUS Service]" in text and "Name=io.github.knowhrishi.wirenote.Search" in text.splitlines()
+    assert "Exec=/x/bin/wirenote search-provider" in text.splitlines()
+    assert RELOAD_BUS in ran                                 # the bus learns the new name now
+    assert not list(data.rglob("*search-provider*"))
+
+    ini = (search_provider.gnome_ini_path()).read_text().splitlines()
+    for line in ("[Shell Search Provider]", "DesktopId=io.github.knowhrishi.wirenote.desktop",
+                 "BusName=io.github.knowhrishi.wirenote.Search",
+                 f"ObjectPath={search_provider.GNOME_PATH}", "Version=2"):
+        assert line in ini
+
+    ran.clear()
+    assert install.uninstall(dry_run=False) == 0
+    assert not plugin.exists() and not service.exists()
+    assert RELOAD_BUS in ran
+    assert not any("/usr/local" in " ".join(argv) for argv in ran)
+
+
+def test_install_carries_on_without_busctl(home, monkeypatch, capsys):
+    tmp, ran = home
+
+    def run(argv):
+        if argv[0] == "busctl":
+            raise FileNotFoundError("busctl")
+        ran.append(argv)
+        return 0
+    monkeypatch.setattr(install, "_run", run)
+    assert install.install(dry_run=False) == 0
+    assert "after your next login" in capsys.readouterr().out
+    monkeypatch.setattr(install, "_run", lambda argv: 1 if argv[0] == "busctl" else 0)
+    assert install.install(dry_run=False) == 0
+
+
+def test_uninstall_points_at_a_gnome_provider_it_leaves(home, monkeypatch, capsys, tmp_path):
+    from wirenote.notify import search_provider
+
+    local = tmp_path / "usr-local-providers"
+    local.mkdir()
+    (local / search_provider.GNOME_INI).write_text("[Shell Search Provider]\n")
+    monkeypatch.setattr(search_provider, "GNOME_PROVIDER_DIRS", (local, tmp_path / "usr-providers"))
+    assert install.uninstall(dry_run=False) == 0
+    assert (local / search_provider.GNOME_INI).exists()
+    assert f"sudo rm {local / search_provider.GNOME_INI}" in capsys.readouterr().out

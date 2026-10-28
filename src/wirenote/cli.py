@@ -273,26 +273,25 @@ def cmd_ui(args) -> int:
 
 def cmd_open(args) -> int:
     """Open the web UI through a one-time login link, starting it if needed."""
-    import subprocess
-    import time
-
     from .ui import launch
 
     port = _settings().ui_port
-    if launch.listener_uid(port) is None:
-        subprocess.Popen([sys.executable, "-m", "wirenote.cli", "ui"], start_new_session=True,
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL)
-        for _ in range(50):
-            if launch.listener_uid(port) is not None:
-                break
-            time.sleep(0.1)
-    if launch.listener_uid(port) != os.getuid():
+    if not launch.ensure_ui(port):
         print(f"wirenote: port {port} belongs to another user or nothing answers there; "
               "not opening it. Set ui_port in config.toml to a free port.", file=sys.stderr)
         return 1
     launch.open_ui(port, f"#/call/{args.call}" if args.call else "#/")
     return 0
+
+
+def cmd_search_provider(args) -> int:
+    """KRunner and GNOME search; the session bus starts this (notify/search_provider.py)."""
+    from .notify import search_provider
+
+    if args.gnome_ini:
+        print(search_provider.gnome_ini_path())
+        return 0
+    return search_provider.main(_settings(), state_dir())
 
 
 def cmd_doctor(args) -> int:
@@ -434,6 +433,9 @@ def main(argv: list[str] | None = None) -> int:
     proc = sub.add_parser("process", help=argparse.SUPPRESS)
     proc.add_argument("job", type=int)
     proc.set_defaults(fn=cmd_process)
+    sp = sub.add_parser("search-provider", help=argparse.SUPPRESS)
+    sp.add_argument("--gnome-ini", action="store_true", help="print where the GNOME search provider file is")
+    sp.set_defaults(fn=cmd_search_provider)
     dump = sub.add_parser("dump-streams", help="probe PipeWire capture streams (test fixtures)",
                           add_help=False)
     dump.add_argument("rest", nargs=argparse.REMAINDER)

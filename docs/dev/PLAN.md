@@ -124,6 +124,8 @@ Every value below lives in `config.toml`. Values marked as a guess are to be tun
 | Tray icon | on where the desktop hosts one (an `org.kde.StatusNotifierWatcher`); none elsewhere | The state and Stop one click away; detection never depends on it |
 | Global shortcuts | off; when on, Ctrl+Alt+R (start or stop) and Ctrl+Alt+F (flag) through the GlobalShortcuts portal, bound with the same ids at every start | Binding can show a desktop dialog, which should follow something you did; unchanged ids do not ask again |
 | Shortcut debounce | a second start-or-stop press within 1.5 s is ignored | Some desktops deliver one press twice; the second would stop the recording the first started |
+| Launcher search | KRunner and GNOME search: title, people and summary, never the transcript; from 3 characters; at most 8 meetings | Fast at every key press; shorter queries match nearly everything; a launcher shows a short list |
+| Launcher search process | started by the session bus on the first search; exits after 60 s without one | Nothing runs while you do not search; a typing pause does not restart it |
 | Update check | off; when on, once a day | Nothing leaves the computer unless asked; releases are rarer than daily |
 | Update notification | once per version, never while recording | A reminder, not a nag; never during a call |
 | Waiting for a call before updating | at most 4 h, the recording cap | An update must not end a recording |

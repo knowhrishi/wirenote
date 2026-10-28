@@ -85,6 +85,28 @@ They work through the desktop's shortcuts portal (xdg-desktop-portal), which KDE
 
 To turn the shortcuts off, untick them in **Settings › Desktop**, or set `global_shortcuts = false` in `config.toml`.
 
+## Find a meeting from the launcher
+
+Type a few letters of a meeting in your desktop's launcher, KRunner on KDE Plasma (`Alt+Space`) or the search in GNOME's Activities overview, and pick the meeting to open it in the meetings app.
+
+- The launcher matches the meeting's title, its people and its summary, not the transcript. Search the transcript in the meetings app.
+- It starts after 3 characters and shows at most 8 meetings, newest first, each with its date and people.
+- On GNOME, press Enter on Wirenote's icon to open the meetings app with your search in its search box.
+
+What you type stays on your computer and is never written to a log. The search runs only while you use it: it starts with your first search and stops a minute after your last.
+
+**KDE Plasma:** it works after `wirenote setup install`. If KRunner does not show meetings at once, run `kquitapp6 krunner`, or log out and in.
+
+**GNOME:** GNOME reads search providers only from system folders, so this needs one step with `sudo`. After `wirenote setup install`, run:
+
+```sh
+sudo install -Dm644 "$(wirenote search-provider --gnome-ini)" /usr/local/share/gnome-shell/search-providers/io.github.knowhrishi.wirenote.search-provider.ini
+```
+
+Then log out and in. To turn it off, untick Wirenote in Settings › Search. `wirenote setup uninstall` leaves this file in place and shows the `sudo rm` command that removes it.
+
+`wirenote doctor` says whether the launcher search is set up. If the session bus could not be told about the new search service, `wirenote setup install` says so; the search then works after your next login.
+
 ## Summaries
 
 **Local, the default.** [Ollama](https://ollama.com) runs on your computer and listens on 127.0.0.1; nothing leaves the laptop. The default model is `qwen3:4b`:

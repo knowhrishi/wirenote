@@ -1665,6 +1665,15 @@ function route() {
   if (hash === "#/tasks") return renderTasks();
   if (hash === "#/settings") return renderSettings();
   if (hash === "#/updates") return renderUpdates();
+  // "Search in Wirenote" from GNOME's search: the list, filtered by what you typed there
+  const q = hash.match(/^#\/\?q=([^&]*)$/);
+  if (q) {
+    let query = "";
+    try { query = decodeURIComponent(q[1]); } catch { /* a broken link: the whole list */ }
+    state.query = query;
+    $("#search").value = query;
+    refreshList();
+  }
   return renderHome();
 }
 

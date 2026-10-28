@@ -1,0 +1,5 @@
+# Written by `wirenote setup install`; remove with `wirenote setup uninstall`.
+# Starts Wirenote's launcher search (KRunner, GNOME) on the first search; it stops after a minute.
+[D-BUS Service]
+Name=io.github.knowhrishi.wirenote.Search
+Exec=@EXEC@ search-provider

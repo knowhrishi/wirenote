@@ -257,24 +257,27 @@ class Store:
                                        if not a.get("done") and a.get("owner") == "Me"),
                 "preview": ((s or {}).get("summary") or [""])[0]}
 
-    def calls(self, query: str = "") -> list[dict]:
+    def calls(self, query: str = "", deep: bool = True) -> list[dict]:
+        """Every call, newest first; with a query, those that match it. deep=False looks at the
+        title, people and summary only, not your notes or the transcript: fast enough for a
+        launcher that searches at every key press."""
         recording_id = self.status().get("recording_id")
         q = query.strip().lower()
         out = []
         for d in self._rec_dirs():
             try:
                 brief = self._brief(d, recording_id)
-            except (OSError, ValueError, KeyError):
-                continue
-            if q:
-                hit = self._search(d, brief, q)
-                if hit is None:
-                    continue
-                brief["match"] = hit
+                if q:
+                    hit = self._search(d, brief, q, deep)
+                    if hit is None:
+                        continue
+                    brief["match"] = hit
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                continue        # a broken call folder hides that call, not the list
             out.append(brief)
         return out
 
-    def _search(self, d: Path, brief: dict, q: str) -> dict | None:
+    def _search(self, d: Path, brief: dict, q: str, deep: bool = True) -> dict | None:
         if q in brief["title"].lower():
             return {"where": "title", "text": brief["title"]}
         for name in brief["speakers"] + brief["attendees"]:
@@ -290,6 +293,8 @@ class Store:
         for a in s.get("action_items", []):
             if q in a.get("task", "").lower():
                 return {"where": "action_items", "text": a["task"]}
+        if not deep:
+            return None
         if q in read_my_notes(d).lower():
             return {"where": "my_notes", "text": read_my_notes(d)[:140]}
         for line in self._transcript(d).get("lines", []):

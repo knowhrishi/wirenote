@@ -14,6 +14,7 @@ import os
 import re
 import secrets
 import subprocess
+import sys
 import time
 from pathlib import Path
 from urllib.parse import quote
@@ -75,6 +76,20 @@ def login_url(port: int, route: str = "#/") -> str:
 def _xdg_open(target: str) -> None:
     subprocess.Popen(["xdg-open", target], start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def ensure_ui(port: int) -> bool:
+    """Start this user's web app if nothing listens on port. True once it is ours that answers
+    there; False for nothing, or someone else's server, which must never get the login link."""
+    if listener_uid(port) is None:
+        subprocess.Popen([sys.executable, "-m", "wirenote.cli", "ui"], start_new_session=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
+        for _ in range(50):
+            if listener_uid(port) is not None:
+                break
+            time.sleep(0.1)
+    return listener_uid(port) == os.getuid()
 
 
 def open_ui(port: int, route: str = "#/", fallback: str | None = None) -> bool:

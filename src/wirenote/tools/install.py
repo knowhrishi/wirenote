@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Hrishikesh Jadhav
 """`wirenote setup install` / `uninstall`: systemd user units, the app-menu entry
-and its icon, so nobody copies files by hand.
+and its icon, and the launcher search (KRunner's plugin and the D-Bus service that starts
+it), so nobody copies files by hand.
 
-Nothing here needs root: everything goes to the user's own config and data folders.
+Nothing here needs root: everything goes to the user's own config and data folders. GNOME's
+search provider file is the exception: GNOME reads it only from system folders, so it is a
+documented sudo step (docs/usage.md › Find a meeting from the launcher), and uninstall only
+says how to remove it.
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ from pathlib import Path
 from .. import APP_ID
 from ..config.secrets import set_config_value
 from ..config.settings import config_dir, data_dir, load_settings, state_dir
+from ..notify import search_provider
 
 UNITS = ("wirenote.service", "wirenote-ui.service")
 OLD_UNITS = ("meetnote.service", "meetnote-ui.service")
@@ -27,7 +32,7 @@ OLD_UNITS = ("meetnote.service", "meetnote-ui.service")
 
 @dataclass(frozen=True)
 class Action:
-    kind: str          # "write" | "run" | "remove"
+    kind: str          # "write" | "run" | "try" (a command whose failure is only noted) | "remove"
     target: str        # a path, or a description of the command
     payload: object    # file text, or argv
 
@@ -52,6 +57,28 @@ def _old_desktop_path() -> Path:
 
 def _icon_path() -> Path:
     return _xdg_data() / "icons" / "hicolor" / "scalable" / "apps" / "wirenote.svg"
+
+
+def _krunner_path() -> Path:
+    return _xdg_data() / "krunner" / "dbusplugins" / f"{APP_ID}.desktop"
+
+
+def _dbus_service_path() -> Path:
+    # The bus looks the name up by the file's name (dbus-broker requires the two to match)
+    return _xdg_data() / "dbus-1" / "services" / f"{search_provider.BUS_NAME}.service"
+
+
+def _reload_bus() -> Action:
+    """The session bus learns of a new or removed service file now, not at the next login."""
+    argv = ["busctl", "--user", "call", "org.freedesktop.DBus", "/org/freedesktop/DBus",
+            "org.freedesktop.DBus", "ReloadConfig"]
+    return Action("try", " ".join(argv), argv)
+
+
+def _search_files(exe: str) -> list[Action]:
+    return [Action("write", str(_krunner_path()), _template("krunner-plugin.desktop", exe)),
+            Action("write", str(_dbus_service_path()),
+                   _template(f"{search_provider.BUS_NAME}.service", exe))]
 
 
 def _exe() -> str:
@@ -81,12 +108,14 @@ def plan_install(exe: str) -> list[Action]:
         actions.append(Action("remove", str(_old_desktop_path()), None))
     actions.append(Action("write", str(_icon_path()),
                           (files("wirenote") / "ui" / "static" / "icon.svg").read_text()))
+    actions += _search_files(exe)
     actions.append(_systemctl("daemon-reload"))
     if any((units / u).exists() for u in OLD_UNITS):
         # Before enabling ours: the old UI holds the same port.
         actions.append(_systemctl("disable", "--now", *OLD_UNITS))
         actions += [Action("remove", str(units / u), None) for u in OLD_UNITS]
         actions.append(_systemctl("daemon-reload"))
+    actions.append(_reload_bus())
     actions.append(_systemctl("enable", *UNITS))
     # Restart rather than start, so an update runs the new code.
     actions.append(_systemctl("restart", *UNITS))
@@ -108,6 +137,17 @@ def _apply(actions: list[Action], dry_run: bool) -> int:
             print(f"remove {a.target}")
             if not dry_run:
                 Path(a.target).unlink(missing_ok=True)
+        elif a.kind == "try":
+            print(f"run {a.target}")
+            if dry_run:
+                continue
+            try:
+                ok = _run(list(a.payload)) == 0
+            except OSError:
+                ok = False
+            if not ok:
+                print("  ! the session bus did not reload its services: the launcher search "
+                      "starts working after your next login")
         else:
             print(f"run {a.target}")
             if not dry_run and _run(list(a.payload)) != 0:
@@ -152,7 +192,10 @@ def uninstall(purge: bool = False, dry_run: bool = False,
     actions += [Action("remove", str(_units_dir() / u), None) for u in UNITS]
     actions += [Action("remove", str(_desktop_path()), None),
                 Action("remove", str(_old_desktop_path()), None),
-                Action("remove", str(_icon_path()), None), _systemctl("daemon-reload")]
+                Action("remove", str(_icon_path()), None),
+                Action("remove", str(_krunner_path()), None),
+                Action("remove", str(_dbus_service_path()), None),
+                _systemctl("daemon-reload"), _reload_bus()]
     folders: list[Path] = []
     if purge:
         settings = load_settings(config_dir() / "config.toml")
@@ -167,6 +210,9 @@ def uninstall(purge: bool = False, dry_run: bool = False,
             print("nothing removed")
             return 1
     rc = _apply(actions, dry_run)
+    for d in search_provider.GNOME_PROVIDER_DIRS[:1]:    # /usr/share belongs to a package
+        if (d / search_provider.GNOME_INI).exists():
+            print(f"GNOME's search still lists Wirenote; remove it with: sudo rm {d / search_provider.GNOME_INI}")
     for f in folders:
         print(f"remove {f}")
         if not dry_run:
