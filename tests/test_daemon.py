@@ -591,3 +591,37 @@ def test_the_prep_banner_is_withdrawn_when_a_recording_starts(tmp_path):
     assert d._control("record")["ok"]
     asyncio.run(drain(d))
     assert d.recording is not None and banner in d.notifier.closed and banner not in d._shown
+
+
+def test_a_recording_that_starts_while_the_library_loads_gets_no_prep_banner(tmp_path, monkeypatch):
+    import wirenote.detector.daemon as daemon_mod
+
+    d, now = _prep_setup(tmp_path)
+    real = daemon_mod.load_calls
+
+    def load_then_record(path):
+        calls = real(path)
+        prompt(d)
+        assert d._control("record")["ok"]       # starts during the await
+        return calls
+
+    monkeypatch.setattr(daemon_mod, "load_calls", load_then_record)
+
+    async def go():
+        await d._prep_round(now)
+        await drain(d)
+    asyncio.run(go())
+    assert not [v for v in d.notifier.shown.values() if v[0].startswith("Next: ")]
+    assert d.state.prepped == {}                        # not marked, so it can retry
+
+
+def test_an_event_cached_empty_is_looked_at_again_after_a_note_finishes(tmp_path):
+    d, now = _prep_setup(tmp_path, past=False)
+    from test_people import rec
+    root = d.settings.recordings_path()
+    root.mkdir(parents=True, exist_ok=True)
+    rec(root, 1, attendees=["Zed"], people=[["Zed", "z@x.test"]], title="Other")
+    asyncio.run(d._prep_round(now))
+    assert len(d._prep_empty) == 1
+    d._note_written()
+    assert d._prep_empty == set()

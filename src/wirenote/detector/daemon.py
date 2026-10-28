@@ -680,6 +680,7 @@ class Daemon:
                            note=bool(job.note), error=(job.error or "")[-300:] or None)
             self._write_status(force=True)
             if job.state == "done":
+                self._note_written()
                 self._ops.put_nowait((self._show_note_ready, job))
             elif job.state == "failed":
                 self._ops.put_nowait((self._show_message, (
@@ -777,6 +778,10 @@ class Daemon:
         if self._prep_task is None or self._prep_task.done():
             self._prep_task = asyncio.create_task(self._prep_round())
 
+    def _note_written(self) -> None:
+        """New history: an event judged to have none may match it now."""
+        self._prep_empty.clear()
+
     async def _prep_round(self, now: dt.datetime | None = None) -> None:
         """Queue a prep banner for an event starting within prep_lead_s, once, when there is
         history and no call is being recorded. Never lets an error stop the loop it runs in."""
@@ -791,6 +796,10 @@ class Daemon:
                     or self.detector.tracker.recording_key is not None):
                 return
             calls = await asyncio.to_thread(load_calls, self.settings.recordings_path())
+            # A recording or a setting change can land during the read: look again, and mark
+            # nothing, so a skipped event can still be prepped later.
+            if self.detector.tracker.recording_key is not None or not self.settings.meeting_prep:
+                return
             mine = my_addresses(calls, self.settings)
             for e in soon:
                 if not related_calls(e, calls, mine=mine):
