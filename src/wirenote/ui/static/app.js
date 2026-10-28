@@ -1238,8 +1238,9 @@ async function renderPrep(key) {
       : h("div", { class: "empty-line" }, "Nothing open.")));
   if (b.people.length) {
     page.append(h("section", { class: "section" }, h("h2", {}, "Who is invited"),
-      h("div", { class: "people" }, b.people.map((p) => h("a", { class: "person", href: `#/people/${p.key}`,
-        title: `Open the page for ${p.name}` }, avatar(p.name), p.name)))));
+      h("div", { class: "people" }, b.people.map((p) => p.key
+        ? h("a", { class: "person", href: `#/people/${p.key}`, title: `Open the page for ${p.name}` }, avatar(p.name), p.name)
+        : h("span", { class: "person" }, avatar(p.name), p.name)))));
   }
 }
 

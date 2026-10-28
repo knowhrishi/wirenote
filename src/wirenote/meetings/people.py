@@ -54,6 +54,13 @@ def resolve(name: str, aliases: dict[str, str]) -> str:
     return key
 
 
+def link(name: str, aliases: dict[str, str], people: dict[str, Person]) -> str | None:
+    """The key of name's page, through aliases; None when there is no such page (you, Me,
+    or a name that is in no call), so the app shows plain text instead of a dead link."""
+    key = resolve(name, aliases)
+    return person_key(key) if is_person(name) and key in people else None
+
+
 def build_people(calls: list[CallRecord], aliases: dict[str, str],
                  mine: set[str] = frozenset()) -> dict[str, Person]:
     """calls newest first. Keyed by the case-folded canonical name. mine are your addresses
@@ -88,6 +95,8 @@ def build_people(calls: list[CallRecord], aliases: dict[str, str],
             p.last_met = max(p.last_met, call.started)
     for call in calls:      # after all calls: an owner may first appear in an older one
         for i, a in enumerate((call.summary or {}).get("action_items") or []):
+            if not isinstance(a, dict):
+                continue
             owner = str(a.get("owner") or "")
             key = resolve(owner, aliases)
             if is_person(owner) and key in people:

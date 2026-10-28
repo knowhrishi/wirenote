@@ -28,7 +28,7 @@ from ..config.secrets import (calendar_sources, load_secrets, save_secrets, with
                               write_config_atomic)
 from ..config.settings import DEFAULT_CONFIG_TOML, Settings, config_dir, parse_settings
 from ..meetings.catalog import load_calls
-from ..meetings.people import (MAX_NAME, build_people, is_person, load_aliases, person_key, resolve,
+from ..meetings.people import (MAX_NAME, build_people, is_person, link, load_aliases, person_key, resolve,
                                save_aliases)
 from ..meetings.me import infer_addresses, my_addresses
 from ..meetings.related import event_key, prep_brief, related_calls
@@ -338,8 +338,9 @@ class Store:
                    "can_remember": bool((speakers.get(label) or {}).get("embedding"))}
                   for label in sorted(talk, key=lambda l: (l != "Me", -talk[l]))]
         aliases = load_aliases(self.state_dir)
+        known = self._known_people(aliases)
         for p in people:
-            p["person"] = self._link(p["name"], aliases) if p["named"] else None
+            p["person"] = link(p["name"], aliases, known) if p["named"] else None
         return {**brief,
                 "summary": summary,
                 "template": used,
@@ -350,7 +351,7 @@ class Store:
                 "series_template": series_templates(self.state_dir).get(str(uid)) if uid else None,
                 "lines": lines,
                 "people": people,
-                "attendee_people": {n: self._link(n, aliases) for n in brief["attendees"]},
+                "attendee_people": {n: link(n, aliases, known) for n in brief["attendees"]},
                 "names": {p["label"]: p["name"] for p in people},
                 "runs": tr.get("runs", []),
                 "echo_dropped": len(tr.get("dropped_echo", [])),
@@ -420,13 +421,13 @@ class Store:
 
     def set_action_done(self, rec_id: str, index: int, done: bool) -> None:
         d = self.rec_dir(rec_id)
-        self._calls_cache = (0.0, 0, None)
         s = self._summary(d)
         if not s or not 0 <= index < len(s.get("action_items", [])):
             raise Invalid("no such action item")
         item = s["action_items"][index]
         item["done"] = bool(done)
         _write_json(d / SUMMARY, s)
+        self._calls_cache = (0.0, 0, None)      # after the write: a read meanwhile must not stay cached
         note = self._note(read_manifest(d))
         if note and note.exists():
             _tick_in_note(note, item, done)
@@ -504,6 +505,7 @@ class Store:
             if remember and name and info.get("embedding"):
                 self.voices.remember(name, info["embedding"])
         _write_json(d / TRANSCRIPT, tr)
+        self._calls_cache = (0.0, 0, None)      # a newly named speaker is a person with a page
         if read_manifest(d).get("note"):
             rewrite_note(d, self.settings)
 
@@ -698,10 +700,10 @@ class Store:
 
     # People ----------------------------------------------------------------
 
-    @staticmethod
-    def _link(name: str, aliases: dict[str, str]) -> str | None:
-        """The key of the person page for name, or None for Me, Others and the like."""
-        return person_key(resolve(name, aliases)) if is_person(name) else None
+    def _known_people(self, aliases: dict[str, str]) -> dict:
+        """The people that have a page, for links from a call; reads the cached library."""
+        calls = self._recent_calls()
+        return build_people(calls, aliases, my_addresses(calls, self.settings))
 
     def _people(self):
         calls = load_calls(self.root)
@@ -734,6 +736,8 @@ class Store:
             raise Invalid("name too long")
         aliases = load_aliases(self.state_dir)
         target = resolve(same_as, aliases)
+        if target not in self._people()[0]:
+            raise Invalid("no one called that")      # a typo must not make a new person
         if resolve(name, aliases) == target:
             raise Invalid("those are already the same person")
         # Point the old name at the target's spelling, so the merged person is shown that way.
@@ -1115,7 +1119,7 @@ class Store:
         for e in self._upcoming[1]:
             if event_key(e) == key:
                 calls = self._recent_calls()
-                return prep_brief(e, calls, my_addresses(calls, self.settings))
+                return prep_brief(e, calls, my_addresses(calls, self.settings), load_aliases(self.state_dir))
         raise NotFound("event")
 
     def _recent_calls(self) -> list:

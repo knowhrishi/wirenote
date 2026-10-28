@@ -16,7 +16,7 @@ import re
 from ..calendar.ics import Event
 from .catalog import CallRecord
 from .me import my_names, without_me
-from .people import is_person, person_key
+from .people import build_people, is_person, link
 
 MAX_RELATED = 5
 SERIES_ACTIONS = 20      # related calls whose open action items the brief collects
@@ -97,9 +97,11 @@ def related_calls(e: Event, calls: list[CallRecord], limit: int = MAX_RELATED,
     return [c for tier in tiers for c in tier][:limit]
 
 
-def prep_brief(e: Event, calls: list[CallRecord], mine: set[str] = frozenset()) -> dict:
+def prep_brief(e: Event, calls: list[CallRecord], mine: set[str] = frozenset(),
+               aliases: dict[str, str] | None = None) -> dict:
     """What to read before the event: the last related call, open action items across all
-    related calls, and who is invited. last is None when nothing is related."""
+    related calls, and who is invited. last is None when nothing is related. An invitee's
+    key is that of their page (through aliases), or None when they have none."""
     related = related_calls(e, calls, SERIES_ACTIONS, mine)
     names = my_names([_invitees(e), *(c.attendees for c in related)], mine) if mine else set()
     last = related[0] if related else None
@@ -110,10 +112,12 @@ def prep_brief(e: Event, calls: list[CallRecord], mine: set[str] = frozenset()) 
                 actions.append({"call": c.id, "index": i, "title": c.title, "started": c.started,
                                 "task": str(a.get("task") or ""), "owner": str(a.get("owner") or ""),
                                 "due": str(a.get("due") or "")})
+    aliases = aliases or {}
+    known = build_people(calls, aliases, mine)
     people = []
     for name, email in _others(_invitees(e), mine, names):
         if is_person(name):
-            people.append({"name": name, "key": person_key(name),
+            people.append({"name": name, "key": link(name, aliases, known),
                            "met": sum(1 for c in related if _shared(((name, email),), c, mine, names))})
     return {"event": {"key": event_key(e), "title": e.title, "start": e.start.isoformat(),
                       "end": e.end.isoformat()},

@@ -100,9 +100,13 @@ def _speakers(transcript: dict) -> tuple[tuple[str, float], ...]:
     speakers = transcript.get("speakers") or {}
     seconds: dict[str, float] = {}
     for line in transcript.get("lines") or []:
-        label = line["speaker"]
-        if not (speakers.get(label) or {}).get("name"):
+        label = line.get("speaker") if isinstance(line, dict) else None
+        if not isinstance(label, str) or not (speakers.get(label) or {}).get("name"):
             continue
+        try:
+            secs = max(0.0, float(line["end"]) - float(line["start"]))
+        except (KeyError, TypeError, ValueError):
+            continue        # one broken line costs that line, not the call
         name = display_name(label, speakers)
-        seconds[name] = seconds.get(name, 0.0) + max(0.0, line["end"] - line["start"])
+        seconds[name] = seconds.get(name, 0.0) + secs
     return tuple(seconds.items())

@@ -144,7 +144,7 @@ A template has at most 6 sections and 2000 characters of instructions. A file th
 **People** in the sidebar lists everyone who spoke in one of your calls or was invited to one. Open a person to see the calls you had with them, how long they spoke, their email addresses from the calendar, and the action items assigned to them. Tick items off there or in the call.
 
 - A person is a name. You are left out: an invitee with one of your addresses (`my_emails`, or the guess shown in Settings › Calendars) has no page. Speakers count once you have named them (a "Speaker 2" has no page), and so does everyone on a calendar invitation. "Me" and "Others" never do, nor do meeting rooms and equipment booked on an invitation.
-- The same person under two names, such as "Anna" and "Anna Berg"? Open one of them and click **Same person as…**. Their calls and action items come together. The recordings and notes are not changed. The choice is kept in `people.json` in `~/.local/state/wirenote/`; delete a line there to undo it.
+- The same person under two names, such as "Anna" and "Anna Berg"? Open one of them, click **Same person as…** and type the other name as People shows it; a name no one has is refused. Their calls and action items come together. The recordings and notes are not changed. The choice is kept in `people.json` in `~/.local/state/wirenote/`; delete a line there to undo it.
 - In a call, the name chips under the title open that person's page too.
 - Nothing is sent anywhere: the pages are built from your own recordings each time you open them. Calls saved before this version show up the same way, with the addresses their invitation had.
 

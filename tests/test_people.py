@@ -225,3 +225,69 @@ def test_you_are_not_listed_from_calls_saved_before_1_0(tmp_path):
     calls = load_calls(tmp_path)
     assert my_addresses(calls, Settings()) == {"me@x.test"}
     assert sorted(build_people(calls, {}, my_addresses(calls, Settings()))) == ["anna", "bo", "cy"]
+
+
+def test_a_malformed_transcript_line_skips_only_that_line(tmp_path):
+    rec(tmp_path, 1, speakers={"S1": {"name": "Anna"}},
+        lines=[{"speaker": "S1", "start": 0}, {"start": 0, "end": 3}, "garbage", {"speaker": ["S1"], "start": 0, "end": 1},
+               {"speaker": "S1", "start": "x", "end": 2}, talk("S1", 1, 5)])
+    (call,) = load_calls(tmp_path)
+    assert call.speakers == (("Anna", 4.0),)
+
+
+def test_an_action_item_that_is_not_an_object_is_skipped(tmp_path):
+    rec(tmp_path, 1, attendees=["Anna"], actions=["oops", None, {"owner": "Anna", "task": "Send it", "due": ""}])
+    anna = build_people(load_calls(tmp_path), {})["anna"]
+    assert [(a["index"], a["task"]) for a in anna.actions] == [(2, "Send it")]
+
+
+def test_same_person_as_refuses_a_name_no_one_has(people_store, tmp_path):
+    with pytest.raises(Invalid, match="no one called that"):
+        people_store.alias("Bo", "Anan")
+    assert not (tmp_path / "state" / "people.json").exists()
+    assert people_store.alias("Bo", "anna") == person_key("Anna")
+
+
+def test_links_go_only_to_pages_that_exist(tmp_path):
+    from wirenote.calendar.ics import Event
+    from wirenote.meetings.related import prep_brief
+    import datetime as dt
+
+    s = replace(settings_for(tmp_path), recordings_dir=str(tmp_path / "recordings"), my_emails=("me@x.test",))
+    root = tmp_path / "recordings"
+    d = rec(root, 1, attendees=["Me Myself", "Anna"], people=[["Me Myself", "me@x.test"], ["Anna", "a@x.test"]],
+            speakers={"S1": {"name": "Anna"}, "S2": {"name": "Me Myself"}}, lines=[talk("S1", 0, 5), talk("S2", 5, 9)])
+    store = Store(s, tmp_path / "state", voices=no_voices(tmp_path))
+    call = store.call(d.name)
+    assert call["attendee_people"] == {"Me Myself": None, "Anna": person_key("Anna")}
+    assert {p["name"]: p["person"] for p in call["people"] if p["named"]} == {
+        "Anna": person_key("Anna"), "Me Myself": None}
+    rec(root, 2, speakers={"S1": {"name": "Anna Berg"}}, lines=[talk("S1", 0, 5)])
+    store.alias("Anna", "Anna Berg")
+    assert store.call(d.name)["attendee_people"]["Anna"] == person_key("Anna Berg")
+
+    start = dt.datetime(2026, 11, 3, 10, 0, tzinfo=dt.timezone.utc)
+    e = Event(title="Call", start=start, end=start + dt.timedelta(hours=1), attendees=("Anna", "Ben"),
+              people=(("Anna", "a@x.test"), ("Ben", "b@x.test")))
+    calls = load_calls(root)
+    keys = {p["name"]: p["key"] for p in prep_brief(e, calls, {"me@x.test"})["people"]}
+    assert keys == {"Anna": person_key("Anna"), "Ben": None}             # Ben is in no call: no page
+    keys = {p["name"]: p["key"] for p in prep_brief(e, calls, {"me@x.test"}, {"anna": "Anna Berg"})["people"]}
+    assert keys["Anna"] == person_key("Anna Berg")
+
+
+def test_ticking_an_action_is_not_hidden_by_a_read_during_the_write(people_store, monkeypatch):
+    import wirenote.ui.data as data_mod
+
+    store = people_store
+    (rec_id,) = [c.id for c in store._recent_calls() if c.summary["action_items"]]
+    real = data_mod._write_json
+
+    def write_while_someone_reads(path, data):
+        store._recent_calls()                     # another request reads the library meanwhile
+        real(path, data)
+
+    monkeypatch.setattr(data_mod, "_write_json", write_while_someone_reads)
+    store.set_action_done(rec_id, 0, True)
+    (call,) = [c for c in store._recent_calls() if c.id == rec_id]
+    assert call.summary["action_items"][0]["done"] is True
