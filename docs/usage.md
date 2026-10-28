@@ -90,7 +90,7 @@ To turn the shortcuts off, untick them in **Settings › Desktop**, or set `glob
 Type a few letters of a meeting in your desktop's launcher, KRunner on KDE Plasma (`Alt+Space`) or the search in GNOME's Activities overview, and pick the meeting to open it in the meetings app.
 
 - The launcher matches the meeting's title, its people and its summary, not the transcript. Search the transcript in the meetings app.
-- It starts after 3 characters and shows at most 8 meetings, newest first, each with its date and people.
+- It starts after 3 characters and shows at most 8 meetings, newest first, each with its date and people. You are left out of the people, as on the People page (see "People").
 - On GNOME, press Enter on Wirenote's icon to open the meetings app with your search in its search box.
 
 What you type stays on your computer and is never written to a log. The search runs only while you use it: it starts with your first search and stops a minute after your last.

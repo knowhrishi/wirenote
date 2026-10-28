@@ -67,13 +67,13 @@ def _load(d: Path) -> CallRecord:
         started=str(m["started"]),
         calendar_uid=str(cal.get("uid") or ""),
         calendar_title=str(cal.get("title") or ""),
-        attendees=_attendees(cal),
+        attendees=attendee_pairs(cal),
         speakers=_speakers(_json(d / TRANSCRIPT)),
         summary=summary,
         flags=tuple(read_flags(d)))
 
 
-def _attendees(cal: dict) -> tuple[tuple[str, str], ...]:
+def attendee_pairs(cal: dict) -> tuple[tuple[str, str], ...]:
     """(name, email) pairs. Calendars saved before 1.0 have no people, only attendees and
     emails: two lists that line up by index when they are as long (every invitee then had
     an address); otherwise names only. An invitee who has no display name is listed by

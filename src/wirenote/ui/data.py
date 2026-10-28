@@ -27,10 +27,10 @@ from ..capture.recorder import add_flag, read_flags, read_manifest, write_flags,
 from ..config.secrets import (calendar_sources, load_secrets, save_secrets, with_config_value,
                               write_config_atomic)
 from ..config.settings import DEFAULT_CONFIG_TOML, Settings, config_dir, parse_settings
-from ..meetings.catalog import load_calls
+from ..meetings.catalog import attendee_pairs, load_calls
 from ..meetings.people import (MAX_NAME, build_people, is_person, link, load_aliases, person_key, resolve,
                                save_aliases)
-from ..meetings.me import infer_addresses, my_addresses
+from ..meetings.me import infer_addresses, my_addresses, my_names, without_me
 from ..meetings.related import event_key, prep_brief, related_calls
 from ..config.vocabulary import load_vocabulary, save_vocabulary
 from ..process.engines import ENGINES, OVERRIDES, check_overrides
@@ -304,14 +304,17 @@ class Store:
         """One call as the launcher shows it; NotFound for an id that is not a call."""
         d = self.rec_dir(rec_id)
         try:
-            entry = dict(self._quick_entry(d))
-            entry["speakers"] = self._quick_people(d)
+            entry = self._quick_entry(d)
+            found = {k: entry[k] for k in ("id", "title", "started")}
+            found["attendees"] = self._quick_invitees(entry, {})
+            found["speakers"] = self._quick_people(d)
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
             raise NotFound(rec_id) from e
-        return entry
+        return found
 
     def _quick_calls(self, q: str, limit: int | None) -> list[dict]:
         out = []
+        me: dict = {}           # your addresses, worked out once per search when a hit has invitees
         for d in self._rec_dirs():
             try:
                 entry = self._quick_entry(d)
@@ -322,8 +325,9 @@ class Store:
                                 if q in n.lower()), None)
                 if hit is None:
                     continue
-                found = {k: entry[k] for k in ("id", "title", "started", "attendees")}
-                found["speakers"] = [] if entry["attendees"] else self._quick_people(d)
+                found = {k: entry[k] for k in ("id", "title", "started")}
+                found["attendees"] = self._quick_invitees(entry, me)
+                found["speakers"] = [] if found["attendees"] else self._quick_people(d)
                 found["match"] = hit
             except (OSError, ValueError, KeyError, TypeError, AttributeError):
                 continue        # a broken call folder hides that call, not the list
@@ -350,9 +354,31 @@ class Store:
         texts += [a.get("task") for a in (s or {}).get("action_items") or [] if isinstance(a, dict)]
         entry = {"id": m["id"], "title": self._title(m, s), "started": m.get("started"),
                  "attendees": [a for a in cal.get("attendees") or [] if isinstance(a, str)],
+                 "invited": attendee_pairs(cal),
                  "texts": [t for t in texts if isinstance(t, str)]}
         self._quick[d.name] = (key, entry)
         return entry
+
+    def _quick_invitees(self, entry: dict, me: dict) -> list[str]:
+        """The invitees the launcher shows: you left out, as on the People page. me holds
+        your addresses and names once worked out; a call without invitees needs neither."""
+        if not entry["invited"]:
+            return []
+        if not me:
+            me.update(zip(("mine", "names"), self._quick_me()))
+        return [n for n, _ in without_me(entry["invited"], me["mine"], me["names"])]
+
+    def _quick_me(self) -> tuple[set[str], set[str]]:
+        """Your addresses (meetings/me.py) and the names they go by, from every call's
+        invitation: the guess needs all of them. Read once per change, like the rest."""
+        invited = []
+        for d in self._rec_dirs():
+            try:
+                invited.append(self._quick_entry(d)["invited"])
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                continue
+        mine = my_addresses([_Invitation(pairs) for pairs in invited], self.settings)
+        return mine, (my_names(invited, mine) if mine else set())
 
     def _quick_people(self, d: Path) -> list[str]:
         key = _mtime_ns(d / TRANSCRIPT)
@@ -1227,6 +1253,12 @@ class Store:
         calls = load_calls(self.root)
         self._calls_cache = (time.monotonic(), stamp, calls)
         return calls
+
+
+@dataclasses.dataclass(frozen=True)
+class _Invitation:
+    """What meetings/me.py reads of a call: its invitees as (name, email) pairs."""
+    attendees: tuple[tuple[str, str], ...]
 
 
 def _mtime_ns(path: Path) -> int | None:

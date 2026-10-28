@@ -68,10 +68,12 @@ class FakeBus:
 
 
 def write_call(root, rec_id, title=None, attendees=(), summary=None, transcript=None,
-               started="2026-10-27T10:00:00+01:00"):
+               started="2026-10-27T10:00:00+01:00", people=None):
     d = root / rec_id
     d.mkdir(parents=True)
     cal = {"title": title, "attendees": list(attendees)} if title else None
+    if cal is not None and people is not None:
+        cal["people"] = [list(p) for p in people]
     (d / "manifest.json").write_text(json.dumps({
         "version": 1, "id": rec_id, "app": "chrome", "name": "Chrome", "service": None,
         "room": None, "calendar": cal, "started": started, "segments": []}))
@@ -177,6 +179,35 @@ def test_matches_title_people_and_summary_not_transcript(lib):
     assert search(store, ["swordfish"]) == []
     assert store.calls("swordfish")[0]["match"]["where"] == "transcript"     # the app still finds it
     assert store.calls("swordfish", deep=False) == []
+
+
+def test_people_line_leaves_you_out(lib, tmp_path):
+    store, root = lib
+    me = ("Kim Vale", "kim@example.test")
+    others = [("Anna Berg", "anna@example.test"), ("Ben Ott", "ben@example.test"),
+              ("Anna Berg", "anna@example.test")]
+    for i, other in enumerate(others):                 # your address is on every invitation
+        write_call(root, f"2026102{i + 1}-100000-chrome", title=f"Sync {i}",
+                   attendees=[me[0], other[0]], people=[me, other])
+    # A calendar saved without addresses: the name your address goes by is you too
+    write_call(root, "20261020-100000-chrome", title="Sync old", attendees=["Kim Vale", "Ben Ott"])
+    subtitles = {r["id"]: r["subtitle"] for r in search(store, ["sync"])}
+    assert subtitles == {"20261023-100000-chrome": "2026-10-27 10:00 · Anna Berg",
+                         "20261022-100000-chrome": "2026-10-27 10:00 · Ben Ott",
+                         "20261021-100000-chrome": "2026-10-27 10:00 · Anna Berg",
+                         "20261020-100000-chrome": "2026-10-27 10:00 · Ben Ott"}
+    (metas,) = exported(service_for(Store(store.settings, tmp_path / "state"), [])).invoke(
+        GNOME_PATH, "GetResultMetas", ["20261023-100000-chrome"])     # a fresh process
+    assert metas[0]["description"].value == "2026-10-27 10:00 · Anna Berg"
+
+    # One call is too few to guess; my_emails says it, and you are left out at once
+    one = tmp_path / "one"
+    write_call(one, "20261027-100000-chrome", title="Intro", attendees=[me[0], "Cem Kaya"],
+               people=[me, ("Cem Kaya", "cem@example.test")])
+    s = replace(store.settings, recordings_dir=str(one))
+    assert search(Store(s, tmp_path / "s1"), ["intro"])[0]["subtitle"] == "2026-10-27 10:00 · Kim Vale, Cem Kaya"
+    s = replace(s, my_emails=("KIM@example.test",))
+    assert search(Store(s, tmp_path / "s2"), ["intro"])[0]["subtitle"] == "2026-10-27 10:00 · Cem Kaya"
 
 
 def test_bad_ids_are_refused(lib):

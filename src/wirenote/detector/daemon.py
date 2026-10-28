@@ -257,6 +257,8 @@ class Daemon:
             tasks.append(self._tray_task)
         if self._shortcuts_task is not None:
             tasks.append(self._shortcuts_task)
+        if self._prep_task is not None:      # a round can still be reading the library
+            tasks.append(self._prep_task)
         for task in [*tasks, stop]:
             task.cancel()
         await asyncio.gather(*tasks, stop, return_exceptions=True)

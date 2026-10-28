@@ -680,3 +680,43 @@ def test_an_event_cached_empty_is_looked_at_again_after_a_note_finishes(tmp_path
     assert len(d._prep_empty) == 1
     d._note_written()
     assert d._prep_empty == set()
+
+
+def test_shutdown_stops_a_running_prep_round(tmp_path, monkeypatch):
+    import wirenote.detector.daemon as daemon_mod
+
+    monkeypatch.setenv("WIRENOTE_SOCKET", str(tmp_path / "control.sock"))
+
+    async def no_sleep_signals(on_sleep):
+        raise ConnectionError("no system bus")
+    monkeypatch.setattr(daemon_mod, "watch_sleep", no_sleep_signals)
+    d = make(tmp_path)
+    d.settings = replace(d.settings, tray_icon=False)
+    seen = []
+
+    async def slow_round(now=None):            # still reading a big library at shutdown
+        seen.append("reading")
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            seen.append("cancelled")
+            raise
+    d._prep_round = slow_round
+
+    async def first_loop():
+        d._start_prep()
+        await asyncio.sleep(0)
+        d._stopping.set()
+
+    async def idle():
+        await asyncio.Event().wait()
+    d._pw_loop = first_loop
+    for name in ("_tick_loop", "_op_loop", "_rec_loop", "_worker_loop", "_housekeeping_loop",
+                 "_control_loop", "_calendar_loop", "_update_loop"):
+        setattr(d, name, idle)
+
+    async def go():
+        await d.run()
+        # Stopped by run() itself, not left for the event loop to tidy up after it
+        assert seen == ["reading", "cancelled"] and d._prep_task.done()
+    asyncio.run(asyncio.wait_for(go(), 5))
