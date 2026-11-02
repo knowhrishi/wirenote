@@ -27,7 +27,7 @@ A release starts from a button and goes through a pull request:
 5. In the Actions tab, approve the "Publish to PyPI" job.
 6. Check the result: `uv tool install wirenote==X.Y.Z` in a clean account, and the release page. On an older install, `wirenote update --check` should now offer X.Y.Z with its notes.
 
-If CI does not show up on the release pull request, close and reopen it. If a release fails after the tag exists, fix the cause and run **Release** again from Actions on the tag (Run workflow › Use workflow from › Tags › vX.Y.Z).
+If Prepare release pushes `release/vX.Y.Z` but fails to open the pull request, GitHub does not let workflows open pull requests yet: turn on the setting in step 4 under "Once, before the first release" and run Prepare release again with the same choice. It finds the branch it pushed and only opens the pull request. If CI does not show up on the release pull request, close and reopen it. If a release fails after the tag exists, fix the cause and run **Release** again from Actions on the tag (Run workflow › Use workflow from › Tags › vX.Y.Z).
 
 Releasing by hand still works: set the version in `pyproject.toml`, `uv.lock` and `src/wirenote/__init__.py`, date the changelog section, and save the stored data (`WIRENOTE_E2E_KEEP=tests/compat/X.Y.Z uv run pytest -q tests/e2e/test_call_to_note.py`, or through `scripts/test_in_linux.sh` on macOS). Merge, then push an annotated `vX.Y.Z` tag.
 
