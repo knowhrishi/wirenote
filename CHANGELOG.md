@@ -11,6 +11,10 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - People: a page per person in the meetings app (**People** in the sidebar). It lists the calls you had with them, how long they spoke, their email addresses from the calendar and the action items assigned to them. Names under a call's title and on its speakers open the page. If one person appears under two names, "Same person as…" puts them together; your recordings stay as they are. See "People" in docs/usage.md.
 - Meeting prep: 5 minutes before a meeting you have had calls about, a banner shows the last summary's first point and how many action items are still open. "Open prep" opens a page with what was decided, the open items and who is invited; "Coming up" has a Prep link too. No banner while you record or for a meeting with no history. You are left out when calls are compared; set `my_emails` in Settings › Calendars if Wirenote guesses your address wrong or has no guess. Turn it off with `meeting_prep = false`. See "Before a meeting" in docs/usage.md.
 
+### Fixed
+
+- A call where one person talked for more than about two minutes without a break never got a transcript. Processing failed three times with "Non-zero status code returned while running Where node". It works now. What you need to do: after the update, click "Transcribe again" on the call, or run `wirenote reprocess ID`.
+
 ## [0.3.1] - 2026-10-27
 
 ### Fixed

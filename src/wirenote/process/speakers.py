@@ -97,8 +97,11 @@ class Diarizer:
                 total += t.end - t.start
                 if total >= EMBED_SECONDS:
                     break
+            # One long monologue alone can pass EMBED_SECONDS, and the embedding
+            # model fails on more than about 122 s of audio.
+            samples = np.concatenate(chunks)[:int(EMBED_SECONDS * rate)]
             stream = self.extractor.create_stream()
-            stream.accept_waveform(rate, np.concatenate(chunks))
+            stream.accept_waveform(rate, samples)
             stream.input_finished()
             prints[label] = _unit(self.extractor.compute(stream))
         return turns, prints

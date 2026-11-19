@@ -83,3 +83,38 @@ def test_a_short_call_keeps_its_one_voice_and_real_speakers_stay():
     book.prints.update(S1="a", S2="b")
     book.seconds.update(S1=60.0, S2=9.0)                      # both long enough: unchanged
     assert fold_short_speakers(lines, book) == lines and set(book.prints) == {"S1", "S2"}
+
+
+def test_a_voice_print_never_exceeds_embed_seconds_even_from_one_long_turn():
+    # The speaker model refuses more than about 122 s of audio; a 170 s monologue crashed the job.
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from wirenote.process.speakers import EMBED_SECONDS, Diarizer
+
+    rate, fed = 16000, []
+
+    class Stream:
+        def accept_waveform(self, _rate, samples):
+            fed.append(len(samples))
+
+        def input_finished(self):
+            pass
+
+    class Extractor:
+        def create_stream(self):
+            return Stream()
+
+        def compute(self, _stream):
+            if fed[-1] > EMBED_SECONDS * rate:
+                raise RuntimeError("input too long for the speaker model")
+            return [1.0, 0.0]
+
+    segs = [SimpleNamespace(start=0.0, end=170.0, speaker=0), SimpleNamespace(start=171.0, end=180.0, speaker=1)]
+    d = object.__new__(Diarizer)
+    d.sd = SimpleNamespace(process=lambda _a: SimpleNamespace(sort_by_start_time=lambda: segs))
+    d.extractor = Extractor()
+    turns, prints = d.run(np.zeros(181 * rate, dtype=np.float32), rate)
+    assert len(turns) == 2 and set(prints) == {0, 1}
+    assert max(fed) == EMBED_SECONDS * rate
